@@ -352,3 +352,24 @@ def test_listen_records_the_sentence_too(monkeypatch, capsys):
     capsys.readouterr()
     assert cli.main(["progress"]) == 0
     assert "should have been there" in capsys.readouterr().out
+
+
+def test_record_plays_the_reference_before_every_take(monkeypatch, tmp_path):
+    """声学记忆衰减很快，只在开头听一次等于只有第一遍在模仿。"""
+    connection, segment_id = _seed_segment()
+    connection.close()
+    plays: list[int] = []
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: plays.append(1) or 1)
+    monkeypatch.setattr(cli.media, "record",
+                        lambda dest, **k: write_tone(dest, seconds=3.0))
+    monkeypatch.setattr(cli.media, "list_input_devices", lambda: ())
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: "")
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=i * 0.5, end=i * 0.5 + 0.4)
+        for i, t in enumerate(["should", "have", "been", "there"])
+    ))
+    assert cli.main(["record", "--segment", str(segment_id), "--unit", "1",
+                     "--takes", "3", "--listen", "2",
+                     "-o", str(tmp_path / "r.png")]) == 0
+    assert len(plays) == 6      # 3 遍 x 每遍听 2 次
