@@ -150,3 +150,42 @@ def test_export_rejects_out_of_range_unit(capsys):
     connection.close()
     assert cli.main(["export", str(segment_id), "--unit", "99"]) == 1
     assert "没有第 99 个" in capsys.readouterr().err
+
+
+def test_compare_accepts_multiple_takes(monkeypatch, tmp_path, capsys):
+    reference = write_tone(tmp_path / "ref.wav")
+    takes = [write_tone(tmp_path / f"t{i}.wav") for i in range(3)]
+
+    def fake_transcribe(path):
+        return tuple(
+            Word(text=text, start=start, end=start + 0.4)
+            for text, start in zip(
+                ["should", "have", "been", "there"], [0.0, 0.5, 1.0, 1.5]
+            )
+        )
+
+    monkeypatch.setattr(cli, "transcribe_words", fake_transcribe)
+    argv = ["compare", "--ref", str(reference)]
+    for take in takes:
+        argv += ["--user", str(take)]
+    argv += ["-o", str(tmp_path / "multi.png")]
+
+    assert cli.main(argv) == 0
+    out = capsys.readouterr().out
+    assert "3 次录音" in out
+    assert (tmp_path / "multi.png").exists()
+
+
+def test_compare_rejects_when_any_take_is_silent(tmp_path, capsys):
+    reference = write_tone(tmp_path / "ref.wav")
+    good = write_tone(tmp_path / "good.wav")
+    sr = 16000
+    silent = tmp_path / "silent.wav"
+    sf.write(silent, np.zeros(sr * 2, dtype=np.float32), sr)
+
+    exit_code = cli.main(
+        ["compare", "--ref", str(reference),
+         "--user", str(good), "--user", str(silent)]
+    )
+    assert exit_code == 1
+    assert "静音" in capsys.readouterr().err

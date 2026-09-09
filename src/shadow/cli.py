@@ -18,6 +18,7 @@ from .models import Word
 from .analysis.rhythm import analyse_rhythm
 from .report.advice import PAUSE_KINDS, build_advice, well_done
 from .report.blocks import Flag, PauseNote, render_feedback
+from .report.takes import TakeMetrics, TakeSummary, summarise
 
 
 class CliError(RuntimeError):
@@ -150,11 +151,13 @@ def cmd_export(args: argparse.Namespace) -> int:
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
-    try:
-        media.validate_attempt(Path(args.user))
-    except Exception as exc:
-        print(f"录音不可用：{exc}", file=sys.stderr)
-        return 1
+    paths = [Path(p) for p in args.user]
+    for path in paths:                       # 全部先校验，别录了三遍才发现第一遍是静音
+        try:
+            media.validate_attempt(path)
+        except Exception as exc:
+            print(f"录音不可用（{path.name}）：{exc}", file=sys.stderr)
+            return 1
 
     connection = _open_db()
     try:
@@ -168,27 +171,35 @@ def cmd_compare(args: argparse.Namespace) -> int:
         else:
             ref_path = Path(args.ref)
             ref_words = transcribe_words(ref_path)
-        usr_words: tuple[Word, ...] = transcribe_words(Path(args.user))
+        if not ref_words:
+            print("原声转写为空，无法比较。", file=sys.stderr)
+            return 1
+        ref_prosody = analyse(ref_path)
+
+        metrics: list[TakeMetrics] = []
+        details = []
+        for path in paths:
+            usr_words = transcribe_words(path)
+            tokens = diff_words([w.text for w in ref_words],
+                                [w.text for w in usr_words])
+            rhythm = analyse_rhythm(ref_words, usr_words, matched_pairs(tokens))
+            usr_prosody = analyse(path)
+            advice = build_advice(
+                ref_words=ref_words, usr_words=usr_words, tokens=tokens,
+                rhythm=rhythm, ref_prosody=ref_prosody, usr_prosody=usr_prosody,
+            )
+            metrics.append(TakeMetrics(
+                accuracy=diff_accuracy(tokens), speech_ratio=rhythm.speech_ratio,
+                pause_ratio=rhythm.pause_ratio, advice=advice,
+            ))
+            details.append((usr_words, tokens, rhythm, usr_prosody, advice))
     except Exception as exc:
         print(f"转写失败：{exc}", file=sys.stderr)
         return 1
 
-    if not ref_words:
-        print("原声转写为空，无法比较。", file=sys.stderr)
-        return 1
+    summary = summarise(metrics)
+    usr_words, tokens, rhythm, usr_prosody, advice = details[summary.representative]
 
-    tokens = diff_words([w.text for w in ref_words], [w.text for w in usr_words])
-    score = diff_accuracy(tokens)
-    pairs = matched_pairs(tokens)
-    rhythm = analyse_rhythm(ref_words, usr_words, pairs)
-    ref_prosody = analyse(ref_path)
-    usr_prosody = analyse(Path(args.user))
-
-    advice = build_advice(
-        ref_words=ref_words, usr_words=usr_words, tokens=tokens, rhythm=rhythm,
-        ref_prosody=ref_prosody, usr_prosody=usr_prosody,
-    )
-    # 停顿属于节奏，只标在图 1；图 2 只标词本身的音高/时长问题
     flags = tuple(
         Flag(usr_index=usr_index, text=item.flag)
         for item, usr_index in _flag_targets(advice, ref_words, tokens)
@@ -204,14 +215,11 @@ def cmd_compare(args: argparse.Namespace) -> int:
     render_feedback(
         ref_words=ref_words, usr_words=usr_words, tokens=tokens, rhythm=rhythm,
         ref_prosody=ref_prosody, usr_prosody=usr_prosody, flags=flags,
-        pause_notes=pause_notes,
-        accuracy=score, text=" ".join(w.text for w in ref_words), out_path=out_path,
+        pause_notes=pause_notes, accuracy=diff_accuracy(tokens),
+        text=" ".join(w.text for w in ref_words), out_path=out_path,
     )
 
-    _print_report(tokens, score, rhythm, advice,
-                  well_done(ref_words=ref_words, usr_words=usr_words,
-                            tokens=tokens, rhythm=rhythm, advice=advice),
-                  out_path)
+    _print_summary(summary, paths, tokens, out_path)
     return 0
 
 
@@ -228,8 +236,19 @@ def _flag_targets(advice, ref_words, tokens):
                 break
 
 
-def _print_report(tokens, score, rhythm, advice, good, out_path) -> None:
-    print(f"\n可懂度 {score * 100:.0f}%（{sum(1 for t in tokens if t.ref_index is not None)} 个词）")
+def _band(spread, unit: str = "x") -> str:
+    if spread.width < 0.005:
+        return f"{spread.median:.2f}{unit}"
+    return f"{spread.median:.2f}{unit}（{spread.low:.2f}–{spread.high:.2f}）"
+
+
+def _print_summary(summary: TakeSummary, paths, tokens, out_path) -> None:
+    if summary.count > 1:
+        print(f"\n{summary.count} 次录音，取中位数（括号内是范围）")
+    accuracy = summary.accuracy
+    print(f"\n可懂度 {accuracy.median * 100:.0f}%"
+          + ("" if accuracy.width < 0.005
+             else f"（{accuracy.low * 100:.0f}–{accuracy.high * 100:.0f}%）"))
     problems = [t for t in tokens if t.kind != "equal"]
     if not problems:
         print("  发音层面没问题——每个词机器都听出来了。")
@@ -242,23 +261,38 @@ def _print_report(tokens, score, rhythm, advice, good, out_path) -> None:
             else:
                 print(f"  多  {token.usr_text}")
 
-    pause = ("—" if rhythm.pause_ratio is None
-             else f"{rhythm.pause_ratio:.2f}x")
-    print(f"\n发声 {rhythm.speech_ratio:.2f}x    停顿 {pause}    "
-          f"整句 {rhythm.span_ratio:.2f}x")
+    pause = "—" if summary.pause_ratio is None else _band(summary.pause_ratio)
+    print(f"\n发声 {_band(summary.speech_ratio)}    停顿 {pause}")
 
-    if advice:
-        print(f"\n下一遍改这 {min(MAX_ADVICE, len(advice))} 处，按重要性排：\n")
-        for number, item in enumerate(advice[:MAX_ADVICE], 1):
-            print(f"  {number}. {item.title}")
-            print(f"     现状：{item.detail}")
-            print(f"     怎么做：{item.action}\n")
+    if summary.count > 1:
+        unstable = [
+            name for name, spread, limit in (
+                ("发声", summary.speech_ratio, 0.15),
+                ("停顿", summary.pause_ratio, 0.30),
+            )
+            if spread is not None and spread.width > limit
+        ]
+        if unstable:
+            print(f"  ⚠ {' 和 '.join(unstable)}在几次之间差得比较多，"
+                  "说明还没形成稳定的模式——先把同一句读稳，再谈往原声靠。")
+
+    if not summary.issues:
+        print("\n没有反复出现的问题，可以换下一个单元了。\n")
     else:
-        print("\n这一句没有明显偏差，可以换下一个单元了。\n")
+        shown = summary.issues[:MAX_ADVICE]
+        head = (f"\n反复出现的问题，按重要性排（先看每次都犯的）：\n"
+                if summary.count > 1 else f"\n下一遍改这 {len(shown)} 处：\n")
+        print(head)
+        for number, issue in enumerate(shown, 1):
+            times = (f"  [{issue.hits}/{issue.total} 次]" if summary.count > 1 else "")
+            print(f"  {number}. {issue.advice.title}{times}")
+            print(f"     现状：{issue.advice.detail}")
+            print(f"     怎么做：{issue.advice.action}\n")
 
-    if good:
-        print(f"这些词你做对了，保持：{' / '.join(good[:12])}")
-    print(f"\n反馈图已写入 {out_path}")
+    if summary.count > 1:
+        print(f"（图用的是第 {summary.representative + 1} 次，"
+              f"它的语速最接近这几次的中位数）")
+    print(f"反馈图已写入 {out_path}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -289,7 +323,8 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--segment", type=int, help="已导入的片段 id")
     p_compare.add_argument("-u", "--unit", type=int,
                            help="只比对第 n 个练习单元（配合 --segment）")
-    p_compare.add_argument("--user", required=True, help="你的录音 wav 路径")
+    p_compare.add_argument("--user", required=True, action="append",
+                           help="你的录音 wav 路径，可重复传多次（建议每轮录 3 遍）")
     p_compare.add_argument("-o", "--out", help="输出 png 路径")
     p_compare.set_defaults(func=cmd_compare)
 
