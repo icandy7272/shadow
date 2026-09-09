@@ -76,6 +76,7 @@ CREATE INDEX IF NOT EXISTS idx_attempts_run ON attempts(run_id);
 # 已有数据库要就地加列。老库是 M1 建的，那时还没有练习单元和指标存储。
 MIGRATIONS = (
     ("practice_runs", "unit_index", "INTEGER"),
+    ("practice_runs", "unit_text", "TEXT"),
     ("attempts", "metrics_json", "TEXT"),
 )
 
@@ -200,11 +201,18 @@ def get_segment(conn: sqlite3.Connection, segment_id: int) -> dict[str, Any] | N
 # --- 练习记录 ---------------------------------------------------------------
 
 
-def start_run(conn: sqlite3.Connection, *, segment_id: int, unit_index: int | None) -> int:
+def start_run(
+    conn: sqlite3.Connection,
+    *,
+    segment_id: int,
+    unit_index: int | None,
+    unit_text: str | None = None,
+) -> int:
+    """记下练的是哪一句，而不只是序号——切分规则一变，序号就失去意义。"""
     cursor = conn.execute(
-        "INSERT INTO practice_runs (segment_id, unit_index, started_at)"
-        " VALUES (?, ?, ?)",
-        (segment_id, unit_index, _now()),
+        "INSERT INTO practice_runs (segment_id, unit_index, unit_text, started_at)"
+        " VALUES (?, ?, ?, ?)",
+        (segment_id, unit_index, unit_text, _now()),
     )
     conn.commit()
     return int(cursor.lastrowid)

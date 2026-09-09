@@ -316,3 +316,39 @@ def test_progress_shows_blind_ratings(monkeypatch, capsys):
     assert cli.main(["progress"]) == 0
     out = capsys.readouterr().out
     assert "盲听" in out and "2分" in out
+
+
+def test_units_can_split_strictly_by_sentence(capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    assert cli.main(["units", str(segment_id), "--min-sec", "0"]) == 0
+    assert "练习单元" in capsys.readouterr().out
+
+
+def test_run_records_what_was_practised_not_just_an_index(monkeypatch, tmp_path):
+    """切分规则一变，序号就失去意义——必须存下练的是哪句话。"""
+    connection, segment_id = _seed_segment()
+    connection.close()
+    user = write_tone(tmp_path / "me.wav", seconds=3.0)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=text, start=i * 0.5, end=i * 0.5 + 0.4)
+        for i, text in enumerate(["should", "have", "been", "there"])
+    ))
+    assert cli.main(["compare", "--segment", str(segment_id), "--unit", "1",
+                     "--user", str(user), "-o", str(tmp_path / "a.png")]) == 0
+    connection = db.connect()
+    row = db.list_runs(connection, segment_id=segment_id)[0]
+    assert row["unit_text"] == "should have been there"
+    connection.close()
+
+
+def test_listen_records_the_sentence_too(monkeypatch, capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: "3")
+    cli.main(["listen", "--segment", str(segment_id), "--unit", "1"])
+    capsys.readouterr()
+    assert cli.main(["progress"]) == 0
+    assert "should have been there" in capsys.readouterr().out

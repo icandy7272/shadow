@@ -78,24 +78,33 @@ UNIT_PAD_SEC = 0.1
 MAX_ADVICE = 3
 
 
-def _segment_units(connection, segment_id: int):
-    """取出片段及其练习单元。"""
+def _segment_units(connection, segment_id: int, *, min_sec: float | None = None,
+                   max_sec: float | None = None):
+    """取出片段及其练习单元。min_sec=0 表示完全按句子切、不合并短句。"""
     segment = db.get_segment(connection, segment_id)
     if segment is None:
         raise CliError(f"片段 {segment_id} 不存在")
     source = db.get_source(connection, segment["source_id"])
     if source is None or not source["audio_path"]:
         raise CliError(f"片段 {segment_id} 的素材音频缺失")
-    return segment, source, split_into_units(segment["words"])
+    return segment, source, split_into_units(
+        segment["words"],
+        min_sec=config.UNIT_MIN_SEC if min_sec is None else min_sec,
+        max_sec=config.UNIT_MAX_SEC if max_sec is None else max_sec,
+    )
 
 
-def _segment_reference(connection, segment_id: int, dest: Path, *, unit: int | None = None):
+def _segment_reference(connection, segment_id: int, dest: Path, *,
+                       unit: int | None = None, min_sec: float | None = None,
+                       max_sec: float | None = None):
     """导出音频，并把词时间戳平移到以裁剪起点为 0。
 
     unit=None 导出整个片段；给了 unit 就只导出那个练习单元（首尾各留一点余量，
     免得切掉词头的爆破音）。
     """
-    segment, source, units = _segment_units(connection, segment_id)
+    segment, source, units = _segment_units(
+        connection, segment_id, min_sec=min_sec, max_sec=max_sec
+    )
 
     if unit is None:
         start, end = segment["start_sec"], segment["end_sec"]
@@ -120,7 +129,10 @@ def _segment_reference(connection, segment_id: int, dest: Path, *, unit: int | N
 def cmd_units(args: argparse.Namespace) -> int:
     connection = _open_db()
     try:
-        segment, _, units = _segment_units(connection, args.segment)
+        segment, _, units = _segment_units(
+            connection, args.segment,
+            min_sec=args.min_sec, max_sec=args.max_sec,
+        )
     except Exception as exc:
         print(f"读取失败：{exc}", file=sys.stderr)
         return 1
@@ -143,7 +155,8 @@ def cmd_export(args: argparse.Namespace) -> int:
     )
     try:
         path, _, text = _segment_reference(
-            connection, args.segment, dest, unit=args.unit
+            connection, args.segment, dest, unit=args.unit,
+            min_sec=args.min_sec, max_sec=args.max_sec,
         )
     except Exception as exc:
         print(f"导出失败：{exc}", file=sys.stderr)
@@ -160,7 +173,8 @@ def _reference_for(connection, args):
         return _segment_reference(
             connection, args.segment,
             config.segment_audio_dir() / f"{args.segment}{suffix}.wav",
-            unit=args.unit,
+            unit=args.unit, min_sec=getattr(args, "min_sec", None),
+            max_sec=getattr(args, "max_sec", None),
         )[:2]
     ref_path = Path(args.ref)
     return ref_path, transcribe_words(ref_path)
@@ -207,15 +221,18 @@ def _compare(connection, *, ref_path, ref_words, paths, out_path,
     )
 
     if segment_id is not None:
-        _save_run(connection, segment_id, unit_index, details, metrics)
+        _save_run(connection, segment_id, unit_index, details, metrics,
+                  unit_text=" ".join(w.text for w in ref_words))
 
     _print_summary(summary, paths, tokens, out_path)
     return 0
 
 
-def _save_run(connection, segment_id, unit_index, details, metrics) -> None:
+def _save_run(connection, segment_id, unit_index, details, metrics,
+              unit_text=None) -> None:
     """把这一轮存进库，进度才能跨会话累积。"""
-    run_id = db.start_run(connection, segment_id=segment_id, unit_index=unit_index)
+    run_id = db.start_run(connection, segment_id=segment_id,
+                          unit_index=unit_index, unit_text=unit_text)
     for (path, usr_words, _, _, _, advice), take in zip(details, metrics):
         db.add_attempt(
             connection, run_id=run_id, audio_path=str(path),
@@ -324,7 +341,8 @@ def cmd_listen(args: argparse.Namespace) -> int:
     if args.segment is None:
         print(f"记下了：{rating} 分（用 --segment 才能存进进度）")
         return 0
-    run_id = db.start_run(connection, segment_id=args.segment, unit_index=args.unit)
+    run_id = db.start_run(connection, segment_id=args.segment, unit_index=args.unit,
+                          unit_text=" ".join(w.text for w in ref_words))
     db.set_blind_rating(connection, run_id, rating)
     db.finish_run(connection, run_id)
     print(f"记下了：{rating} 分。shadow progress 可以看这个分数的走势。")
@@ -442,16 +460,15 @@ def cmd_progress(args: argparse.Namespace) -> int:
         print("还没有练习记录。用 shadow record 练一轮就有了。")
         return 0
 
-    print(f"{'时间':<14}{'片段':>5}{'单元':>5}{'遍数':>5}"
-          f"{'可懂':>7}{'发声':>7}{'停顿':>7}   反复出现的问题")
+    print(f"{'时间':<14}{'遍数':>5}{'可懂':>7}{'发声':>7}{'停顿':>7}"
+          f"   句子 / 反复出现的问题")
     for row in runs:
         takes = db.run_metrics(connection, row["id"])
         if not takes:
             if row["blind_rating"] is not None:
-                print(f"{_local_time(row['started_at']):<14}"
-                      f"{row['segment_id']:>5}{(row['unit_index'] or '-'):>5}"
-                      f"{'盲听':>5}{row['blind_rating']:>6}分"
-                      f"{'':>7}{'':>7}   —")
+                text = (row["unit_text"] or "")[:44]
+                print(f"{_local_time(row['started_at']):<14}{'盲听':>5}"
+                      f"{row['blind_rating']:>6}分{'':>7}{'':>7}   {text}")
             continue
         counts: dict[str, int] = {}
         for take in takes:
@@ -462,12 +479,13 @@ def cmd_progress(args: argparse.Namespace) -> int:
         repeated = [t for t, c in sorted(counts.items(), key=lambda kv: -kv[1])
                     if c >= threshold]
         pauses = [t["pause_ratio"] for t in takes if t.get("pause_ratio") is not None]
-        print(f"{_local_time(row['started_at']):<14}"
-              f"{row['segment_id']:>5}{(row['unit_index'] or '-'):>5}{len(takes):>5}"
+        text = (row["unit_text"] or f"片段 {row['segment_id']} 单元 {row['unit_index']}")[:30]
+        print(f"{_local_time(row['started_at']):<14}{len(takes):>5}"
               f"{statistics.median(t['accuracy'] for t in takes) * 100:>6.0f}%"
               f"{statistics.median(t['speech_ratio'] for t in takes):>7.2f}"
               f"{(statistics.median(pauses) if pauses else float('nan')):>7.2f}"
-              f"   {'、'.join(repeated[:3]) if repeated else '—'}")
+              f"   {text}"
+              f"{('  ← ' + '、'.join(repeated[:2])) if repeated else ''}")
     return 0
 
 
@@ -557,12 +575,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_units = sub.add_parser("units", help="列出片段内的练习单元（3-8s）")
     p_units.add_argument("segment", type=int)
+    p_units.add_argument("--min-sec", type=float,
+                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+    p_units.add_argument("--max-sec", type=float,
+                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
     p_units.set_defaults(func=cmd_units)
 
     p_export = sub.add_parser("export", help="导出音频用于跟读")
     p_export.add_argument("segment", type=int)
     p_export.add_argument("-u", "--unit", type=int, help="只导出第 n 个练习单元")
     p_export.add_argument("-o", "--out")
+    p_export.add_argument("--min-sec", type=float,
+                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+    p_export.add_argument("--max-sec", type=float,
+                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
     p_export.set_defaults(func=cmd_export)
 
     p_record = sub.add_parser("record", help="录音并立即比对（推荐每轮录 3 遍）")
@@ -576,6 +602,10 @@ def build_parser() -> argparse.ArgumentParser:
                           help="录之前先放几遍原声（建议 5-10）")
     p_record.add_argument("--seconds", type=float, help="每遍录多少秒，默认按原声长度自动定")
     p_record.add_argument("-o", "--out", help="输出 png 路径")
+    p_record.add_argument("--min-sec", type=float,
+                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+    p_record.add_argument("--max-sec", type=float,
+                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
     p_record.set_defaults(func=cmd_record)
 
     p_listen = sub.add_parser("listen", help="盲听：不给文字，听完自评")
@@ -585,6 +615,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_listen.add_argument("-u", "--unit", type=int, help="片段内第 n 个练习单元")
     p_listen.add_argument("-t", "--times", type=int, default=2, help="放几遍（默认 2）")
     p_listen.add_argument("--gap", type=float, default=1.2, help="两遍之间隔几秒")
+    p_listen.add_argument("--min-sec", type=float,
+                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+    p_listen.add_argument("--max-sec", type=float,
+                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
     p_listen.set_defaults(func=cmd_listen)
 
     p_play = sub.add_parser("play", help="播放原声（默认不显示原文）")
@@ -595,6 +629,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_play.add_argument("-t", "--times", type=int, default=1, help="放几遍（默认 1）")
     p_play.add_argument("--gap", type=float, default=0.8, help="两遍之间隔几秒")
     p_play.add_argument("--text", action="store_true", help="同时显示原文")
+    p_play.add_argument("--min-sec", type=float,
+                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+    p_play.add_argument("--max-sec", type=float,
+                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
     p_play.set_defaults(func=cmd_play)
 
     p_progress = sub.add_parser("progress", help="查看跨会话的练习趋势")
@@ -611,6 +649,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_compare.add_argument("--user", required=True, action="append",
                            help="你的录音 wav 路径，可重复传多次（建议每轮录 3 遍）")
     p_compare.add_argument("-o", "--out", help="输出 png 路径")
+    p_compare.add_argument("--min-sec", type=float,
+                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+    p_compare.add_argument("--max-sec", type=float,
+                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
     p_compare.set_defaults(func=cmd_compare)
 
     return parser
