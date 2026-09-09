@@ -2519,6 +2519,13 @@ def test_labels_use_chinese_when_font_available(monkeypatch):
     assert plot.configure_labels() is plot.LABELS_ZH
 
 
+def test_unrecognised_positions_finds_words_with_no_ratio():
+    from shadow.report.plot import unrecognised_positions
+
+    assert unrecognised_positions(TIMINGS) == (2,)
+    assert unrecognised_positions(()) == ()
+
+
 def test_render_handles_all_missing_timings(tmp_path):
     out = tmp_path / "cmp2.png"
     reference = fake_prosody()
@@ -2587,7 +2594,7 @@ LABELS_ZH = {
     "p2_title": "Panel 2 · 轻重分布",
     "p2_y": "能量（dB）",
     "p2_x": "时间（秒，已对齐到原声轴）",
-    "p3_title": "Panel 3 · 节奏：柱子高于 1.0 = 拖长了（该弱读却发满），红柱 = 机器没听出这个词",
+    "p3_title": "Panel 3 · 节奏：柱子高于 1.0 = 拖长了（该弱读却发满），红底红字的词 = 机器没听出来",
     "p3_y": "你的时长 / 原声时长",
 }
 
@@ -2600,7 +2607,7 @@ LABELS_EN = {
     "p2_title": "Panel 2 - Loudness distribution",
     "p2_y": "energy (dB)",
     "p2_x": "time (s, warped onto reference axis)",
-    "p3_title": "Panel 3 - Rhythm: bar above 1.0 = stretched (should be reduced); red = not recognised",
+    "p3_title": "Panel 3 - Rhythm: bar above 1.0 = stretched (should be reduced); red band = not recognised",
     "p3_y": "your duration / reference duration",
 }
 
@@ -2621,6 +2628,13 @@ def configure_labels() -> dict[str, str]:
         return LABELS_EN
     plt.rcParams["font.sans-serif"] = [font, *plt.rcParams["font.sans-serif"]]
     return LABELS_ZH
+
+
+def unrecognised_positions(timings: Sequence[WordTiming]) -> tuple[int, ...]:
+    """比值为 None 的词在 Panel 3 上的位置——机器没听出来，必须显式标红。"""
+    return tuple(
+        index for index, timing in enumerate(timings) if timing.ratio is None
+    )
 
 
 def render_comparison(
@@ -2665,13 +2679,21 @@ def render_comparison(
 
     positions = np.arange(len(timings))
     ratios = [t.ratio if t.ratio is not None else 0.0 for t in timings]
-    colours = [USR_COLOUR if t.ratio is None else REF_COLOUR for t in timings]
-    ax_timing.bar(positions, ratios, color=colours)
+    ax_timing.bar(positions, ratios, color=REF_COLOUR)
+
+    # 没听出来的词比值为 None，柱高为 0 会让它直接从图上消失——而「没被听懂」
+    # 恰恰是最该看见的信号。改用红色背景带 + 红色词标出来，不伪造一个比值。
+    for position in unrecognised_positions(timings):
+        ax_timing.axvspan(position - 0.45, position + 0.45,
+                          color=USR_COLOUR, alpha=0.18, zorder=0)
+
     ax_timing.axhline(1.0, color="#333333", linewidth=1.2)
     ax_timing.set_xticks(positions)
     ax_timing.set_xticklabels(
         [t.text for t in timings], rotation=60, ha="right", fontsize=8
     )
+    for index in unrecognised_positions(timings):
+        ax_timing.get_xticklabels()[index].set_color(USR_COLOUR)
     ax_timing.set_ylabel(labels["p3_y"])
     ax_timing.set_title(labels["p3_title"], loc="left")
     ax_timing.grid(alpha=0.2, axis="y")
@@ -2685,7 +2707,7 @@ def render_comparison(
 - [ ] **Step 4: 运行，确认通过**
 
 Run: `uv run pytest tests/test_plot.py`
-Expected: 4 passed
+Expected: 5 passed
 
 - [ ] **Step 5: Commit**
 

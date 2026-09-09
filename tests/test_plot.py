@@ -55,6 +55,13 @@ def test_labels_use_chinese_when_font_available(monkeypatch):
     assert plot.configure_labels() is plot.LABELS_ZH
 
 
+def test_unrecognised_positions_finds_words_with_no_ratio():
+    from shadow.report.plot import unrecognised_positions
+
+    assert unrecognised_positions(TIMINGS) == (2,)
+    assert unrecognised_positions(()) == ()
+
+
 def test_render_handles_all_missing_timings(tmp_path):
     out = tmp_path / "cmp2.png"
     reference = fake_prosody()
