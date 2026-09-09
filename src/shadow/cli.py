@@ -576,9 +576,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_units = sub.add_parser("units", help="列出片段内的练习单元（3-8s）")
     p_units.add_argument("segment", type=int)
     p_units.add_argument("--min-sec", type=float,
-                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+                          help="练习单元的最短秒数。默认 0 = 严格一句一个；设成 1.5 会把短句并进下一句")
     p_units.add_argument("--max-sec", type=float,
-                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
+                          help="练习单元的最长秒数，超过会在最大停顿处再断（默认 6）")
     p_units.set_defaults(func=cmd_units)
 
     p_export = sub.add_parser("export", help="导出音频用于跟读")
@@ -586,9 +586,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_export.add_argument("-u", "--unit", type=int, help="只导出第 n 个练习单元")
     p_export.add_argument("-o", "--out")
     p_export.add_argument("--min-sec", type=float,
-                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+                          help="练习单元的最短秒数。默认 0 = 严格一句一个；设成 1.5 会把短句并进下一句")
     p_export.add_argument("--max-sec", type=float,
-                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
+                          help="练习单元的最长秒数，超过会在最大停顿处再断（默认 6）")
     p_export.set_defaults(func=cmd_export)
 
     p_record = sub.add_parser("record", help="录音并立即比对（推荐每轮录 3 遍）")
@@ -603,9 +603,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_record.add_argument("--seconds", type=float, help="每遍录多少秒，默认按原声长度自动定")
     p_record.add_argument("-o", "--out", help="输出 png 路径")
     p_record.add_argument("--min-sec", type=float,
-                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+                          help="练习单元的最短秒数。默认 0 = 严格一句一个；设成 1.5 会把短句并进下一句")
     p_record.add_argument("--max-sec", type=float,
-                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
+                          help="练习单元的最长秒数，超过会在最大停顿处再断（默认 6）")
     p_record.set_defaults(func=cmd_record)
 
     p_listen = sub.add_parser("listen", help="盲听：不给文字，听完自评")
@@ -616,9 +616,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_listen.add_argument("-t", "--times", type=int, default=2, help="放几遍（默认 2）")
     p_listen.add_argument("--gap", type=float, default=1.2, help="两遍之间隔几秒")
     p_listen.add_argument("--min-sec", type=float,
-                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+                          help="练习单元的最短秒数。默认 0 = 严格一句一个；设成 1.5 会把短句并进下一句")
     p_listen.add_argument("--max-sec", type=float,
-                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
+                          help="练习单元的最长秒数，超过会在最大停顿处再断（默认 6）")
     p_listen.set_defaults(func=cmd_listen)
 
     p_play = sub.add_parser("play", help="播放原声（默认不显示原文）")
@@ -630,9 +630,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_play.add_argument("--gap", type=float, default=0.8, help="两遍之间隔几秒")
     p_play.add_argument("--text", action="store_true", help="同时显示原文")
     p_play.add_argument("--min-sec", type=float,
-                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+                          help="练习单元的最短秒数。默认 0 = 严格一句一个；设成 1.5 会把短句并进下一句")
     p_play.add_argument("--max-sec", type=float,
-                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
+                          help="练习单元的最长秒数，超过会在最大停顿处再断（默认 6）")
     p_play.set_defaults(func=cmd_play)
 
     p_progress = sub.add_parser("progress", help="查看跨会话的练习趋势")
@@ -650,9 +650,9 @@ def build_parser() -> argparse.ArgumentParser:
                            help="你的录音 wav 路径，可重复传多次（建议每轮录 3 遍）")
     p_compare.add_argument("-o", "--out", help="输出 png 路径")
     p_compare.add_argument("--min-sec", type=float,
-                          help="练习单元的最短秒数，0 表示严格一句一个（默认 1.2）")
+                          help="练习单元的最短秒数。默认 0 = 严格一句一个；设成 1.5 会把短句并进下一句")
     p_compare.add_argument("--max-sec", type=float,
-                          help="练习单元的最长秒数，超过会在最大停顿处再切（默认 6）")
+                          help="练习单元的最长秒数，超过会在最大停顿处再断（默认 6）")
     p_compare.set_defaults(func=cmd_compare)
 
     return parser

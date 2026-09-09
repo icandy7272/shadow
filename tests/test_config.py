@@ -19,3 +19,10 @@ def test_ensure_dirs_creates_whole_tree(monkeypatch, tmp_path):
 def test_segment_bounds_are_sane():
     assert config.SEGMENT_MIN_SEC < config.SEGMENT_MAX_SEC
     assert 0 < config.PAUSE_GAP_SEC < 2.0
+
+
+def test_unit_bounds_default_to_sentence_level():
+    # 0 表示不合并短句，即严格一句一个
+    assert config.UNIT_MIN_SEC == 0.0
+    assert config.UNIT_MIN_WORDS >= 1
+    assert config.UNIT_MAX_SEC > 1.0
