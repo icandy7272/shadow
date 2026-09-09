@@ -197,6 +197,12 @@ PITCH_CEILING_HZ = 500.0
 MIN_ATTEMPT_SEC = 1.0
 MIN_ATTEMPT_RMS_DB = -50.0
 
+# --- 外部命令超时（秒）---
+# 无超时的 subprocess.run 会在网络卡住时永久挂起，状态停在 downloading 且无恢复路径。
+PROBE_TIMEOUT_SEC = 60.0
+DOWNLOAD_TIMEOUT_SEC = 1800.0
+FFMPEG_TIMEOUT_SEC = 900.0
+
 
 def data_dir() -> Path:
     return Path(os.environ.get("SHADOW_DATA_DIR", Path.home() / ".shadow"))
@@ -717,6 +723,15 @@ def test_short_tail_is_merged_into_previous_segment():
     assert segments[0].duration == pytest.approx(50.5)
 
 
+def test_short_tail_is_not_merged_when_it_would_exceed_max():
+    # 201 词无停顿：前段硬切在 90s，尾段 10.5s 不足 min。
+    # 合并会得到 100.5s 超出 max_sec，因此必须保留为两段。
+    segments = split(make_words(201))
+    assert len(segments) == 2
+    assert segments[0].duration == pytest.approx(90.0)
+    assert segments[1].duration == pytest.approx(10.5)
+
+
 def test_segment_indices_are_sequential_and_bounds_match_words():
     segments = split(make_words(300))
     assert [s.idx for s in segments] == [0, 1]
@@ -776,7 +791,11 @@ def split_into_segments(
         tail_start, tail_end = spans[-1]
         if words[tail_end].end - words[tail_start].start < min_sec:
             prev_start, _ = spans[-2]
-            spans = spans[:-2] + [(prev_start, tail_end)]
+            merged = words[tail_end].end - words[prev_start].start
+            # 只在不撑破 max_sec 时才合并。宁可留一个偏短的尾段，
+            # 也不能产出超长片段——30-90s 是整个训练设计的前提。
+            if merged <= max_sec:
+                spans = spans[:-2] + [(prev_start, tail_end)]
 
     return tuple(
         Segment(
@@ -792,7 +811,7 @@ def split_into_segments(
 - [ ] **Step 4: 运行，确认通过**
 
 Run: `uv run pytest tests/test_segmenter.py`
-Expected: 6 passed
+Expected: 7 passed
 
 - [ ] **Step 5: Commit**
 
@@ -871,6 +890,12 @@ def test_select_blanks_caps_at_twelve_for_long_segments():
 
 def test_select_blanks_handles_empty_input():
     assert select_blanks(()) == ()
+
+
+def test_select_blanks_degrades_gracefully_when_no_function_words():
+    # 全是实词，没有功能词可挖 —— 应返回空，而不是硬凑到下限
+    words = build_words(["market", "closed", "time", "today", "anyway"])
+    assert select_blanks(words) == ()
 ```
 
 - [ ] **Step 2: 运行，确认失败**
@@ -922,7 +947,14 @@ def _cmu() -> dict[str, list[list[str]]]:
 
 
 def normalise(text: str) -> str:
-    return _NON_WORD.sub("", text.lower())
+    """归一化用于比较的词形。
+
+    剥空时退回小写原文：全数字或全符号的词（"2023" / "2024"）被剥成空串后
+    会互相误判为相等，既虚高可懂度，又会把一对错词当成时间对齐锚点喂给
+    build_anchors——而整个对齐设计的前提就是 equal 的 token 可靠。
+    """
+    stripped = _NON_WORD.sub("", text.lower())
+    return stripped or text.lower().strip()
 
 
 def count_syllables(word: str) -> int:
@@ -991,7 +1023,7 @@ def select_blanks(
 - [ ] **Step 4: 运行，确认通过**
 
 Run: `uv run pytest tests/test_blanks.py`
-Expected: 7 passed
+Expected: 8 passed
 
 - [ ] **Step 5: Commit**
 
@@ -1068,6 +1100,15 @@ def test_probe_rejects_unparseable_duration(monkeypatch):
         downloader.probe("https://x/y")
 
 
+def test_probe_reports_timeout_clearly(monkeypatch):
+    def timeout_run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(downloader.subprocess, "run", timeout_run)
+    with pytest.raises(DownloadError, match="超时"):
+        downloader.probe("https://x/y")
+
+
 def test_download_audio_invokes_ytdlp_then_ffmpeg(monkeypatch, tmp_path):
     calls = []
 
@@ -1114,6 +1155,20 @@ class DownloadError(RuntimeError):
     """下载或探测素材失败。消息中应包含外部工具的原始输出。"""
 
 
+def _run(cmd: list[str], *, timeout: float, what: str) -> subprocess.CompletedProcess:
+    """跑外部命令，把超时转成可读错误。
+
+    不设超时的话，网络卡住会让导入永久挂起，状态停在 downloading 且没有恢复路径。
+    """
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise DownloadError(
+            f"{what}超时（{timeout:.0f} 秒无响应）。"
+            f"网络卡住或链接无法访问，换个链接或稍后重试。"
+        ) from exc
+
+
 def validate_url(url: str) -> str:
     cleaned = (url or "").strip()
     parsed = urlparse(cleaned)
@@ -1124,13 +1179,13 @@ def validate_url(url: str) -> str:
 
 def probe(url: str) -> tuple[str, float]:
     """返回 (标题, 时长秒)。不下载媒体。"""
-    proc = subprocess.run(
+    proc = _run(
         [
             "yt-dlp", "--no-playlist", "--skip-download",
             "--print", "%(title)s", "--print", "%(duration)s", url,
         ],
-        capture_output=True,
-        text=True,
+        timeout=config.PROBE_TIMEOUT_SEC,
+        what="yt-dlp 查询",
     )
     if proc.returncode != 0:
         raise DownloadError(f"yt-dlp 查询失败：\n{proc.stderr.strip()}")
@@ -1154,14 +1209,14 @@ def download_audio(url: str, dest_wav: Path, *, workdir: Path) -> Path:
     dest_wav.parent.mkdir(parents=True, exist_ok=True)
     workdir.mkdir(parents=True, exist_ok=True)
 
-    fetch = subprocess.run(
+    fetch = _run(
         [
             "yt-dlp", "--no-playlist", "-f", "bestaudio",
             "-o", str(workdir / "raw.%(ext)s"),
             "--print", "after_move:filepath", url,
         ],
-        capture_output=True,
-        text=True,
+        timeout=config.DOWNLOAD_TIMEOUT_SEC,
+        what="yt-dlp 下载",
     )
     if fetch.returncode != 0:
         raise DownloadError(f"yt-dlp 下载失败：\n{fetch.stderr.strip()}")
@@ -1171,14 +1226,14 @@ def download_audio(url: str, dest_wav: Path, *, workdir: Path) -> Path:
         raise DownloadError("yt-dlp 未报告下载后的文件路径")
     raw_path = Path(raw_lines[-1].strip())
 
-    convert = subprocess.run(
+    convert = _run(
         [
             "ffmpeg", "-y", "-loglevel", "error", "-i", str(raw_path),
             "-ar", str(config.SAMPLE_RATE), "-ac", "1",
             "-c:a", "pcm_s16le", str(dest_wav),
         ],
-        capture_output=True,
-        text=True,
+        timeout=config.FFMPEG_TIMEOUT_SEC,
+        what="ffmpeg 转码",
     )
     if convert.returncode != 0:
         raise DownloadError(f"ffmpeg 转码失败：\n{convert.stderr.strip()}")
@@ -1188,7 +1243,7 @@ def download_audio(url: str, dest_wav: Path, *, workdir: Path) -> Path:
 - [ ] **Step 4: 运行，确认通过**
 
 Run: `uv run pytest tests/test_downloader.py`
-Expected: 10 passed
+Expected: 11 passed
 
 - [ ] **Step 5: Commit**
 
@@ -1499,11 +1554,18 @@ def conn(monkeypatch, tmp_path):
 
 
 def fake_words():
-    """160 词 x 0.5s，第 79 词后有停顿 -> 应切成 2 段。"""
+    """160 词，第 79 词后有停顿 -> 应切成 2 段。
+
+    实词 market（2 音节）0.7s、功能词 the（1 音节）0.1s，每对仍占 0.8s。
+    这样 the 的弱读比值 = 0.1 / (1 x 32.0/120) = 0.375，低于 0.6 的严格阈值，
+    会被 select_blanks 选中。若两者时长相同，1 音节的 the 反而显得「偏慢」
+    （比值 1.5），一个空都挖不出来。
+    """
     words, t = [], 0.0
     for i in range(160):
-        words.append(Word(text="the" if i % 2 else "market", start=t, end=t + 0.5))
-        t += 0.5 + (0.5 if i == 79 else 0.0)
+        text, duration = ("the", 0.1) if i % 2 else ("market", 0.7)
+        words.append(Word(text=text, start=t, end=t + duration))
+        t += duration + (0.5 if i == 79 else 0.0)
     return tuple(words)
 
 
@@ -1865,7 +1927,7 @@ def accuracy(tokens: Sequence[DiffToken]) -> float:
 - [ ] **Step 5: 运行，确认通过**
 
 Run: `uv run pytest tests/test_diff.py tests/test_blanks.py`
-Expected: 15 passed
+Expected: 16 passed
 
 - [ ] **Step 6: Commit**
 
@@ -1947,8 +2009,11 @@ def test_semitones_are_speaker_independent(tmp_path):
 def test_energy_drop_is_about_six_db(tmp_path):
     result = analyse(write_two_levels(tmp_path / "a.wav"))
     half = len(result.energy_db) // 2
-    loud = np.median(result.energy_db[100:half - 100])
-    quiet = np.median(result.energy_db[half + 100:-100])
+    # 信号 2.0s / 步长 0.01s = 200 帧，half = 100。裁边必须远小于 100，
+    # 否则 [100:half-100] 会切出空数组，np.median 返回 nan。
+    margin = 20
+    loud = np.median(result.energy_db[margin:half - margin])
+    quiet = np.median(result.energy_db[half + margin:-margin])
     assert loud - quiet == pytest.approx(6.0, abs=1.5)
 
 
@@ -2461,6 +2526,13 @@ def test_labels_use_chinese_when_font_available(monkeypatch):
     assert plot.configure_labels() is plot.LABELS_ZH
 
 
+def test_unrecognised_positions_finds_words_with_no_ratio():
+    from shadow.report.plot import unrecognised_positions
+
+    assert unrecognised_positions(TIMINGS) == (2,)
+    assert unrecognised_positions(()) == ()
+
+
 def test_render_handles_all_missing_timings(tmp_path):
     out = tmp_path / "cmp2.png"
     reference = fake_prosody()
@@ -2512,6 +2584,7 @@ from ..analysis.timing import WordTiming  # noqa: E402
 
 REF_COLOUR = "#1f77b4"
 USR_COLOUR = "#d62728"
+WRONG_COLOUR = "#ff7f0e"
 FLAG_COLOUR = "#999999"
 
 # matplotlib 内置字体不含 CJK 字形，直接写中文会渲染成一排方框。
@@ -2529,7 +2602,7 @@ LABELS_ZH = {
     "p2_title": "Panel 2 · 轻重分布",
     "p2_y": "能量（dB）",
     "p2_x": "时间（秒，已对齐到原声轴）",
-    "p3_title": "Panel 3 · 节奏：柱子高于 1.0 = 拖长了（该弱读却发满），红柱 = 机器没听出这个词",
+    "p3_title": "Panel 3 · 节奏：柱子高于 1.0 = 拖长了（该弱读却发满）；红底 = 没听出来，橙底 = 听成了别的词",
     "p3_y": "你的时长 / 原声时长",
 }
 
@@ -2542,7 +2615,7 @@ LABELS_EN = {
     "p2_title": "Panel 2 - Loudness distribution",
     "p2_y": "energy (dB)",
     "p2_x": "time (s, warped onto reference axis)",
-    "p3_title": "Panel 3 - Rhythm: bar above 1.0 = stretched (should be reduced); red = not recognised",
+    "p3_title": "Panel 3 - Rhythm: bar above 1.0 = stretched; red = not recognised, orange = heard as another word",
     "p3_y": "your duration / reference duration",
 }
 
@@ -2563,6 +2636,18 @@ def configure_labels() -> dict[str, str]:
         return LABELS_EN
     plt.rcParams["font.sans-serif"] = [font, *plt.rcParams["font.sans-serif"]]
     return LABELS_ZH
+
+
+def unrecognised_positions(timings: Sequence[WordTiming]) -> tuple[int, ...]:
+    """比值为 None 的词在 Panel 3 上的位置——机器没听出来，必须显式标红。"""
+    return tuple(
+        index for index, timing in enumerate(timings) if timing.ratio is None
+    )
+
+
+def flag_colour(timing: WordTiming) -> str:
+    """听成别的词和完全没听出来是两种不同的问题，用颜色区分。"""
+    return WRONG_COLOUR if timing.kind == "wrong" else USR_COLOUR
 
 
 def render_comparison(
@@ -2607,13 +2692,21 @@ def render_comparison(
 
     positions = np.arange(len(timings))
     ratios = [t.ratio if t.ratio is not None else 0.0 for t in timings]
-    colours = [USR_COLOUR if t.ratio is None else REF_COLOUR for t in timings]
-    ax_timing.bar(positions, ratios, color=colours)
+    ax_timing.bar(positions, ratios, color=REF_COLOUR)
+
+    # 没听出来的词比值为 None，柱高为 0 会让它直接从图上消失——而「没被听懂」
+    # 恰恰是最该看见的信号。改用红色背景带 + 红色词标出来，不伪造一个比值。
+    for position in unrecognised_positions(timings):
+        ax_timing.axvspan(position - 0.45, position + 0.45,
+                          color=flag_colour(timings[position]), alpha=0.18, zorder=0)
+
     ax_timing.axhline(1.0, color="#333333", linewidth=1.2)
     ax_timing.set_xticks(positions)
     ax_timing.set_xticklabels(
         [t.text for t in timings], rotation=60, ha="right", fontsize=8
     )
+    for index in unrecognised_positions(timings):
+        ax_timing.get_xticklabels()[index].set_color(flag_colour(timings[index]))
     ax_timing.set_ylabel(labels["p3_y"])
     ax_timing.set_title(labels["p3_title"], loc="left")
     ax_timing.grid(alpha=0.2, axis="y")
@@ -2627,7 +2720,7 @@ def render_comparison(
 - [ ] **Step 4: 运行，确认通过**
 
 Run: `uv run pytest tests/test_plot.py`
-Expected: 4 passed
+Expected: 5 passed
 
 - [ ] **Step 5: Commit**
 
@@ -2703,6 +2796,13 @@ def test_compare_writes_png(monkeypatch, tmp_path, capsys):
     assert "可懂度" in capsys.readouterr().out
 
 
+def test_export_reports_missing_segment_cleanly(capsys):
+    # 曾经这里抛 SystemExit，绕过 except Exception，既没有错误前缀
+    # 也让 main() 无法返回 int
+    assert cli.main(["export", "99999"]) == 1
+    assert "不存在" in capsys.readouterr().err
+
+
 def test_compare_rejects_silent_recording(monkeypatch, tmp_path, capsys):
     reference = write_tone(tmp_path / "ref.wav")
     sr = 16000
@@ -2742,6 +2842,14 @@ from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
 from .models import Word
 from .report.plot import render_comparison
+
+
+class CliError(RuntimeError):
+    """命令执行失败，消息直接呈现给用户。
+
+    不能用 SystemExit——它继承自 BaseException 而非 Exception，
+    会绕过各命令的 except Exception，既丢掉错误前缀，也破坏 main() 返回 int 的契约。
+    """
 
 
 def _open_db():
@@ -2790,10 +2898,10 @@ def _segment_reference(connection, segment_id: int, dest: Path):
     """导出片段音频，并把词时间戳平移到以片段起点为 0。"""
     segment = db.get_segment(connection, segment_id)
     if segment is None:
-        raise SystemExit(f"片段 {segment_id} 不存在")
+        raise CliError(f"片段 {segment_id} 不存在")
     source = db.get_source(connection, segment["source_id"])
     if source is None or not source["audio_path"]:
-        raise SystemExit(f"片段 {segment_id} 的素材音频缺失")
+        raise CliError(f"片段 {segment_id} 的素材音频缺失")
     media.cut_segment(
         Path(source["audio_path"]), dest,
         start=segment["start_sec"], end=segment["end_sec"],
@@ -2926,7 +3034,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: 运行，确认通过**
 
 Run: `uv run pytest tests/test_cli.py`
-Expected: 4 passed
+Expected: 5 passed
 
 - [ ] **Step 5: 全量测试**
 
@@ -3051,3 +3159,34 @@ git commit -m "docs: README 与 M2 验证结论模板"
 - [ ] `shadow import` 能把一个真实 URL 导成若干片段
 - [ ] `shadow compare` 能产出三面板 PNG
 - [ ] `2026-09-09-m2-verdict.md` 已填写，M3 的走向已确定
+
+---
+
+## 实现后修订记录
+
+计划中的代码块是实现指南；以下修订发生在实现与审查过程中，以 git 历史为准。
+`tests/test_cli.py`、`tests/test_diff.py` 与 `tests/test_text.py` 在终审后新增了用例，
+与上文代码块不再逐字一致，属预期。
+
+**实现 subagent 在执行中发现的计划错误（3 处）：**
+
+| 处 | 问题 | 修正 |
+|---|---|---|
+| Task 9 fixture | 所有词给相同时长 0.5s，1 音节的 `the` 弱读比值算出 1.5（比基准还慢），严格与放宽阈值都选不中，挖空断言必然失败 | `market` 0.7s / `the` 0.1s，比值降到 0.375 |
+| Task 11 fixture | 2.0s 信号只有 200 帧、`half=100`，而裁边宽度写的是 100，两个切片均为空数组，`np.median` 返回 nan | 裁边改为 20 |
+| Task 15 实现 | `_segment_reference` 抛 `SystemExit`（继承自 `BaseException`），绕过 `except Exception`，丢掉错误前缀且破坏 `main() -> int` 契约 | 改抛 `CliError` |
+
+**代码审查发现的缺陷（5 处）：**
+
+| 处 | 问题 | 修正 |
+|---|---|---|
+| `segmenter` | 尾段合并只检查下界，181 词 + 20 词短尾会合并出 100.5s 片段，突破 `max_sec` | 加 `merged <= max_sec` 判断 |
+| `downloader` | `subprocess.run` 无 timeout，网络卡住则导入永久挂起且无恢复路径 | 收敛到带超时的 `_run` |
+| `plot` Panel 3 | 比值为 `None` 的词柱高为 0，等于从图上消失，而图例却写着「红柱」 | 红色背景带 + 红色词标 |
+| `plot` Panel 3 | 「听成别的词」与「完全没听出来」视觉上无法区分 | 橙底 / 红底分开 |
+| `text.normalise` | 剥掉非 `[a-z']` 后，`"2023"` 与 `"2024"` 同为空串被判相等，虚高可懂度并污染时间对齐锚点 | 剥空时退回小写原文 |
+
+**未修（已知、已评估）：**
+
+- 导入中途失败时，已下载的 wav 留在磁盘上无人引用（`sources.audio_path` 只在成功时写入）。
+  单用户本地工具，量级可控，留待需要时再加清理命令。
