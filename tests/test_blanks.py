@@ -54,3 +54,9 @@ def test_select_blanks_caps_at_twelve_for_long_segments():
 
 def test_select_blanks_handles_empty_input():
     assert select_blanks(()) == ()
+
+
+def test_select_blanks_degrades_gracefully_when_no_function_words():
+    # 全是实词，没有功能词可挖 —— 应返回空，而不是硬凑到下限
+    words = build_words(["market", "closed", "time", "today", "anyway"])
+    assert select_blanks(words) == ()

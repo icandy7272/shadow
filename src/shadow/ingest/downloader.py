@@ -15,6 +15,20 @@ class DownloadError(RuntimeError):
     """下载或探测素材失败。消息中应包含外部工具的原始输出。"""
 
 
+def _run(cmd: list[str], *, timeout: float, what: str) -> subprocess.CompletedProcess:
+    """跑外部命令，把超时转成可读错误。
+
+    不设超时的话，网络卡住会让导入永久挂起，状态停在 downloading 且没有恢复路径。
+    """
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise DownloadError(
+            f"{what}超时（{timeout:.0f} 秒无响应）。"
+            f"网络卡住或链接无法访问，换个链接或稍后重试。"
+        ) from exc
+
+
 def validate_url(url: str) -> str:
     cleaned = (url or "").strip()
     parsed = urlparse(cleaned)
@@ -25,13 +39,13 @@ def validate_url(url: str) -> str:
 
 def probe(url: str) -> tuple[str, float]:
     """返回 (标题, 时长秒)。不下载媒体。"""
-    proc = subprocess.run(
+    proc = _run(
         [
             "yt-dlp", "--no-playlist", "--skip-download",
             "--print", "%(title)s", "--print", "%(duration)s", url,
         ],
-        capture_output=True,
-        text=True,
+        timeout=config.PROBE_TIMEOUT_SEC,
+        what="yt-dlp 查询",
     )
     if proc.returncode != 0:
         raise DownloadError(f"yt-dlp 查询失败：\n{proc.stderr.strip()}")
@@ -55,14 +69,14 @@ def download_audio(url: str, dest_wav: Path, *, workdir: Path) -> Path:
     dest_wav.parent.mkdir(parents=True, exist_ok=True)
     workdir.mkdir(parents=True, exist_ok=True)
 
-    fetch = subprocess.run(
+    fetch = _run(
         [
             "yt-dlp", "--no-playlist", "-f", "bestaudio",
             "-o", str(workdir / "raw.%(ext)s"),
             "--print", "after_move:filepath", url,
         ],
-        capture_output=True,
-        text=True,
+        timeout=config.DOWNLOAD_TIMEOUT_SEC,
+        what="yt-dlp 下载",
     )
     if fetch.returncode != 0:
         raise DownloadError(f"yt-dlp 下载失败：\n{fetch.stderr.strip()}")
@@ -72,14 +86,14 @@ def download_audio(url: str, dest_wav: Path, *, workdir: Path) -> Path:
         raise DownloadError("yt-dlp 未报告下载后的文件路径")
     raw_path = Path(raw_lines[-1].strip())
 
-    convert = subprocess.run(
+    convert = _run(
         [
             "ffmpeg", "-y", "-loglevel", "error", "-i", str(raw_path),
             "-ar", str(config.SAMPLE_RATE), "-ac", "1",
             "-c:a", "pcm_s16le", str(dest_wav),
         ],
-        capture_output=True,
-        text=True,
+        timeout=config.FFMPEG_TIMEOUT_SEC,
+        what="ffmpeg 转码",
     )
     if convert.returncode != 0:
         raise DownloadError(f"ffmpeg 转码失败：\n{convert.stderr.strip()}")

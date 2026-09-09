@@ -39,6 +39,12 @@ PITCH_CEILING_HZ = 500.0
 MIN_ATTEMPT_SEC = 1.0
 MIN_ATTEMPT_RMS_DB = -50.0
 
+# --- 外部命令超时（秒）---
+# 无超时的 subprocess.run 会在网络卡住时永久挂起，状态停在 downloading 且无恢复路径。
+PROBE_TIMEOUT_SEC = 60.0
+DOWNLOAD_TIMEOUT_SEC = 1800.0
+FFMPEG_TIMEOUT_SEC = 900.0
+
 
 def data_dir() -> Path:
     return Path(os.environ.get("SHADOW_DATA_DIR", Path.home() / ".shadow"))

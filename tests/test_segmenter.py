@@ -54,6 +54,15 @@ def test_short_tail_is_merged_into_previous_segment():
     assert segments[0].duration == pytest.approx(50.5)
 
 
+def test_short_tail_is_not_merged_when_it_would_exceed_max():
+    # 201 词无停顿：前段硬切在 90s，尾段 10.5s 不足 min。
+    # 合并会得到 100.5s 超出 max_sec，因此必须保留为两段。
+    segments = split(make_words(201))
+    assert len(segments) == 2
+    assert segments[0].duration == pytest.approx(90.0)
+    assert segments[1].duration == pytest.approx(10.5)
+
+
 def test_segment_indices_are_sequential_and_bounds_match_words():
     segments = split(make_words(300))
     assert [s.idx for s in segments] == [0, 1]

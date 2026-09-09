@@ -40,7 +40,11 @@ def split_into_segments(
         tail_start, tail_end = spans[-1]
         if words[tail_end].end - words[tail_start].start < min_sec:
             prev_start, _ = spans[-2]
-            spans = spans[:-2] + [(prev_start, tail_end)]
+            merged = words[tail_end].end - words[prev_start].start
+            # 只在不撑破 max_sec 时才合并。宁可留一个偏短的尾段，
+            # 也不能产出超长片段——30-90s 是整个训练设计的前提。
+            if merged <= max_sec:
+                spans = spans[:-2] + [(prev_start, tail_end)]
 
     return tuple(
         Segment(

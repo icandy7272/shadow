@@ -52,6 +52,15 @@ def test_probe_rejects_unparseable_duration(monkeypatch):
         downloader.probe("https://x/y")
 
 
+def test_probe_reports_timeout_clearly(monkeypatch):
+    def timeout_run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(downloader.subprocess, "run", timeout_run)
+    with pytest.raises(DownloadError, match="超时"):
+        downloader.probe("https://x/y")
+
+
 def test_download_audio_invokes_ytdlp_then_ffmpeg(monkeypatch, tmp_path):
     calls = []
 
