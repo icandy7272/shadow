@@ -238,3 +238,81 @@ def test_local_time_conversion():
     assert cli._local_time("2026-09-09T13:23:00+00:00") != "09-09 13:23" or True
     assert len(cli._local_time("2026-09-09T13:23:00+00:00")) == 11
     assert cli._local_time("garbage") == "garbage"
+
+
+def test_play_hides_the_text_by_default(monkeypatch, tmp_path, capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    assert cli.main(["play", "--segment", str(segment_id), "--unit", "1"]) == 0
+    out = capsys.readouterr().out
+    # 盲听纪律：默认不能把原文打出来
+    assert "should have been there" not in out
+    assert "--text" in out
+
+
+def test_play_shows_the_text_when_asked(monkeypatch, tmp_path, capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    assert cli.main(["play", "--segment", str(segment_id), "--unit", "1", "--text"]) == 0
+    assert "should have been there" in capsys.readouterr().out
+
+
+def test_listen_reveals_text_only_after_rating(monkeypatch, capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: "3")
+    assert cli.main(["listen", "--segment", str(segment_id), "--unit", "1"]) == 0
+    out = capsys.readouterr().out
+    # 原文必须出现在评分之后
+    assert out.index("听懂了多少") < out.index("should have been there")
+
+    connection = db.connect()
+    runs = db.list_runs(connection, segment_id=segment_id, unit_index=1)
+    assert len(runs) == 1
+    assert runs[0]["blind_rating"] == 3
+    connection.close()
+
+
+def test_listen_can_skip_the_rating(monkeypatch, capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: "")
+    assert cli.main(["listen", "--segment", str(segment_id), "--unit", "1"]) == 0
+    assert "没记分数" in capsys.readouterr().out
+    connection = db.connect()
+    assert db.list_runs(connection, segment_id=segment_id) == []
+    connection.close()
+
+
+def test_listen_rejects_out_of_range_then_accepts(monkeypatch, capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    answers = iter(["9", "0", "4"])
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    assert cli.main(["listen", "--segment", str(segment_id), "--unit", "1"]) == 0
+    connection = db.connect()
+    assert db.list_runs(connection, segment_id=segment_id)[0]["blind_rating"] == 4
+    connection.close()
+
+
+def test_progress_shows_blind_ratings(monkeypatch, capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: "2")
+    cli.main(["listen", "--segment", str(segment_id), "--unit", "1"])
+    capsys.readouterr()
+    assert cli.main(["progress"]) == 0
+    out = capsys.readouterr().out
+    assert "盲听" in out and "2分" in out

@@ -259,6 +259,78 @@ def cmd_compare(args: argparse.Namespace) -> int:
         return 1
 
 
+BLIND_SCALE = (
+    "1  几乎没听懂",
+    "2  抓到几个词",
+    "3  大意懂了，细节丢了",
+    "4  基本都懂，个别词没抓住",
+    "5  每个词都听清了",
+)
+
+
+def _ask_blind_rating() -> int | None:
+    print("\n听懂了多少？")
+    for line in BLIND_SCALE:
+        print(f"    {line}")
+    while True:
+        try:
+            answer = input("  输入 1-5（直接回车跳过）：").strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        if not answer:
+            return None
+        if answer in "12345" and len(answer) == 1:
+            return int(answer)
+        print("  只接受 1 到 5。")
+
+
+def cmd_listen(args: argparse.Namespace) -> int:
+    """盲听：不给文字，听完自评，然后才揭晓原文。
+
+    这一步是整个训练里最反直觉也最重要的一步。用户的病是英语以视觉形式存储，
+    字幕常开等于持续给病灶续命。而自评分数是唯一测「听懂了多少」的指标——
+    发声、停顿、音高全是产出侧的。
+    """
+    connection = _open_db()
+    try:
+        ref_path, ref_words = _reference_for(connection, args)
+    except Exception as exc:
+        print(f"读取原声失败：{exc}", file=sys.stderr)
+        return 1
+
+    print(f"盲听 · {len(ref_words)} 个词 · 放 {args.times} 遍")
+    print("不看文字，就听。\n")
+    try:
+        for index in range(1, args.times + 1):
+            print(f"  {index}/{args.times}", end="\r", flush=True)
+            media.play(ref_path, times=1, gap=0.0)
+            if index < args.times:
+                time.sleep(args.gap)
+        print("             ")
+    except KeyboardInterrupt:
+        print("\n停了。")
+    except Exception as exc:
+        print(f"\n播放失败：{exc}", file=sys.stderr)
+        return 1
+
+    rating = _ask_blind_rating()
+
+    print("\n原文：")
+    print(f"  {' '.join(w.text for w in ref_words)}\n")
+
+    if rating is None:
+        print("没记分数。")
+        return 0
+    if args.segment is None:
+        print(f"记下了：{rating} 分（用 --segment 才能存进进度）")
+        return 0
+    run_id = db.start_run(connection, segment_id=args.segment, unit_index=args.unit)
+    db.set_blind_rating(connection, run_id, rating)
+    db.finish_run(connection, run_id)
+    print(f"记下了：{rating} 分。shadow progress 可以看这个分数的走势。")
+    return 0
+
+
 def cmd_play(args: argparse.Namespace) -> int:
     connection = _open_db()
     try:
@@ -266,7 +338,10 @@ def cmd_play(args: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"读取原声失败：{exc}", file=sys.stderr)
         return 1
-    print(" ".join(w.text for w in ref_words))
+    if args.text:
+        print(" ".join(w.text for w in ref_words))
+    else:
+        print(f"（{len(ref_words)} 个词，不显示原文——想看加 --text）")
     print(f"\n放 {args.times} 遍（Ctrl+C 停）\n")
     try:
         for index in range(1, args.times + 1):
@@ -372,6 +447,11 @@ def cmd_progress(args: argparse.Namespace) -> int:
     for row in runs:
         takes = db.run_metrics(connection, row["id"])
         if not takes:
+            if row["blind_rating"] is not None:
+                print(f"{_local_time(row['started_at']):<14}"
+                      f"{row['segment_id']:>5}{(row['unit_index'] or '-'):>5}"
+                      f"{'盲听':>5}{row['blind_rating']:>6}分"
+                      f"{'':>7}{'':>7}   —")
             continue
         counts: dict[str, int] = {}
         for take in takes:
@@ -498,13 +578,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_record.add_argument("-o", "--out", help="输出 png 路径")
     p_record.set_defaults(func=cmd_record)
 
-    p_play = sub.add_parser("play", help="播放原声")
+    p_listen = sub.add_parser("listen", help="盲听：不给文字，听完自评")
+    listen_group = p_listen.add_mutually_exclusive_group(required=True)
+    listen_group.add_argument("--ref", help="原声 wav 路径")
+    listen_group.add_argument("--segment", type=int, help="已导入的片段 id")
+    p_listen.add_argument("-u", "--unit", type=int, help="片段内第 n 个练习单元")
+    p_listen.add_argument("-t", "--times", type=int, default=2, help="放几遍（默认 2）")
+    p_listen.add_argument("--gap", type=float, default=1.2, help="两遍之间隔几秒")
+    p_listen.set_defaults(func=cmd_listen)
+
+    p_play = sub.add_parser("play", help="播放原声（默认不显示原文）")
     play_group = p_play.add_mutually_exclusive_group(required=True)
     play_group.add_argument("--ref", help="原声 wav 路径")
     play_group.add_argument("--segment", type=int, help="已导入的片段 id")
     p_play.add_argument("-u", "--unit", type=int, help="片段内第 n 个练习单元")
-    p_play.add_argument("-n", "--times", type=int, default=1, help="放几遍（默认 1）")
+    p_play.add_argument("-t", "--times", type=int, default=1, help="放几遍（默认 1）")
     p_play.add_argument("--gap", type=float, default=0.8, help="两遍之间隔几秒")
+    p_play.add_argument("--text", action="store_true", help="同时显示原文")
     p_play.set_defaults(func=cmd_play)
 
     p_progress = sub.add_parser("progress", help="查看跨会话的练习趋势")

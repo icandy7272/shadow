@@ -210,6 +210,13 @@ def start_run(conn: sqlite3.Connection, *, segment_id: int, unit_index: int | No
     return int(cursor.lastrowid)
 
 
+def set_blind_rating(conn: sqlite3.Connection, run_id: int, rating: int) -> None:
+    conn.execute(
+        "UPDATE practice_runs SET blind_rating = ? WHERE id = ?", (rating, run_id)
+    )
+    conn.commit()
+
+
 def finish_run(conn: sqlite3.Connection, run_id: int) -> None:
     conn.execute(
         "UPDATE practice_runs SET finished_at = ? WHERE id = ?", (_now(), run_id)
