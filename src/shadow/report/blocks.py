@@ -56,7 +56,7 @@ def _quad(x0: float, x1: float, y0: float, y1: float, **kwargs) -> Polygon:
     )
 
 
-def _draw_rhythm(ax, labels, ref_words, usr_words, rhythm) -> None:
+def _draw_rhythm(ax, labels, ref_words, usr_words, rhythm, missed_pauses) -> None:
     height = 0.20
     for base, words, colour, name in (
         (0.42, ref_words, REF_COLOUR, labels["ref"]),
@@ -89,6 +89,15 @@ def _draw_rhythm(ax, labels, ref_words, usr_words, rhythm) -> None:
             ax.text((a + b) / 2, 0.0, f"{lag:+.1f}{labels['seconds']}",
                     ha="center", va="center", fontsize=8.5, color=USR_COLOUR,
                     bbox=dict(fc="white", ec="none", pad=0.6), zorder=4)
+
+    for ref_index in missed_pauses:
+        if ref_index + 1 >= len(ref_words):
+            continue
+        a = ref_words[ref_index].end - ref_origin
+        b = ref_words[ref_index + 1].start - ref_origin
+        ax.axvspan(a, b, color=USR_COLOUR, alpha=0.16, zorder=0)
+        ax.text((a + b) / 2, 0.80, labels["missed_pause"], ha="center", va="bottom",
+                fontsize=9.5, color=USR_COLOUR, zorder=5)
 
     ax.set_title(f"{labels['rhythm_title']}。{labels['rhythm_hint']}",
                  fontsize=12, loc="left")
@@ -169,6 +178,7 @@ def render_feedback(
     ref_prosody: Prosody,
     usr_prosody: Prosody,
     flags: Sequence[Flag],
+    missed_pauses: Sequence[int] = (),
     accuracy: float,
     text: str,
     out_path: Path,
@@ -186,7 +196,7 @@ def render_feedback(
 
     figure, (ax_rhythm, ax_pitch) = plt.subplots(
         2, 1, figsize=(16, 7.4), gridspec_kw={"height_ratios": [1.0, 1.25]})
-    _draw_rhythm(ax_rhythm, labels, ref_words, usr_words, rhythm)
+    _draw_rhythm(ax_rhythm, labels, ref_words, usr_words, rhythm, missed_pauses)
     _draw_pitch(ax_pitch, labels, ref_words, usr_words, pairs,
                 ref_prosody, usr_prosody, flags)
 

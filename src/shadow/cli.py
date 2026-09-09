@@ -188,15 +188,20 @@ def cmd_compare(args: argparse.Namespace) -> int:
         ref_words=ref_words, usr_words=usr_words, tokens=tokens, rhythm=rhythm,
         ref_prosody=ref_prosody, usr_prosody=usr_prosody,
     )
+    # 停顿属于节奏，只标在图 1；图 2 只标词本身的音高/时长问题
     flags = tuple(
-        Flag(usr_index=usr_index, text=item.title.split("”")[-1].strip() or item.kind)
-        for item, usr_index in _flag_targets(advice, ref_words, usr_words, tokens)
+        Flag(usr_index=usr_index, text=item.flag)
+        for item, usr_index in _flag_targets(advice, ref_words, tokens)
+        if item.kind != "missed_pause"
     )
+    missed = tuple(item.ref_index for item in advice[:MAX_ADVICE]
+                   if item.kind == "missed_pause")
 
     out_path = Path(args.out or "feedback.png")
     render_feedback(
         ref_words=ref_words, usr_words=usr_words, tokens=tokens, rhythm=rhythm,
         ref_prosody=ref_prosody, usr_prosody=usr_prosody, flags=flags,
+        missed_pauses=missed,
         accuracy=score, text=" ".join(w.text for w in ref_words), out_path=out_path,
     )
 
@@ -207,7 +212,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
     return 0
 
 
-def _flag_targets(advice, ref_words, usr_words, tokens):
+def _flag_targets(advice, ref_words, tokens):
     """把诊断挂回到具体的用户词下标，供图 2 标红。"""
     by_ref_text = {}
     for token in tokens:

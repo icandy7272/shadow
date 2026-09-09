@@ -25,6 +25,7 @@ class Advice:
     kind: str
     ref_index: int
     score: float
+    flag: str          # 图上标注用的短标签
     title: str
     detail: str
     action: str
@@ -52,6 +53,7 @@ def build_advice(
         if gap.missed:
             found.append(Advice(
                 kind="missed_pause",
+                flag="后面该停没停",
                 ref_index=gap.ref_index,
                 score=gap.ref_gap / MIN_PAUSE_SEC,
                 title=f"“{gap.text}” 后面该停没停",
@@ -70,6 +72,7 @@ def build_advice(
         if stretch > STRETCH_RATIO:
             found.append(Advice(
                 kind="stretched",
+                flag="拖长了",
                 ref_index=token.ref_index,
                 score=(stretch - 1.0) / (STRETCH_RATIO - 1.0),
                 title=f"“{ref.text}” 拖长了",
@@ -87,6 +90,7 @@ def build_advice(
         if ref_move < -STRONG_SLOPE_ST and usr_move > ref_move + SLOPE_GAP_ST:
             found.append(Advice(
                 kind="flat_fall",
+                flag="该降没降",
                 ref_index=token.ref_index,
                 score=abs(usr_move - ref_move) / SLOPE_GAP_ST,
                 title=f"“{ref.text}” 该降没降",
@@ -98,6 +102,7 @@ def build_advice(
         elif ref_move > STRONG_SLOPE_ST and usr_move < ref_move - SLOPE_GAP_ST:
             found.append(Advice(
                 kind="flat_rise",
+                flag="该升没升",
                 ref_index=token.ref_index,
                 score=abs(ref_move - usr_move) / SLOPE_GAP_ST,
                 title=f"“{ref.text}” 该升没升",
@@ -110,6 +115,7 @@ def build_advice(
             higher = uc[0] > rc[0]
             found.append(Advice(
                 kind="pitch_off",
+                flag="音高偏高" if higher else "音高偏低",
                 ref_index=token.ref_index,
                 score=abs(uc[0] - rc[0]) / PITCH_GAP_ST,
                 title=f"“{ref.text}” 音高{'偏高' if higher else '偏低'}",
