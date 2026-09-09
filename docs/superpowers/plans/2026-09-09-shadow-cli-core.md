@@ -947,7 +947,14 @@ def _cmu() -> dict[str, list[list[str]]]:
 
 
 def normalise(text: str) -> str:
-    return _NON_WORD.sub("", text.lower())
+    """归一化用于比较的词形。
+
+    剥空时退回小写原文：全数字或全符号的词（"2023" / "2024"）被剥成空串后
+    会互相误判为相等，既虚高可懂度，又会把一对错词当成时间对齐锚点喂给
+    build_anchors——而整个对齐设计的前提就是 equal 的 token 可靠。
+    """
+    stripped = _NON_WORD.sub("", text.lower())
+    return stripped or text.lower().strip()
 
 
 def count_syllables(word: str) -> int:
@@ -2577,6 +2584,7 @@ from ..analysis.timing import WordTiming  # noqa: E402
 
 REF_COLOUR = "#1f77b4"
 USR_COLOUR = "#d62728"
+WRONG_COLOUR = "#ff7f0e"
 FLAG_COLOUR = "#999999"
 
 # matplotlib 内置字体不含 CJK 字形，直接写中文会渲染成一排方框。
@@ -2594,7 +2602,7 @@ LABELS_ZH = {
     "p2_title": "Panel 2 · 轻重分布",
     "p2_y": "能量（dB）",
     "p2_x": "时间（秒，已对齐到原声轴）",
-    "p3_title": "Panel 3 · 节奏：柱子高于 1.0 = 拖长了（该弱读却发满），红底红字的词 = 机器没听出来",
+    "p3_title": "Panel 3 · 节奏：柱子高于 1.0 = 拖长了（该弱读却发满）；红底 = 没听出来，橙底 = 听成了别的词",
     "p3_y": "你的时长 / 原声时长",
 }
 
@@ -2607,7 +2615,7 @@ LABELS_EN = {
     "p2_title": "Panel 2 - Loudness distribution",
     "p2_y": "energy (dB)",
     "p2_x": "time (s, warped onto reference axis)",
-    "p3_title": "Panel 3 - Rhythm: bar above 1.0 = stretched (should be reduced); red band = not recognised",
+    "p3_title": "Panel 3 - Rhythm: bar above 1.0 = stretched; red = not recognised, orange = heard as another word",
     "p3_y": "your duration / reference duration",
 }
 
@@ -2635,6 +2643,11 @@ def unrecognised_positions(timings: Sequence[WordTiming]) -> tuple[int, ...]:
     return tuple(
         index for index, timing in enumerate(timings) if timing.ratio is None
     )
+
+
+def flag_colour(timing: WordTiming) -> str:
+    """听成别的词和完全没听出来是两种不同的问题，用颜色区分。"""
+    return WRONG_COLOUR if timing.kind == "wrong" else USR_COLOUR
 
 
 def render_comparison(
@@ -2685,7 +2698,7 @@ def render_comparison(
     # 恰恰是最该看见的信号。改用红色背景带 + 红色词标出来，不伪造一个比值。
     for position in unrecognised_positions(timings):
         ax_timing.axvspan(position - 0.45, position + 0.45,
-                          color=USR_COLOUR, alpha=0.18, zorder=0)
+                          color=flag_colour(timings[position]), alpha=0.18, zorder=0)
 
     ax_timing.axhline(1.0, color="#333333", linewidth=1.2)
     ax_timing.set_xticks(positions)
@@ -2693,7 +2706,7 @@ def render_comparison(
         [t.text for t in timings], rotation=60, ha="right", fontsize=8
     )
     for index in unrecognised_positions(timings):
-        ax_timing.get_xticklabels()[index].set_color(USR_COLOUR)
+        ax_timing.get_xticklabels()[index].set_color(flag_colour(timings[index]))
     ax_timing.set_ylabel(labels["p3_y"])
     ax_timing.set_title(labels["p3_title"], loc="left")
     ax_timing.grid(alpha=0.2, axis="y")
@@ -3146,3 +3159,34 @@ git commit -m "docs: README 与 M2 验证结论模板"
 - [ ] `shadow import` 能把一个真实 URL 导成若干片段
 - [ ] `shadow compare` 能产出三面板 PNG
 - [ ] `2026-09-09-m2-verdict.md` 已填写，M3 的走向已确定
+
+---
+
+## 实现后修订记录
+
+计划中的代码块是实现指南；以下修订发生在实现与审查过程中，以 git 历史为准。
+`tests/test_cli.py`、`tests/test_diff.py` 与 `tests/test_text.py` 在终审后新增了用例，
+与上文代码块不再逐字一致，属预期。
+
+**实现 subagent 在执行中发现的计划错误（3 处）：**
+
+| 处 | 问题 | 修正 |
+|---|---|---|
+| Task 9 fixture | 所有词给相同时长 0.5s，1 音节的 `the` 弱读比值算出 1.5（比基准还慢），严格与放宽阈值都选不中，挖空断言必然失败 | `market` 0.7s / `the` 0.1s，比值降到 0.375 |
+| Task 11 fixture | 2.0s 信号只有 200 帧、`half=100`，而裁边宽度写的是 100，两个切片均为空数组，`np.median` 返回 nan | 裁边改为 20 |
+| Task 15 实现 | `_segment_reference` 抛 `SystemExit`（继承自 `BaseException`），绕过 `except Exception`，丢掉错误前缀且破坏 `main() -> int` 契约 | 改抛 `CliError` |
+
+**代码审查发现的缺陷（5 处）：**
+
+| 处 | 问题 | 修正 |
+|---|---|---|
+| `segmenter` | 尾段合并只检查下界，181 词 + 20 词短尾会合并出 100.5s 片段，突破 `max_sec` | 加 `merged <= max_sec` 判断 |
+| `downloader` | `subprocess.run` 无 timeout，网络卡住则导入永久挂起且无恢复路径 | 收敛到带超时的 `_run` |
+| `plot` Panel 3 | 比值为 `None` 的词柱高为 0，等于从图上消失，而图例却写着「红柱」 | 红色背景带 + 红色词标 |
+| `plot` Panel 3 | 「听成别的词」与「完全没听出来」视觉上无法区分 | 橙底 / 红底分开 |
+| `text.normalise` | 剥掉非 `[a-z']` 后，`"2023"` 与 `"2024"` 同为空串被判相等，虚高可懂度并污染时间对齐锚点 | 剥空时退回小写原文 |
+
+**未修（已知、已评估）：**
+
+- 导入中途失败时，已下载的 wav 留在磁盘上无人引用（`sources.audio_path` 只在成功时写入）。
+  单用户本地工具，量级可控，留待需要时再加清理命令。

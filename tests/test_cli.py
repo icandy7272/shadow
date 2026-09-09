@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from shadow import cli, db
-from shadow.models import Word
+from shadow import cli, config, db, media
+from shadow.models import Segment, Word
 
 
 @pytest.fixture(autouse=True)
@@ -69,3 +69,58 @@ def test_compare_rejects_silent_recording(monkeypatch, tmp_path, capsys):
     )
     assert exit_code == 1
     assert "静音" in capsys.readouterr().err
+
+
+def _seed_segment(seconds=6.0, clip=(2.0, 5.0)):
+    """建一个真实素材 + 片段：片段位于素材的 clip 区间，词时间戳是绝对时间。"""
+    connection = db.connect()
+    db.init_db(connection)
+    source_wav = config.source_audio_dir() / "1.wav"
+    write_tone(source_wav, seconds=seconds)
+    source_id = db.create_source(
+        connection, url="https://x/y", title="T", duration_sec=seconds
+    )
+    db.finish_source(connection, source_id, audio_path=str(source_wav))
+    start = clip[0]
+    words = tuple(
+        Word(text=text, start=start + i * 0.5, end=start + i * 0.5 + 0.4)
+        for i, text in enumerate(["should", "have", "been", "there"])
+    )
+    db.insert_segments(
+        connection, source_id,
+        (Segment(idx=0, start=clip[0], end=clip[1], words=words),),
+    )
+    segment_id = db.list_segments(connection, source_id)[0]["id"]
+    return connection, segment_id
+
+
+def test_segment_reference_rebases_word_times_to_clip_start(tmp_path):
+    # 这是 M2 链路上最容易静默出错的接缝：库里存的是相对整段素材的绝对时间，
+    # 而韵律图的横轴以片段起点为 0。搞错的话整张图会整体偏移。
+    connection, segment_id = _seed_segment()
+    dest, words, text = cli._segment_reference(
+        connection, segment_id, tmp_path / "ref.wav"
+    )
+    connection.close()
+
+    assert words[0].start == pytest.approx(0.0)
+    assert words[-1].end == pytest.approx(1.9)
+    assert text == "should have been there"
+    assert media.probe_duration(dest) == pytest.approx(3.0, abs=0.05)
+
+
+def test_compare_with_segment_renders_chart(monkeypatch, tmp_path, capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    user = write_tone(tmp_path / "me.wav", seconds=3.0)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=text, start=i * 0.5, end=i * 0.5 + 0.4)
+        for i, text in enumerate(["should", "have", "been", "there"])
+    ))
+    out = tmp_path / "seg.png"
+    exit_code = cli.main(
+        ["compare", "--segment", str(segment_id), "--user", str(user), "-o", str(out)]
+    )
+    assert exit_code == 0
+    assert out.exists()
+    assert "可懂度 100%" in capsys.readouterr().out

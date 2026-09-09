@@ -22,6 +22,7 @@ from ..analysis.timing import WordTiming  # noqa: E402
 
 REF_COLOUR = "#1f77b4"
 USR_COLOUR = "#d62728"
+WRONG_COLOUR = "#ff7f0e"
 FLAG_COLOUR = "#999999"
 
 # matplotlib 内置字体不含 CJK 字形，直接写中文会渲染成一排方框。
@@ -39,7 +40,7 @@ LABELS_ZH = {
     "p2_title": "Panel 2 · 轻重分布",
     "p2_y": "能量（dB）",
     "p2_x": "时间（秒，已对齐到原声轴）",
-    "p3_title": "Panel 3 · 节奏：柱子高于 1.0 = 拖长了（该弱读却发满），红底红字的词 = 机器没听出来",
+    "p3_title": "Panel 3 · 节奏：柱子高于 1.0 = 拖长了（该弱读却发满）；红底 = 没听出来，橙底 = 听成了别的词",
     "p3_y": "你的时长 / 原声时长",
 }
 
@@ -52,7 +53,7 @@ LABELS_EN = {
     "p2_title": "Panel 2 - Loudness distribution",
     "p2_y": "energy (dB)",
     "p2_x": "time (s, warped onto reference axis)",
-    "p3_title": "Panel 3 - Rhythm: bar above 1.0 = stretched (should be reduced); red band = not recognised",
+    "p3_title": "Panel 3 - Rhythm: bar above 1.0 = stretched; red = not recognised, orange = heard as another word",
     "p3_y": "your duration / reference duration",
 }
 
@@ -80,6 +81,11 @@ def unrecognised_positions(timings: Sequence[WordTiming]) -> tuple[int, ...]:
     return tuple(
         index for index, timing in enumerate(timings) if timing.ratio is None
     )
+
+
+def flag_colour(timing: WordTiming) -> str:
+    """听成别的词和完全没听出来是两种不同的问题，用颜色区分。"""
+    return WRONG_COLOUR if timing.kind == "wrong" else USR_COLOUR
 
 
 def render_comparison(
@@ -130,7 +136,7 @@ def render_comparison(
     # 恰恰是最该看见的信号。改用红色背景带 + 红色词标出来，不伪造一个比值。
     for position in unrecognised_positions(timings):
         ax_timing.axvspan(position - 0.45, position + 0.45,
-                          color=USR_COLOUR, alpha=0.18, zorder=0)
+                          color=flag_colour(timings[position]), alpha=0.18, zorder=0)
 
     ax_timing.axhline(1.0, color="#333333", linewidth=1.2)
     ax_timing.set_xticks(positions)
@@ -138,7 +144,7 @@ def render_comparison(
         [t.text for t in timings], rotation=60, ha="right", fontsize=8
     )
     for index in unrecognised_positions(timings):
-        ax_timing.get_xticklabels()[index].set_color(USR_COLOUR)
+        ax_timing.get_xticklabels()[index].set_color(flag_colour(timings[index]))
     ax_timing.set_ylabel(labels["p3_y"])
     ax_timing.set_title(labels["p3_title"], loc="left")
     ax_timing.grid(alpha=0.2, axis="y")

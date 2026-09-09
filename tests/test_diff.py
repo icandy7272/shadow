@@ -57,3 +57,11 @@ def test_empty_user_transcript_yields_zero_accuracy():
     tokens = diff_words(REF, [])
     assert kinds(tokens) == ["missing"] * 5
     assert accuracy(tokens) == pytest.approx(0.0)
+
+
+def test_distinct_numbers_are_not_reported_equal():
+    # normalise 曾把全数字词剥成空串，导致 2023/2024 互相判等，
+    # 既虚高可懂度又会污染 build_anchors 的锚点
+    tokens = diff_words(["born", "in", "2023"], ["born", "in", "2024"])
+    assert kinds(tokens) == ["equal", "equal", "wrong"]
+    assert accuracy(tokens) == pytest.approx(2 / 3)
