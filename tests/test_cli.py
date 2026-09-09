@@ -53,6 +53,13 @@ def test_compare_writes_png(monkeypatch, tmp_path, capsys):
     assert "可懂度" in capsys.readouterr().out
 
 
+def test_export_reports_missing_segment_cleanly(capsys):
+    # 曾经这里抛 SystemExit，绕过 except Exception，既没有错误前缀
+    # 也让 main() 无法返回 int
+    assert cli.main(["export", "99999"]) == 1
+    assert "不存在" in capsys.readouterr().err
+
+
 def test_compare_rejects_silent_recording(monkeypatch, tmp_path, capsys):
     reference = write_tone(tmp_path / "ref.wav")
     sr = 16000

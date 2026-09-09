@@ -19,6 +19,14 @@ from .models import Word
 from .report.plot import render_comparison
 
 
+class CliError(RuntimeError):
+    """命令执行失败，消息直接呈现给用户。
+
+    不能用 SystemExit——它继承自 BaseException 而非 Exception，
+    会绕过各命令的 except Exception，既丢掉错误前缀，也破坏 main() 返回 int 的契约。
+    """
+
+
 def _open_db():
     connection = db.connect()
     db.init_db(connection)
@@ -65,10 +73,10 @@ def _segment_reference(connection, segment_id: int, dest: Path):
     """导出片段音频，并把词时间戳平移到以片段起点为 0。"""
     segment = db.get_segment(connection, segment_id)
     if segment is None:
-        raise SystemExit(f"片段 {segment_id} 不存在")
+        raise CliError(f"片段 {segment_id} 不存在")
     source = db.get_source(connection, segment["source_id"])
     if source is None or not source["audio_path"]:
-        raise SystemExit(f"片段 {segment_id} 的素材音频缺失")
+        raise CliError(f"片段 {segment_id} 的素材音频缺失")
     media.cut_segment(
         Path(source["audio_path"]), dest,
         start=segment["start_sec"], end=segment["end_sec"],
