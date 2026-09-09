@@ -13,6 +13,7 @@ from .analysis.diff import accuracy as diff_accuracy
 from .analysis.diff import diff_words, matched_pairs
 from .analysis.prosody import analyse
 from .analysis.timing import word_timings
+from .drill.units import split_into_units
 from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
 from .models import Word
@@ -69,31 +70,76 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def _segment_reference(connection, segment_id: int, dest: Path):
-    """导出片段音频，并把词时间戳平移到以片段起点为 0。"""
+UNIT_PAD_SEC = 0.1
+
+
+def _segment_units(connection, segment_id: int):
+    """取出片段及其练习单元。"""
     segment = db.get_segment(connection, segment_id)
     if segment is None:
         raise CliError(f"片段 {segment_id} 不存在")
     source = db.get_source(connection, segment["source_id"])
     if source is None or not source["audio_path"]:
         raise CliError(f"片段 {segment_id} 的素材音频缺失")
-    media.cut_segment(
-        Path(source["audio_path"]), dest,
-        start=segment["start_sec"], end=segment["end_sec"],
+    return segment, source, split_into_units(segment["words"])
+
+
+def _segment_reference(connection, segment_id: int, dest: Path, *, unit: int | None = None):
+    """导出音频，并把词时间戳平移到以裁剪起点为 0。
+
+    unit=None 导出整个片段；给了 unit 就只导出那个练习单元（首尾各留一点余量，
+    免得切掉词头的爆破音）。
+    """
+    segment, source, units = _segment_units(connection, segment_id)
+
+    if unit is None:
+        start, end = segment["start_sec"], segment["end_sec"]
+        words = segment["words"]
+    else:
+        if not 1 <= unit <= len(units):
+            raise CliError(
+                f"片段 {segment_id} 只有 {len(units)} 个练习单元，没有第 {unit} 个"
+            )
+        words = units[unit - 1]
+        start = max(segment["start_sec"], words[0].start - UNIT_PAD_SEC)
+        end = min(segment["end_sec"], words[-1].end + UNIT_PAD_SEC)
+
+    media.cut_segment(Path(source["audio_path"]), dest, start=start, end=end)
+    rebased = tuple(
+        replace(word, start=word.start - start, end=word.end - start)
+        for word in words
     )
-    offset = segment["start_sec"]
-    words = tuple(
-        replace(word, start=word.start - offset, end=word.end - offset)
-        for word in segment["words"]
-    )
-    return dest, words, segment["text"]
+    return dest, rebased, " ".join(word.text for word in rebased)
+
+
+def cmd_units(args: argparse.Namespace) -> int:
+    connection = _open_db()
+    try:
+        segment, _, units = _segment_units(connection, args.segment)
+    except Exception as exc:
+        print(f"读取失败：{exc}", file=sys.stderr)
+        return 1
+    span = segment["end_sec"] - segment["start_sec"]
+    print(f"片段 #{args.segment}（{span:.1f}s，{len(segment['words'])} 词）"
+          f"切成 {len(units)} 个练习单元：")
+    for index, unit in enumerate(units, 1):
+        duration = unit[-1].end - unit[0].start
+        blanks = sum(word.is_blank for word in unit)
+        text = " ".join(word.text for word in unit)
+        print(f"  {index:2d}. [{duration:4.1f}s {len(unit):2d}词 {blanks}空]  {text}")
+    return 0
 
 
 def cmd_export(args: argparse.Namespace) -> int:
     connection = _open_db()
-    dest = Path(args.out or config.segment_audio_dir() / f"{args.segment}.wav")
+    suffix = "" if args.unit is None else f"-u{args.unit}"
+    dest = Path(
+        args.out or config.segment_audio_dir() / f"{args.segment}{suffix}.wav"
+    )
     try:
-        path, _, text = _segment_reference(connection, args.segment, dest)
+        path, _, text = _segment_reference(
+            connection, args.segment, dest, unit=args.unit
+        )
     except Exception as exc:
         print(f"导出失败：{exc}", file=sys.stderr)
         return 1
@@ -112,9 +158,11 @@ def cmd_compare(args: argparse.Namespace) -> int:
     connection = _open_db()
     try:
         if args.segment is not None:
+            suffix = "" if args.unit is None else f"-u{args.unit}"
             ref_path, ref_words, _ = _segment_reference(
                 connection, args.segment,
-                config.segment_audio_dir() / f"{args.segment}.wav",
+                config.segment_audio_dir() / f"{args.segment}{suffix}.wav",
+                unit=args.unit,
             )
         else:
             ref_path = Path(args.ref)
@@ -181,8 +229,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("-s", "--segments", action="store_true", help="同时列出片段")
     p_list.set_defaults(func=cmd_list)
 
-    p_export = sub.add_parser("export", help="导出片段音频用于跟读")
+    p_units = sub.add_parser("units", help="列出片段内的练习单元（3-8s）")
+    p_units.add_argument("segment", type=int)
+    p_units.set_defaults(func=cmd_units)
+
+    p_export = sub.add_parser("export", help="导出音频用于跟读")
     p_export.add_argument("segment", type=int)
+    p_export.add_argument("-u", "--unit", type=int, help="只导出第 n 个练习单元")
     p_export.add_argument("-o", "--out")
     p_export.set_defaults(func=cmd_export)
 
@@ -190,6 +243,8 @@ def build_parser() -> argparse.ArgumentParser:
     group = p_compare.add_mutually_exclusive_group(required=True)
     group.add_argument("--ref", help="原声 wav 路径")
     group.add_argument("--segment", type=int, help="已导入的片段 id")
+    p_compare.add_argument("-u", "--unit", type=int,
+                           help="只比对第 n 个练习单元（配合 --segment）")
     p_compare.add_argument("--user", required=True, help="你的录音 wav 路径")
     p_compare.add_argument("-o", "--out", help="输出 png 路径")
     p_compare.set_defaults(func=cmd_compare)

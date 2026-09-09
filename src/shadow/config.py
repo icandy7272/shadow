@@ -29,6 +29,14 @@ BLANK_MAX = 12
 WEAK_RATIO_STRICT = 0.6
 WEAK_RATIO_RELAXED = 0.8
 
+# --- 练习单元（在片段内部按句子再切）---
+# 素材单元 30-90s 是为了「完整语义块」，但跟读时太长会跟丢，图上也挤不下。
+# 下限不只是人体工学：0.7s 提不出有意义的音高轮廓，少于 3 个匹配词时
+# 时间对齐会退化成整体线性缩放，反馈直接失效。
+UNIT_MIN_SEC = 3.0
+UNIT_MAX_SEC = 8.0
+UNIT_MIN_WORDS = 5
+
 # --- 韵律分析 ---
 FRAME_STEP_SEC = 0.01
 ENERGY_WINDOW_SEC = 0.025

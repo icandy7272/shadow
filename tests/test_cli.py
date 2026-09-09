@@ -124,3 +124,29 @@ def test_compare_with_segment_renders_chart(monkeypatch, tmp_path, capsys):
     assert exit_code == 0
     assert out.exists()
     assert "可懂度 100%" in capsys.readouterr().out
+
+
+def test_units_command_lists_drill_units(capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    assert cli.main(["units", str(segment_id)]) == 0
+    out = capsys.readouterr().out
+    assert "练习单元" in out
+    assert "should have been there" in out
+
+
+def test_export_unit_cuts_only_that_unit(tmp_path):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    dest = tmp_path / "u1.wav"
+    assert cli.main(["export", str(segment_id), "--unit", "1", "-o", str(dest)]) == 0
+    # 单元含 4 个词（2.0-3.9s）。尾部留 0.1s 余量到 4.0，
+    # 但头部余量被片段起点 2.0 截掉了，所以是 2.0s 而不是 2.1s。
+    assert media.probe_duration(dest) == pytest.approx(2.0, abs=0.05)
+
+
+def test_export_rejects_out_of_range_unit(capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    assert cli.main(["export", str(segment_id), "--unit", "99"]) == 1
+    assert "没有第 99 个" in capsys.readouterr().err
