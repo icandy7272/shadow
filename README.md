@@ -26,6 +26,19 @@ uv run shadow export <segment_id> -o /tmp/ref.wav   # 导出片段用于跟读
 uv run shadow compare --segment <id> --user /tmp/me.wav -o /tmp/out.png
 ```
 
+**每轮录 3 遍，一次全传进去：**
+
+```bash
+uv run shadow compare --segment 2 --unit 1 \
+  --user t1.wav --user t2.wav --user t3.wav -o out.png
+```
+
+单次录音的随机波动和真实进步是同一个量级（实测句尾升降的标准差 1.68，
+而目标值只有 −5.0）。传多个 take 时，工具取中位数、给出范围，并且
+**只报在半数以上 take 里都出现的问题**——一致性才是信号，某一次特别糟
+很可能只是噪声。排序也以一致性优先：3/3 次犯的小毛病，比 2/3 次犯的
+大毛病更值得改。
+
 也可以完全脱离素材库，直接比较两个 wav：
 
 ```bash
