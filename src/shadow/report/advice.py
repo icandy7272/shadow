@@ -14,6 +14,8 @@ from ..analysis.prosody import Prosody, word_contour
 from ..analysis.rhythm import MIN_PAUSE_SEC, Rhythm
 from ..models import Word
 
+PAUSE_KINDS = frozenset({"missed_pause", "long_pause", "extra_pause"})
+
 STRETCH_RATIO = 1.4
 PITCH_GAP_ST = 3.0
 SLOPE_GAP_ST = 2.5
@@ -29,6 +31,7 @@ class Advice:
     title: str
     detail: str
     action: str
+    usr_index: int | None = None
 
 
 def _stretch(ref: Word, usr: Word, speech_ratio: float) -> float:
@@ -53,6 +56,7 @@ def build_advice(
         if gap.missed:
             found.append(Advice(
                 kind="missed_pause",
+                usr_index=gap.usr_index,
                 flag="后面该停没停",
                 ref_index=gap.ref_index,
                 score=gap.ref_gap / MIN_PAUSE_SEC,
@@ -61,6 +65,31 @@ def build_advice(
                         f"你只停了 {gap.usr_gap:.2f} 秒。"),
                 action="读到这里把嘴停住，别连下去。停顿本身就是内容。",
             ))
+
+        elif gap.overdone:
+            extra = gap.usr_gap - gap.ref_gap
+            if gap.ref_gap < MIN_PAUSE_SEC:
+                found.append(Advice(
+                    kind="extra_pause",
+                usr_index=gap.usr_index,
+                    flag="多停了一下",
+                    ref_index=gap.ref_index,
+                    score=extra / MIN_PAUSE_SEC,
+                    title=f"“{gap.text}” 后面多停了一下",
+                    detail=(f"原声这里没有停顿，你停了 {gap.usr_gap:.2f} 秒。"),
+                    action="这里不该断开，连着往下说。",
+                ))
+            else:
+                found.append(Advice(
+                    kind="long_pause",
+                usr_index=gap.usr_index,
+                    flag="停太久",
+                    ref_index=gap.ref_index,
+                    score=extra / MIN_PAUSE_SEC,
+                    title=f"“{gap.text}” 后面停太久",
+                    detail=(f"原声停了 {gap.ref_gap:.2f} 秒，你停了 {gap.usr_gap:.2f} 秒。"),
+                    action="这里是换口气就走，不是真的等一下。",
+                ))
 
     ratio = rhythm.speech_ratio
     for token in tokens:
@@ -127,7 +156,8 @@ def build_advice(
     # 但「该停没停」是另一个动作（嘴要停住），不和词本身的问题合并。
     best: dict[tuple[int, str], Advice] = {}
     for item in found:
-        key = (item.ref_index, "pause" if item.kind == "missed_pause" else "word")
+        key = (item.ref_index,
+               "pause" if item.kind in PAUSE_KINDS else "word")
         if key not in best or item.score > best[key].score:
             best[key] = item
     return tuple(sorted(best.values(), key=lambda item: -item.score))

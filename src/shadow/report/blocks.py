@@ -35,6 +35,14 @@ class Flag:
     text: str
 
 
+@dataclass(frozen=True, slots=True)
+class PauseNote:
+    ref_index: int
+    usr_index: int | None
+    kind: str
+    flag: str
+
+
 def lag_annotations(
     lags: Sequence[tuple[int, float]], *, step: float = LAG_STEP_SEC
 ) -> tuple[tuple[int, float], ...]:
@@ -56,7 +64,7 @@ def _quad(x0: float, x1: float, y0: float, y1: float, **kwargs) -> Polygon:
     )
 
 
-def _draw_rhythm(ax, labels, ref_words, usr_words, rhythm, missed_pauses) -> None:
+def _draw_rhythm(ax, labels, ref_words, usr_words, rhythm, pause_notes) -> None:
     height = 0.20
     for base, words, colour, name in (
         (0.42, ref_words, REF_COLOUR, labels["ref"]),
@@ -90,13 +98,22 @@ def _draw_rhythm(ax, labels, ref_words, usr_words, rhythm, missed_pauses) -> Non
                     ha="center", va="center", fontsize=8.5, color=USR_COLOUR,
                     bbox=dict(fc="white", ec="none", pad=0.6), zorder=4)
 
-    for ref_index in missed_pauses:
-        if ref_index + 1 >= len(ref_words):
-            continue
-        a = ref_words[ref_index].end - ref_origin
-        b = ref_words[ref_index + 1].start - ref_origin
+    usr_origin = usr_words[0].start
+    for note in pause_notes:
+        if note.kind == "missed_pause":
+            # 该停没停：标在原声的空隙上——你本该在这里停
+            if note.ref_index + 1 >= len(ref_words):
+                continue
+            a = ref_words[note.ref_index].end - ref_origin
+            b = ref_words[note.ref_index + 1].start - ref_origin
+        else:
+            # 停过头 / 多停一下：标在你自己那段过长的静音上
+            if note.usr_index is None or note.usr_index + 1 >= len(usr_words):
+                continue
+            a = usr_words[note.usr_index].end - usr_origin
+            b = usr_words[note.usr_index + 1].start - usr_origin
         ax.axvspan(a, b, color=USR_COLOUR, alpha=0.16, zorder=0)
-        ax.text((a + b) / 2, 0.80, labels["missed_pause"], ha="center", va="bottom",
+        ax.text((a + b) / 2, 0.80, note.flag, ha="center", va="bottom",
                 fontsize=9.5, color=USR_COLOUR, zorder=5)
 
     ax.set_title(f"{labels['rhythm_title']}。{labels['rhythm_hint']}",
@@ -178,7 +195,7 @@ def render_feedback(
     ref_prosody: Prosody,
     usr_prosody: Prosody,
     flags: Sequence[Flag],
-    missed_pauses: Sequence[int] = (),
+    pause_notes: Sequence[PauseNote] = (),
     accuracy: float,
     text: str,
     out_path: Path,
@@ -196,7 +213,7 @@ def render_feedback(
 
     figure, (ax_rhythm, ax_pitch) = plt.subplots(
         2, 1, figsize=(16, 7.4), gridspec_kw={"height_ratios": [1.0, 1.25]})
-    _draw_rhythm(ax_rhythm, labels, ref_words, usr_words, rhythm, missed_pauses)
+    _draw_rhythm(ax_rhythm, labels, ref_words, usr_words, rhythm, pause_notes)
     _draw_pitch(ax_pitch, labels, ref_words, usr_words, pairs,
                 ref_prosody, usr_prosody, flags)
 

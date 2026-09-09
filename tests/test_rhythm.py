@@ -58,3 +58,29 @@ def test_handles_unmatched_words():
     r = analyse_rhythm(REF, make([("a", 0.0, 0.4)]), ((0, 0),))
     assert r.gaps[0].usr_gap is None
     assert r.gaps[0].missed is False
+
+
+def test_overdone_pause_is_detected():
+    # 原声停 0.5s，用户停 1.2s：停过头和不停一样是毛病
+    usr = make([("a", 0.0, 0.4), ("b", 1.6, 0.4), ("c", 2.0, 0.4)])
+    gap = analyse_rhythm(REF, usr, ALL).gaps[0]
+    assert gap.overdone is True
+    assert gap.missed is False
+
+
+def test_extra_pause_where_reference_has_none():
+    # 原声 b→c 没有停顿，用户停了 0.4s
+    usr = make([("a", 0.0, 0.4), ("b", 0.9, 0.4), ("c", 1.7, 0.4)])
+    gap = analyse_rhythm(REF, usr, ALL).gaps[1]
+    assert gap.ref_gap == pytest.approx(0.0)
+    assert gap.overdone is True
+
+
+def test_slightly_longer_pause_is_not_flagged():
+    usr = make([("a", 0.0, 0.4), ("b", 0.98, 0.4), ("c", 1.38, 0.4)])
+    assert analyse_rhythm(REF, usr, ALL).gaps[0].overdone is False
+
+
+def test_pause_gap_carries_user_index():
+    usr = make([("a", 0.0, 0.4), ("b", 0.9, 0.4), ("c", 1.3, 0.4)])
+    assert analyse_rhythm(REF, usr, ALL).gaps[0].usr_index == 0

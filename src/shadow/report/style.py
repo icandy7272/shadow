@@ -29,7 +29,7 @@ LABELS_ZH = {
     "rhythm_hint": "红线标出你在这个词上已经落后多少",
     "pitch_title": "图 2 · 音高：一词一格，块的高低 = 音高，块的斜度 = 词内升降（向下斜 = 降调）",
     "ref_legend": "原声（虚线）", "usr_legend": "你（实心）",
-    "speech": "发声", "pause": "停顿", "missed_pause": "↓ 这里该停没停",
+    "speech": "发声", "pause": "停顿", "missed_pause": "这里该停没停",
 }
 
 LABELS_EN = {
@@ -38,7 +38,7 @@ LABELS_EN = {
     "rhythm_hint": "red lines show how far behind you are at that word",
     "pitch_title": "Fig 2 - Pitch: one slot per word, height = pitch, slant = movement within the word",
     "ref_legend": "reference (dashed)", "usr_legend": "you (solid)",
-    "speech": "speech", "pause": "pauses", "missed_pause": "↓ missed pause",
+    "speech": "speech", "pause": "pauses", "missed_pause": "missed pause",
 }
 
 

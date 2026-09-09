@@ -16,8 +16,8 @@ from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
 from .models import Word
 from .analysis.rhythm import analyse_rhythm
-from .report.advice import build_advice, well_done
-from .report.blocks import Flag, render_feedback
+from .report.advice import PAUSE_KINDS, build_advice, well_done
+from .report.blocks import Flag, PauseNote, render_feedback
 
 
 class CliError(RuntimeError):
@@ -192,16 +192,19 @@ def cmd_compare(args: argparse.Namespace) -> int:
     flags = tuple(
         Flag(usr_index=usr_index, text=item.flag)
         for item, usr_index in _flag_targets(advice, ref_words, tokens)
-        if item.kind != "missed_pause"
+        if item.kind not in PAUSE_KINDS
     )
-    missed = tuple(item.ref_index for item in advice[:MAX_ADVICE]
-                   if item.kind == "missed_pause")
+    pause_notes = tuple(
+        PauseNote(ref_index=item.ref_index, usr_index=item.usr_index,
+                  kind=item.kind, flag=item.flag)
+        for item in advice[:MAX_ADVICE] if item.kind in PAUSE_KINDS
+    )
 
     out_path = Path(args.out or "feedback.png")
     render_feedback(
         ref_words=ref_words, usr_words=usr_words, tokens=tokens, rhythm=rhythm,
         ref_prosody=ref_prosody, usr_prosody=usr_prosody, flags=flags,
-        missed_pauses=missed,
+        pause_notes=pause_notes,
         accuracy=score, text=" ".join(w.text for w in ref_words), out_path=out_path,
     )
 

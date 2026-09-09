@@ -18,9 +18,21 @@ MIN_PAUSE_SEC = 0.15
 @dataclass(frozen=True, slots=True)
 class PauseGap:
     ref_index: int
+    usr_index: int | None
     text: str
     ref_gap: float
     usr_gap: float | None
+
+    @property
+    def overdone(self) -> bool:
+        """停得比原声明显久，或者原声根本没停的地方你停了。
+
+        停过头和不停一样是毛病——句子会被拉散，听起来一顿一顿的。
+        """
+        if self.usr_gap is None:
+            return False
+        excess = self.usr_gap - self.ref_gap
+        return excess >= MIN_PAUSE_SEC and self.usr_gap > self.ref_gap * 1.5
 
     @property
     def missed(self) -> bool:
@@ -87,6 +99,7 @@ def analyse_rhythm(
         gaps.append(
             PauseGap(
                 ref_index=index,
+                usr_index=usr_index,
                 text=ref_words[index].text,
                 ref_gap=ref_gap,
                 usr_gap=usr_gap,
