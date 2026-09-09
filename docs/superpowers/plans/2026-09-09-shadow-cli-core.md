@@ -197,6 +197,12 @@ PITCH_CEILING_HZ = 500.0
 MIN_ATTEMPT_SEC = 1.0
 MIN_ATTEMPT_RMS_DB = -50.0
 
+# --- 外部命令超时（秒）---
+# 无超时的 subprocess.run 会在网络卡住时永久挂起，状态停在 downloading 且无恢复路径。
+PROBE_TIMEOUT_SEC = 60.0
+DOWNLOAD_TIMEOUT_SEC = 1800.0
+FFMPEG_TIMEOUT_SEC = 900.0
+
 
 def data_dir() -> Path:
     return Path(os.environ.get("SHADOW_DATA_DIR", Path.home() / ".shadow"))
@@ -717,6 +723,15 @@ def test_short_tail_is_merged_into_previous_segment():
     assert segments[0].duration == pytest.approx(50.5)
 
 
+def test_short_tail_is_not_merged_when_it_would_exceed_max():
+    # 201 词无停顿：前段硬切在 90s，尾段 10.5s 不足 min。
+    # 合并会得到 100.5s 超出 max_sec，因此必须保留为两段。
+    segments = split(make_words(201))
+    assert len(segments) == 2
+    assert segments[0].duration == pytest.approx(90.0)
+    assert segments[1].duration == pytest.approx(10.5)
+
+
 def test_segment_indices_are_sequential_and_bounds_match_words():
     segments = split(make_words(300))
     assert [s.idx for s in segments] == [0, 1]
@@ -776,7 +791,11 @@ def split_into_segments(
         tail_start, tail_end = spans[-1]
         if words[tail_end].end - words[tail_start].start < min_sec:
             prev_start, _ = spans[-2]
-            spans = spans[:-2] + [(prev_start, tail_end)]
+            merged = words[tail_end].end - words[prev_start].start
+            # 只在不撑破 max_sec 时才合并。宁可留一个偏短的尾段，
+            # 也不能产出超长片段——30-90s 是整个训练设计的前提。
+            if merged <= max_sec:
+                spans = spans[:-2] + [(prev_start, tail_end)]
 
     return tuple(
         Segment(
@@ -792,7 +811,7 @@ def split_into_segments(
 - [ ] **Step 4: 运行，确认通过**
 
 Run: `uv run pytest tests/test_segmenter.py`
-Expected: 6 passed
+Expected: 7 passed
 
 - [ ] **Step 5: Commit**
 
@@ -871,6 +890,12 @@ def test_select_blanks_caps_at_twelve_for_long_segments():
 
 def test_select_blanks_handles_empty_input():
     assert select_blanks(()) == ()
+
+
+def test_select_blanks_degrades_gracefully_when_no_function_words():
+    # 全是实词，没有功能词可挖 —— 应返回空，而不是硬凑到下限
+    words = build_words(["market", "closed", "time", "today", "anyway"])
+    assert select_blanks(words) == ()
 ```
 
 - [ ] **Step 2: 运行，确认失败**
@@ -991,7 +1016,7 @@ def select_blanks(
 - [ ] **Step 4: 运行，确认通过**
 
 Run: `uv run pytest tests/test_blanks.py`
-Expected: 7 passed
+Expected: 8 passed
 
 - [ ] **Step 5: Commit**
 
@@ -1068,6 +1093,15 @@ def test_probe_rejects_unparseable_duration(monkeypatch):
         downloader.probe("https://x/y")
 
 
+def test_probe_reports_timeout_clearly(monkeypatch):
+    def timeout_run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(downloader.subprocess, "run", timeout_run)
+    with pytest.raises(DownloadError, match="超时"):
+        downloader.probe("https://x/y")
+
+
 def test_download_audio_invokes_ytdlp_then_ffmpeg(monkeypatch, tmp_path):
     calls = []
 
@@ -1114,6 +1148,20 @@ class DownloadError(RuntimeError):
     """下载或探测素材失败。消息中应包含外部工具的原始输出。"""
 
 
+def _run(cmd: list[str], *, timeout: float, what: str) -> subprocess.CompletedProcess:
+    """跑外部命令，把超时转成可读错误。
+
+    不设超时的话，网络卡住会让导入永久挂起，状态停在 downloading 且没有恢复路径。
+    """
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise DownloadError(
+            f"{what}超时（{timeout:.0f} 秒无响应）。"
+            f"网络卡住或链接无法访问，换个链接或稍后重试。"
+        ) from exc
+
+
 def validate_url(url: str) -> str:
     cleaned = (url or "").strip()
     parsed = urlparse(cleaned)
@@ -1124,13 +1172,13 @@ def validate_url(url: str) -> str:
 
 def probe(url: str) -> tuple[str, float]:
     """返回 (标题, 时长秒)。不下载媒体。"""
-    proc = subprocess.run(
+    proc = _run(
         [
             "yt-dlp", "--no-playlist", "--skip-download",
             "--print", "%(title)s", "--print", "%(duration)s", url,
         ],
-        capture_output=True,
-        text=True,
+        timeout=config.PROBE_TIMEOUT_SEC,
+        what="yt-dlp 查询",
     )
     if proc.returncode != 0:
         raise DownloadError(f"yt-dlp 查询失败：\n{proc.stderr.strip()}")
@@ -1154,14 +1202,14 @@ def download_audio(url: str, dest_wav: Path, *, workdir: Path) -> Path:
     dest_wav.parent.mkdir(parents=True, exist_ok=True)
     workdir.mkdir(parents=True, exist_ok=True)
 
-    fetch = subprocess.run(
+    fetch = _run(
         [
             "yt-dlp", "--no-playlist", "-f", "bestaudio",
             "-o", str(workdir / "raw.%(ext)s"),
             "--print", "after_move:filepath", url,
         ],
-        capture_output=True,
-        text=True,
+        timeout=config.DOWNLOAD_TIMEOUT_SEC,
+        what="yt-dlp 下载",
     )
     if fetch.returncode != 0:
         raise DownloadError(f"yt-dlp 下载失败：\n{fetch.stderr.strip()}")
@@ -1171,14 +1219,14 @@ def download_audio(url: str, dest_wav: Path, *, workdir: Path) -> Path:
         raise DownloadError("yt-dlp 未报告下载后的文件路径")
     raw_path = Path(raw_lines[-1].strip())
 
-    convert = subprocess.run(
+    convert = _run(
         [
             "ffmpeg", "-y", "-loglevel", "error", "-i", str(raw_path),
             "-ar", str(config.SAMPLE_RATE), "-ac", "1",
             "-c:a", "pcm_s16le", str(dest_wav),
         ],
-        capture_output=True,
-        text=True,
+        timeout=config.FFMPEG_TIMEOUT_SEC,
+        what="ffmpeg 转码",
     )
     if convert.returncode != 0:
         raise DownloadError(f"ffmpeg 转码失败：\n{convert.stderr.strip()}")
@@ -1188,7 +1236,7 @@ def download_audio(url: str, dest_wav: Path, *, workdir: Path) -> Path:
 - [ ] **Step 4: 运行，确认通过**
 
 Run: `uv run pytest tests/test_downloader.py`
-Expected: 10 passed
+Expected: 11 passed
 
 - [ ] **Step 5: Commit**
 
@@ -1872,7 +1920,7 @@ def accuracy(tokens: Sequence[DiffToken]) -> float:
 - [ ] **Step 5: 运行，确认通过**
 
 Run: `uv run pytest tests/test_diff.py tests/test_blanks.py`
-Expected: 15 passed
+Expected: 16 passed
 
 - [ ] **Step 6: Commit**
 
