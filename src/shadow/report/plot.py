@@ -35,12 +35,13 @@ LABELS_ZH = {
     "ref": "原声",
     "usr": "你",
     "accuracy": "可懂度",
+    "tempo": "你的整体语速",
     "p1_title": "Panel 1 · 语调轮廓：起伏形状和重音落点是否一致",
     "p1_y": "音高（半音，相对各自中位数）",
     "p2_title": "Panel 2 · 轻重分布",
     "p2_y": "能量（dB）",
     "p2_x": "时间（秒，已对齐到原声轴）",
-    "p3_title": "Panel 3 · 节奏：柱子高于 1.0 = 拖长了（该弱读却发满）；红底 = 没听出来，橙底 = 听成了别的词",
+    "p3_title": "Panel 3 · 节奏：看柱子相对虚线（你的平均语速）的高低，不是相对 1.0；红底 = 没听出来，橙底 = 听成了别的词",
     "p3_y": "你的时长 / 原声时长",
 }
 
@@ -48,14 +49,31 @@ LABELS_EN = {
     "ref": "reference",
     "usr": "you",
     "accuracy": "intelligibility",
+    "tempo": "your overall tempo",
     "p1_title": "Panel 1 - Intonation contour: same shape and stress placement?",
     "p1_y": "pitch (semitones, relative to own median)",
     "p2_title": "Panel 2 - Loudness distribution",
     "p2_y": "energy (dB)",
     "p2_x": "time (s, warped onto reference axis)",
-    "p3_title": "Panel 3 - Rhythm: bar above 1.0 = stretched; red = not recognised, orange = heard as another word",
+    "p3_title": "Panel 3 - Rhythm: read bars against the dotted line (your own tempo), not 1.0; red = not recognised, orange = heard as another word",
     "p3_y": "your duration / reference duration",
 }
+
+
+SEMITONE_LIMIT = 18.0
+
+
+def pitch_axis_limits(*curves: np.ndarray) -> tuple[float, float]:
+    """按稳健分位数定纵轴，别让个别离群帧把真实曲线压扁。"""
+    finite = np.concatenate([c[np.isfinite(c)] for c in curves if c.size])
+    if finite.size == 0:
+        return -1.0, 1.0
+    low, high = np.percentile(finite, [1, 99])
+    pad = max(1.0, 0.15 * (high - low))
+    return (
+        max(-SEMITONE_LIMIT, low - pad),
+        min(SEMITONE_LIMIT, high + pad),
+    )
 
 
 def _pick_cjk_font() -> str | None:
@@ -98,6 +116,13 @@ def render_comparison(
     title: str,
     accuracy: float,
 ) -> Path:
+    if len(usr_times_warped) != len(usr_prosody.times):
+        raise ValueError(
+            f"弯折后的时间轴有 {len(usr_times_warped)} 个点，"
+            f"但用户韵律曲线有 {len(usr_prosody.times)} 个点。"
+            f"usr_times_warped 必须由 usr_prosody.times 弯折而来。"
+        )
+
     labels = configure_labels()
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -116,6 +141,7 @@ def render_comparison(
     ax_pitch.axhline(0.0, color=FLAG_COLOUR, linewidth=0.6)
     ax_pitch.set_ylabel(labels["p1_y"])
     ax_pitch.set_title(labels["p1_title"], loc="left")
+    ax_pitch.set_ylim(*pitch_axis_limits(ref_prosody.semitones, usr_prosody.semitones))
     ax_pitch.legend(loc="upper right")
     ax_pitch.grid(alpha=0.2)
 
@@ -139,6 +165,20 @@ def render_comparison(
                           color=flag_colour(timings[position]), alpha=0.18, zorder=0)
 
     ax_timing.axhline(1.0, color="#333333", linewidth=1.2)
+
+    # 整体语速不同时，1.0 这条线会误导：慢 40% 的人柱子普遍在 1.4 附近，
+    # 那是他的平均水平而非问题。再画一条自己的平均线，看的是分布不是绝对值。
+    tempo = (
+        usr_prosody.duration / ref_prosody.duration
+        if ref_prosody.duration > 0 else 1.0
+    )
+    if abs(tempo - 1.0) > 0.05:
+        ax_timing.axhline(tempo, color="#8c564b", linewidth=1.2, linestyle=":")
+        ax_timing.text(
+            0.995, tempo, f" {labels['tempo']} {tempo:.2f}x ",
+            transform=ax_timing.get_yaxis_transform(),
+            ha="right", va="bottom", fontsize=9, color="#8c564b",
+        )
     ax_timing.set_xticks(positions)
     ax_timing.set_xticklabels(
         [t.text for t in timings], rotation=60, ha="right", fontsize=8

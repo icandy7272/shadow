@@ -42,6 +42,12 @@ FRAME_STEP_SEC = 0.01
 ENERGY_WINDOW_SEC = 0.025
 PITCH_FLOOR_HZ = 75.0
 PITCH_CEILING_HZ = 500.0
+# 固定的 75-500 Hz 对低男声太宽，会把谐波误判成基频（实测 94 Hz 的声音
+# 有 12% 的帧跳到 494 Hz，把纵轴撑到 30 半音，真实语调全被压扁）。
+# Praat 标准两遍法：先宽跑一遍取四分位数，再用 0.75*Q1 ~ 1.5*Q3 重跑。
+PITCH_ADAPT_MIN_VOICED = 20
+PITCH_ADAPT_LOW = 0.75
+PITCH_ADAPT_HIGH = 1.5
 
 # --- 录音校验 ---
 MIN_ATTEMPT_SEC = 1.0

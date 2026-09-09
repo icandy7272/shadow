@@ -37,6 +37,32 @@ def _rms_db(
     return 20.0 * np.log10(rms + 1e-10)
 
 
+def adaptive_pitch_bounds(
+    sound: parselmouth.Sound,
+    *,
+    step: float,
+    floor: float,
+    ceiling: float,
+) -> tuple[float, float]:
+    """按说话人自身的基频分布收窄搜索范围。
+
+    固定上限对低男声太宽，追踪器会把谐波当成基频。先用宽范围跑一遍，
+    取浊音帧的四分位数，再收到 0.75*Q1 ~ 1.5*Q3（Praat 的标准做法）。
+    浊音帧太少时保持原边界，不瞎猜。
+    """
+    rough = sound.to_pitch(time_step=step, pitch_floor=floor, pitch_ceiling=ceiling)
+    values = np.asarray(rough.selected_array["frequency"], dtype=float)
+    voiced = values[values > 0.0]
+    if voiced.size < config.PITCH_ADAPT_MIN_VOICED:
+        return floor, ceiling
+
+    q25, q75 = np.percentile(voiced, [25, 75])
+    low = max(floor, config.PITCH_ADAPT_LOW * float(q25))
+    high = min(ceiling, config.PITCH_ADAPT_HIGH * float(q75))
+    high = max(high, low * 2.0)  # 搜索范围不能退化
+    return low, min(high, ceiling)
+
+
 def analyse(
     wav_path,
     *,
@@ -52,9 +78,10 @@ def analyse(
     if times.size == 0:
         times = np.array([0.0])
 
-    pitch = sound.to_pitch(
-        time_step=step, pitch_floor=pitch_floor, pitch_ceiling=pitch_ceiling
+    low, high = adaptive_pitch_bounds(
+        sound, step=step, floor=pitch_floor, ceiling=pitch_ceiling
     )
+    pitch = sound.to_pitch(time_step=step, pitch_floor=low, pitch_ceiling=high)
     pitch_times = np.asarray(pitch.xs(), dtype=float)
     pitch_values = np.asarray(pitch.selected_array["frequency"], dtype=float)
 

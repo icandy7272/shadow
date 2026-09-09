@@ -2,7 +2,7 @@ import numpy as np
 
 from shadow.analysis.prosody import Prosody
 from shadow.analysis.timing import WordTiming
-from shadow.report.plot import render_comparison
+from shadow.report.plot import pitch_axis_limits, render_comparison
 
 
 def fake_prosody(duration=2.0, offset=0.0):
@@ -78,3 +78,47 @@ def test_render_handles_all_missing_timings(tmp_path):
         accuracy=0.0,
     )
     assert out.exists()
+
+
+def test_pitch_axis_ignores_outliers():
+    # 少数离群帧不该把纵轴撑开，否则真实曲线被压扁成一条线
+    clean = np.concatenate([np.linspace(-4.0, 4.0, 400), np.array([28.0, 29.0])])
+    low, high = pitch_axis_limits(clean)
+    assert high < 12.0
+    assert low > -12.0
+
+
+def test_pitch_axis_handles_all_nan():
+    low, high = pitch_axis_limits(np.full(50, np.nan))
+    assert low < high
+
+
+def test_render_draws_tempo_line_when_speeds_differ(tmp_path):
+    out = tmp_path / "tempo.png"
+    user = fake_prosody(duration=3.0)
+    render_comparison(
+        ref_prosody=fake_prosody(duration=2.0),
+        usr_prosody=user,
+        usr_times_warped=user.times * (2.0 / 3.0),
+        timings=TIMINGS,
+        out_path=out,
+        title="tempo",
+        accuracy=0.75,
+    )
+    assert out.exists()
+
+
+def test_render_rejects_mismatched_warped_axis(tmp_path):
+    # 长度不匹配时 matplotlib 只会抛一句看不懂的 ValueError
+    import pytest
+
+    with pytest.raises(ValueError, match="必须由 usr_prosody.times"):
+        render_comparison(
+            ref_prosody=fake_prosody(duration=2.0),
+            usr_prosody=fake_prosody(duration=3.0),
+            usr_times_warped=fake_prosody(duration=2.0).times,
+            timings=TIMINGS,
+            out_path=tmp_path / "bad.png",
+            title="bad",
+            accuracy=0.0,
+        )

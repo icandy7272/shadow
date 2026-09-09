@@ -2,7 +2,10 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from shadow.analysis.prosody import analyse
+import parselmouth
+
+from shadow import config
+from shadow.analysis.prosody import adaptive_pitch_bounds, analyse
 
 SR = 16000
 
@@ -76,3 +79,31 @@ def test_silence_yields_no_pitch_but_still_returns_grid(tmp_path):
     result = analyse(write_tone(tmp_path / "a.wav", amplitude=0.0))
     assert np.all(np.isnan(result.semitones))
     assert result.times.size > 0
+
+
+def test_adaptive_bounds_narrow_around_a_low_voice(tmp_path):
+    # 固定的 75-500 Hz 对低男声太宽，追踪器会把谐波当基频
+    sound = parselmouth.Sound(str(write_tone(tmp_path / "low.wav", freq=95.0)))
+    low, high = adaptive_pitch_bounds(
+        sound, step=0.01,
+        floor=config.PITCH_FLOOR_HZ, ceiling=config.PITCH_CEILING_HZ,
+    )
+    assert low >= config.PITCH_FLOOR_HZ
+    assert high < config.PITCH_CEILING_HZ
+    assert low < 95.0 < high
+
+
+def test_adaptive_bounds_keep_originals_when_nothing_is_voiced(tmp_path):
+    sound = parselmouth.Sound(str(write_tone(tmp_path / "q.wav", amplitude=0.0)))
+    assert adaptive_pitch_bounds(
+        sound, step=0.01,
+        floor=config.PITCH_FLOOR_HZ, ceiling=config.PITCH_CEILING_HZ,
+    ) == (config.PITCH_FLOOR_HZ, config.PITCH_CEILING_HZ)
+
+
+def test_low_voice_produces_no_octave_outliers(tmp_path):
+    # 回归：真实录音（94 Hz 男声）曾有 12% 的帧跳到 494 Hz，撑爆纵轴
+    result = analyse(write_tone(tmp_path / "low.wav", freq=95.0))
+    finite = result.semitones[np.isfinite(result.semitones)]
+    assert finite.size > 0
+    assert np.abs(finite).max() < 3.0
