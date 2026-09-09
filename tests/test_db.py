@@ -54,3 +54,53 @@ def test_reset_stale_sources_marks_non_terminal_as_failed(conn):
 
     assert db.get_source(conn, stuck)["status"] == db.STATUS_FAILED
     assert db.get_source(conn, done)["status"] == db.STATUS_READY
+
+
+def test_migration_adds_columns_to_an_existing_database(monkeypatch, tmp_path):
+    """老库是 M1 建的，没有 unit_index / metrics_json 两列。"""
+    monkeypatch.setenv("SHADOW_DATA_DIR", str(tmp_path))
+    old = db.connect()
+    old.executescript(db.SCHEMA)      # 只建表，不跑迁移
+    old.commit()
+    cols = {r["name"] for r in old.execute("PRAGMA table_info(practice_runs)")}
+    assert "unit_index" not in cols
+    db.init_db(old)                   # 迁移应就地补列
+    cols = {r["name"] for r in old.execute("PRAGMA table_info(practice_runs)")}
+    assert "unit_index" in cols
+    assert "metrics_json" in {r["name"] for r in old.execute("PRAGMA table_info(attempts)")}
+    db.init_db(old)                   # 再跑一次不应报错
+    old.close()
+
+
+def test_practice_run_records_takes_and_metrics(conn):
+    source_id = db.create_source(conn, url="https://x/y", title="T", duration_sec=60.0)
+    db.insert_segments(conn, source_id, (
+        Segment(idx=0, start=0.0, end=1.0, words=(Word("hi", 0.0, 1.0),)),
+    ))
+    segment_id = db.list_segments(conn, source_id)[0]["id"]
+
+    run_id = db.start_run(conn, segment_id=segment_id, unit_index=1)
+    assert db.list_runs(conn) == []          # 未完成的不计入
+    db.add_attempt(conn, run_id=run_id, audio_path="/tmp/a.wav", asr_text="hi",
+                   metrics={"accuracy": 1.0, "speech_ratio": 1.1})
+    db.add_attempt(conn, run_id=run_id, audio_path="/tmp/b.wav", asr_text="hi",
+                   metrics={"accuracy": 0.9, "speech_ratio": 1.2})
+    db.finish_run(conn, run_id)
+
+    runs = db.list_runs(conn, segment_id=segment_id, unit_index=1)
+    assert len(runs) == 1
+    metrics = db.run_metrics(conn, run_id)
+    assert [m["speech_ratio"] for m in metrics] == [1.1, 1.2]
+
+
+def test_list_runs_filters_by_unit(conn):
+    source_id = db.create_source(conn, url="https://x/y", title="T", duration_sec=60.0)
+    db.insert_segments(conn, source_id, (
+        Segment(idx=0, start=0.0, end=1.0, words=(Word("hi", 0.0, 1.0),)),
+    ))
+    segment_id = db.list_segments(conn, source_id)[0]["id"]
+    for unit in (1, 2):
+        run_id = db.start_run(conn, segment_id=segment_id, unit_index=unit)
+        db.finish_run(conn, run_id)
+    assert len(db.list_runs(conn, segment_id=segment_id)) == 2
+    assert len(db.list_runs(conn, segment_id=segment_id, unit_index=2)) == 1

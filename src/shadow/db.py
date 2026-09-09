@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Sequence
@@ -72,6 +73,21 @@ CREATE INDEX IF NOT EXISTS idx_attempts_run ON attempts(run_id);
 """
 
 
+# 已有数据库要就地加列。老库是 M1 建的，那时还没有练习单元和指标存储。
+MIGRATIONS = (
+    ("practice_runs", "unit_index", "INTEGER"),
+    ("attempts", "metrics_json", "TEXT"),
+)
+
+
+def _ensure_columns(conn: sqlite3.Connection) -> None:
+    for table, column, column_type in MIGRATIONS:
+        present = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in present:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+    conn.commit()
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -87,6 +103,7 @@ def connect() -> sqlite3.Connection:
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     conn.commit()
+    _ensure_columns(conn)
 
 
 def create_source(
@@ -178,3 +195,67 @@ def get_segment(conn: sqlite3.Connection, segment_id: int) -> dict[str, Any] | N
     data = dict(row)
     data["words"] = words_from_json(row["words_json"])
     return data
+
+
+# --- 练习记录 ---------------------------------------------------------------
+
+
+def start_run(conn: sqlite3.Connection, *, segment_id: int, unit_index: int | None) -> int:
+    cursor = conn.execute(
+        "INSERT INTO practice_runs (segment_id, unit_index, started_at)"
+        " VALUES (?, ?, ?)",
+        (segment_id, unit_index, _now()),
+    )
+    conn.commit()
+    return int(cursor.lastrowid)
+
+
+def finish_run(conn: sqlite3.Connection, run_id: int) -> None:
+    conn.execute(
+        "UPDATE practice_runs SET finished_at = ? WHERE id = ?", (_now(), run_id)
+    )
+    conn.commit()
+
+
+def add_attempt(
+    conn: sqlite3.Connection,
+    *,
+    run_id: int,
+    audio_path: str,
+    asr_text: str,
+    metrics: dict[str, Any],
+) -> int:
+    cursor = conn.execute(
+        "INSERT INTO attempts (run_id, audio_path, asr_text, metrics_json, created_at)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (run_id, audio_path, asr_text, json.dumps(metrics, ensure_ascii=False), _now()),
+    )
+    conn.commit()
+    return int(cursor.lastrowid)
+
+
+def list_runs(
+    conn: sqlite3.Connection,
+    *,
+    segment_id: int | None = None,
+    unit_index: int | None = None,
+) -> list[sqlite3.Row]:
+    clauses, params = ["finished_at IS NOT NULL"], []
+    if segment_id is not None:
+        clauses.append("segment_id = ?")
+        params.append(segment_id)
+    if unit_index is not None:
+        clauses.append("unit_index = ?")
+        params.append(unit_index)
+    where = " AND ".join(clauses)
+    return list(
+        conn.execute(f"SELECT * FROM practice_runs WHERE {where} ORDER BY id", params)
+    )
+
+
+def run_metrics(conn: sqlite3.Connection, run_id: int) -> list[dict[str, Any]]:
+    """一次练习里各 take 的指标。"""
+    rows = conn.execute(
+        "SELECT metrics_json FROM attempts WHERE run_id = ? ORDER BY id", (run_id,)
+    )
+    return [json.loads(row["metrics_json"]) for row in rows if row["metrics_json"]]

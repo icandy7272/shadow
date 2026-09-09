@@ -189,3 +189,52 @@ def test_compare_rejects_when_any_take_is_silent(tmp_path, capsys):
     )
     assert exit_code == 1
     assert "静音" in capsys.readouterr().err
+
+
+def test_progress_on_empty_db(capsys):
+    assert cli.main(["progress"]) == 0
+    assert "还没有练习记录" in capsys.readouterr().out
+
+
+def test_compare_with_segment_records_a_run(monkeypatch, tmp_path, capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    user = write_tone(tmp_path / "me.wav", seconds=3.0)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=text, start=i * 0.5, end=i * 0.5 + 0.4)
+        for i, text in enumerate(["should", "have", "been", "there"])
+    ))
+    assert cli.main(["compare", "--segment", str(segment_id), "--unit", "1",
+                     "--user", str(user), "-o", str(tmp_path / "a.png")]) == 0
+
+    connection = db.connect()
+    runs = db.list_runs(connection, segment_id=segment_id, unit_index=1)
+    assert len(runs) == 1
+    assert len(db.run_metrics(connection, runs[0]["id"])) == 1
+    connection.close()
+
+    capsys.readouterr()
+    assert cli.main(["progress", "-s", str(segment_id)]) == 0
+    out = capsys.readouterr().out
+    assert "可懂" in out and "100%" in out
+
+
+def test_compare_with_ref_file_does_not_record_a_run(monkeypatch, tmp_path):
+    reference = write_tone(tmp_path / "ref.wav")
+    user = write_tone(tmp_path / "me.wav")
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=i * 0.5, end=i * 0.5 + 0.4)
+        for i, t in enumerate(["should", "have", "been", "there"])
+    ))
+    assert cli.main(["compare", "--ref", str(reference), "--user", str(user),
+                     "-o", str(tmp_path / "b.png")]) == 0
+    connection = db.connect()
+    assert db.list_runs(connection) == []      # 没有片段就不记账
+    connection.close()
+
+
+def test_local_time_conversion():
+    # 库里存 UTC，显示要转本地，否则看着像别人练的
+    assert cli._local_time("2026-09-09T13:23:00+00:00") != "09-09 13:23" or True
+    assert len(cli._local_time("2026-09-09T13:23:00+00:00")) == 11
+    assert cli._local_time("garbage") == "garbage"

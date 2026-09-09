@@ -42,3 +42,35 @@ def test_validate_attempt_rejects_silence(tmp_path):
 def test_validate_attempt_accepts_normal_recording(tmp_path):
     source = write_tone(tmp_path / "s.wav", seconds=2.0, amplitude=0.3)
     media.validate_attempt(source)  # 不抛异常即通过
+
+
+def test_list_input_devices_parses_ffmpeg_output(monkeypatch):
+    sample = (
+        "[AVFoundation indev @ 0x1] AVFoundation video devices:\n"
+        "[AVFoundation indev @ 0x1] [0] FaceTime HD Camera\n"
+        "[AVFoundation indev @ 0x1] AVFoundation audio devices:\n"
+        "[AVFoundation indev @ 0x1] [0] Studio Display XDR麦克风\n"
+        "[AVFoundation indev @ 0x1] [1] MacBook Air麦克风\n"
+        "[in#0 @ 0x2] Error opening input: Input/output error\n"
+    )
+
+    class Proc:
+        returncode = 1
+        stdout = ""
+        stderr = sample
+
+    monkeypatch.setattr(media.subprocess, "run", lambda *a, **k: Proc())
+    assert media.list_input_devices() == (
+        ("0", "Studio Display XDR麦克风"), ("1", "MacBook Air麦克风"),
+    )
+
+
+def test_record_surfaces_permission_hint_on_failure(monkeypatch, tmp_path):
+    class Proc:
+        returncode = 1
+        stdout = ""
+        stderr = "abort() called"
+
+    monkeypatch.setattr(media.subprocess, "run", lambda *a, **k: Proc())
+    with pytest.raises(AudioError, match="麦克风"):
+        media.record(tmp_path / "x.wav", seconds=1.0)

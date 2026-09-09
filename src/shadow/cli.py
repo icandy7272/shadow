@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import statistics
 import sys
+from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
 
@@ -150,55 +152,41 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_compare(args: argparse.Namespace) -> int:
-    paths = [Path(p) for p in args.user]
-    for path in paths:                       # 全部先校验，别录了三遍才发现第一遍是静音
-        try:
-            media.validate_attempt(path)
-        except Exception as exc:
-            print(f"录音不可用（{path.name}）：{exc}", file=sys.stderr)
-            return 1
+def _reference_for(connection, args):
+    """取原声音频与词序列。--segment 走库，--ref 走文件。"""
+    if args.segment is not None:
+        suffix = "" if args.unit is None else f"-u{args.unit}"
+        return _segment_reference(
+            connection, args.segment,
+            config.segment_audio_dir() / f"{args.segment}{suffix}.wav",
+            unit=args.unit,
+        )[:2]
+    ref_path = Path(args.ref)
+    return ref_path, transcribe_words(ref_path)
 
-    connection = _open_db()
-    try:
-        if args.segment is not None:
-            suffix = "" if args.unit is None else f"-u{args.unit}"
-            ref_path, ref_words, _ = _segment_reference(
-                connection, args.segment,
-                config.segment_audio_dir() / f"{args.segment}{suffix}.wav",
-                unit=args.unit,
-            )
-        else:
-            ref_path = Path(args.ref)
-            ref_words = transcribe_words(ref_path)
-        if not ref_words:
-            print("原声转写为空，无法比较。", file=sys.stderr)
-            return 1
-        ref_prosody = analyse(ref_path)
 
-        metrics: list[TakeMetrics] = []
-        details = []
-        for path in paths:
-            usr_words = transcribe_words(path)
-            tokens = diff_words([w.text for w in ref_words],
-                                [w.text for w in usr_words])
-            rhythm = analyse_rhythm(ref_words, usr_words, matched_pairs(tokens))
-            usr_prosody = analyse(path)
-            advice = build_advice(
-                ref_words=ref_words, usr_words=usr_words, tokens=tokens,
-                rhythm=rhythm, ref_prosody=ref_prosody, usr_prosody=usr_prosody,
-            )
-            metrics.append(TakeMetrics(
-                accuracy=diff_accuracy(tokens), speech_ratio=rhythm.speech_ratio,
-                pause_ratio=rhythm.pause_ratio, advice=advice,
-            ))
-            details.append((usr_words, tokens, rhythm, usr_prosody, advice))
-    except Exception as exc:
-        print(f"转写失败：{exc}", file=sys.stderr)
-        return 1
+def _compare(connection, *, ref_path, ref_words, paths, out_path,
+             segment_id=None, unit_index=None) -> int:
+    ref_prosody = analyse(ref_path)
+    metrics: list[TakeMetrics] = []
+    details = []
+    for path in paths:
+        usr_words = transcribe_words(path)
+        tokens = diff_words([w.text for w in ref_words], [w.text for w in usr_words])
+        rhythm = analyse_rhythm(ref_words, usr_words, matched_pairs(tokens))
+        usr_prosody = analyse(path)
+        advice = build_advice(
+            ref_words=ref_words, usr_words=usr_words, tokens=tokens,
+            rhythm=rhythm, ref_prosody=ref_prosody, usr_prosody=usr_prosody,
+        )
+        metrics.append(TakeMetrics(
+            accuracy=diff_accuracy(tokens), speech_ratio=rhythm.speech_ratio,
+            pause_ratio=rhythm.pause_ratio, advice=advice,
+        ))
+        details.append((path, usr_words, tokens, rhythm, usr_prosody, advice))
 
     summary = summarise(metrics)
-    usr_words, tokens, rhythm, usr_prosody, advice = details[summary.representative]
+    _, usr_words, tokens, rhythm, usr_prosody, advice = details[summary.representative]
 
     flags = tuple(
         Flag(usr_index=usr_index, text=item.flag)
@@ -210,8 +198,6 @@ def cmd_compare(args: argparse.Namespace) -> int:
                   kind=item.kind, flag=item.flag)
         for item in advice[:MAX_ADVICE] if item.kind in PAUSE_KINDS
     )
-
-    out_path = Path(args.out or "feedback.png")
     render_feedback(
         ref_words=ref_words, usr_words=usr_words, tokens=tokens, rhythm=rhythm,
         ref_prosody=ref_prosody, usr_prosody=usr_prosody, flags=flags,
@@ -219,7 +205,149 @@ def cmd_compare(args: argparse.Namespace) -> int:
         text=" ".join(w.text for w in ref_words), out_path=out_path,
     )
 
+    if segment_id is not None:
+        _save_run(connection, segment_id, unit_index, details, metrics)
+
     _print_summary(summary, paths, tokens, out_path)
+    return 0
+
+
+def _save_run(connection, segment_id, unit_index, details, metrics) -> None:
+    """把这一轮存进库，进度才能跨会话累积。"""
+    run_id = db.start_run(connection, segment_id=segment_id, unit_index=unit_index)
+    for (path, usr_words, _, _, _, advice), take in zip(details, metrics):
+        db.add_attempt(
+            connection, run_id=run_id, audio_path=str(path),
+            asr_text=" ".join(w.text for w in usr_words),
+            metrics={
+                "accuracy": take.accuracy,
+                "speech_ratio": take.speech_ratio,
+                "pause_ratio": take.pause_ratio,
+                "issues": [
+                    {"kind": a.kind, "ref_index": a.ref_index,
+                     "score": a.score, "title": a.title}
+                    for a in advice
+                ],
+            },
+        )
+    db.finish_run(connection, run_id)
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    paths = [Path(p) for p in args.user]
+    for path in paths:            # 全部先校验，别录了三遍才发现第一遍是静音
+        try:
+            media.validate_attempt(path)
+        except Exception as exc:
+            print(f"录音不可用（{path.name}）：{exc}", file=sys.stderr)
+            return 1
+
+    connection = _open_db()
+    try:
+        ref_path, ref_words = _reference_for(connection, args)
+        if not ref_words:
+            print("原声转写为空，无法比较。", file=sys.stderr)
+            return 1
+        return _compare(
+            connection, ref_path=ref_path, ref_words=ref_words, paths=paths,
+            out_path=Path(args.out or "feedback.png"),
+            segment_id=args.segment, unit_index=args.unit,
+        )
+    except Exception as exc:
+        print(f"比对失败：{exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_record(args: argparse.Namespace) -> int:
+    connection = _open_db()
+    try:
+        ref_path, ref_words = _reference_for(connection, args)
+    except Exception as exc:
+        print(f"读取原声失败：{exc}", file=sys.stderr)
+        return 1
+
+    span = ref_words[-1].end - ref_words[0].start if ref_words else 5.0
+    seconds = args.seconds or min(span * 1.8 + 1.5, 120.0)
+
+    devices = media.list_input_devices()
+    if devices:
+        current = dict(devices).get(args.device, "?")
+        print("麦克风：" + "，".join(f"[{i}] {n}" for i, n in devices))
+        print(f"这次用 [{args.device}] {current}（换设备加 --device N）\n")
+
+    print(f"原声：{' '.join(w.text for w in ref_words)}")
+    print(f"每遍录 {seconds:.0f} 秒，共 {args.takes} 遍。\n")
+
+    stamp = datetime.now().strftime("%m%d-%H%M%S")
+    label = f"{args.segment}" if args.segment is not None else "ref"
+    if args.unit is not None:
+        label += f"-u{args.unit}"
+
+    paths: list[Path] = []
+    for index in range(1, args.takes + 1):
+        try:
+            input(f"第 {index}/{args.takes} 遍 —— 按回车开始")
+        except (EOFError, KeyboardInterrupt):
+            print("\n已取消。", file=sys.stderr)
+            return 1
+        dest = config.attempt_audio_dir() / f"{label}-{stamp}-{index}.wav"
+        try:
+            media.record(dest, seconds=seconds, device=args.device)
+            media.validate_attempt(dest)
+        except Exception as exc:
+            print(f"  第 {index} 遍不可用：{exc}", file=sys.stderr)
+            return 1
+        print(f"  录好了 → {dest.name}")
+        paths.append(dest)
+
+    print()
+    try:
+        return _compare(
+            connection, ref_path=ref_path, ref_words=ref_words, paths=paths,
+            out_path=Path(args.out or "feedback.png"),
+            segment_id=args.segment, unit_index=args.unit,
+        )
+    except Exception as exc:
+        print(f"比对失败：{exc}", file=sys.stderr)
+        return 1
+
+
+def _local_time(stamp: str) -> str:
+    """库里存的是 UTC，显示要转本地时区，否则跨时区看着像是别人练的。"""
+    try:
+        return datetime.fromisoformat(stamp).astimezone().strftime("%m-%d %H:%M")
+    except ValueError:
+        return stamp[:16]
+
+
+def cmd_progress(args: argparse.Namespace) -> int:
+    connection = _open_db()
+    runs = db.list_runs(connection, segment_id=args.segment, unit_index=args.unit)
+    if not runs:
+        print("还没有练习记录。用 shadow record 练一轮就有了。")
+        return 0
+
+    print(f"{'时间':<14}{'片段':>5}{'单元':>5}{'遍数':>5}"
+          f"{'可懂':>7}{'发声':>7}{'停顿':>7}   反复出现的问题")
+    for row in runs:
+        takes = db.run_metrics(connection, row["id"])
+        if not takes:
+            continue
+        counts: dict[str, int] = {}
+        for take in takes:
+            for issue in {(i["kind"], i["ref_index"]): i
+                          for i in take.get("issues", ())}.values():
+                counts[issue["title"]] = counts.get(issue["title"], 0) + 1
+        threshold = max(1, round(len(takes) * 0.5))
+        repeated = [t for t, c in sorted(counts.items(), key=lambda kv: -kv[1])
+                    if c >= threshold]
+        pauses = [t["pause_ratio"] for t in takes if t.get("pause_ratio") is not None]
+        print(f"{_local_time(row['started_at']):<14}"
+              f"{row['segment_id']:>5}{(row['unit_index'] or '-'):>5}{len(takes):>5}"
+              f"{statistics.median(t['accuracy'] for t in takes) * 100:>6.0f}%"
+              f"{statistics.median(t['speech_ratio'] for t in takes):>7.2f}"
+              f"{(statistics.median(pauses) if pauses else float('nan')):>7.2f}"
+              f"   {'、'.join(repeated[:3]) if repeated else '—'}")
     return 0
 
 
@@ -316,6 +444,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_export.add_argument("-u", "--unit", type=int, help="只导出第 n 个练习单元")
     p_export.add_argument("-o", "--out")
     p_export.set_defaults(func=cmd_export)
+
+    p_record = sub.add_parser("record", help="录音并立即比对（推荐每轮录 3 遍）")
+    record_group = p_record.add_mutually_exclusive_group(required=True)
+    record_group.add_argument("--ref", help="原声 wav 路径")
+    record_group.add_argument("--segment", type=int, help="已导入的片段 id")
+    p_record.add_argument("-u", "--unit", type=int, help="片段内第 n 个练习单元")
+    p_record.add_argument("-n", "--takes", type=int, default=3, help="录几遍（默认 3）")
+    p_record.add_argument("--device", default="0", help="麦克风编号，默认 0")
+    p_record.add_argument("--seconds", type=float, help="每遍录多少秒，默认按原声长度自动定")
+    p_record.add_argument("-o", "--out", help="输出 png 路径")
+    p_record.set_defaults(func=cmd_record)
+
+    p_progress = sub.add_parser("progress", help="查看跨会话的练习趋势")
+    p_progress.add_argument("-s", "--segment", type=int)
+    p_progress.add_argument("-u", "--unit", type=int)
+    p_progress.set_defaults(func=cmd_progress)
 
     p_compare = sub.add_parser("compare", help="对比原声与你的录音")
     group = p_compare.add_mutually_exclusive_group(required=True)

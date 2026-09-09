@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 import subprocess
 from pathlib import Path
 
@@ -57,3 +58,48 @@ def validate_attempt(path: Path) -> None:
         raise AudioError(
             f"录音接近静音（{rms_db:.1f} dB）。检查麦克风是否被静音或选错设备。"
         )
+
+
+# --- 录音（macOS / avfoundation）-------------------------------------------
+
+
+def list_input_devices() -> tuple[tuple[str, str], ...]:
+    """返回 ((编号, 名称), ...)。ffmpeg 把设备列表打在 stderr 且退出码非零，是正常的。"""
+    proc = subprocess.run(
+        ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
+        capture_output=True, text=True,
+    )
+    devices: list[tuple[str, str]] = []
+    in_audio = False
+    for line in proc.stderr.splitlines():
+        if "AVFoundation audio devices" in line:
+            in_audio = True
+            continue
+        if in_audio:
+            match = re.search(r"\[(\d+)\]\s+(.+?)\s*$", line)
+            if match:
+                devices.append((match.group(1), match.group(2)))
+            elif "AVFoundation" not in line:
+                break
+    return tuple(devices)
+
+
+def record(dest: Path, *, seconds: float, device: str = "0") -> Path:
+    """从麦克风录一段，直接产出 16k 单声道 wav。"""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "avfoundation", "-i", f":{device}",
+            "-t", f"{seconds:.2f}",
+            "-ar", str(config.SAMPLE_RATE), "-ac", "1",
+            "-c:a", "pcm_s16le", str(dest),
+        ],
+        capture_output=True, text=True, timeout=seconds + 30,
+    )
+    if proc.returncode != 0 or not dest.exists():
+        raise AudioError(
+            f"录音失败：\n{proc.stderr.strip()}\n"
+            f"（第一次使用需要在「系统设置 → 隐私与安全性 → 麦克风」里允许终端）"
+        )
+    return dest

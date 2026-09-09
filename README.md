@@ -19,6 +19,21 @@ uv sync
 
 ## 用法
 
+### 每天的循环
+
+```bash
+uv run shadow units 2                       # 看这个片段有哪几个练习单元
+uv run shadow record --segment 2 --unit 1   # 录 3 遍并立即出反馈（推荐）
+uv run shadow progress                      # 看跨天的趋势
+```
+
+`record` 会自动按原声长度定录音时长、每遍前等你按回车、录完立刻校验（太短或静音
+当场重录），三遍录完直接跑比对并**存进数据库**——所以 `progress` 能看到跨会话的进步。
+
+换麦克风用 `--device N`（命令会先列出可选设备），改遍数用 `-n`。
+
+### 单条命令
+
 ```bash
 uv run shadow import <url>          # 导入素材，自动转写并切成 30-90s 片段
 uv run shadow list -s               # 列出素材与片段
