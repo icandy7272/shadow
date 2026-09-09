@@ -1954,8 +1954,11 @@ def test_semitones_are_speaker_independent(tmp_path):
 def test_energy_drop_is_about_six_db(tmp_path):
     result = analyse(write_two_levels(tmp_path / "a.wav"))
     half = len(result.energy_db) // 2
-    loud = np.median(result.energy_db[100:half - 100])
-    quiet = np.median(result.energy_db[half + 100:-100])
+    # 信号 2.0s / 步长 0.01s = 200 帧，half = 100。裁边必须远小于 100，
+    # 否则 [100:half-100] 会切出空数组，np.median 返回 nan。
+    margin = 20
+    loud = np.median(result.energy_db[margin:half - margin])
+    quiet = np.median(result.energy_db[half + margin:-margin])
     assert loud - quiet == pytest.approx(6.0, abs=1.5)
 
 
