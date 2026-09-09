@@ -74,3 +74,27 @@ def test_record_surfaces_permission_hint_on_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(media.subprocess, "run", lambda *a, **k: Proc())
     with pytest.raises(AudioError, match="麦克风"):
         media.record(tmp_path / "x.wav", seconds=1.0)
+
+
+def test_play_repeats_and_counts(monkeypatch, tmp_path):
+    source = write_tone(tmp_path / "p.wav", seconds=0.5)
+    calls = []
+
+    class Proc:
+        returncode = 0
+        stdout = stderr = ""
+
+    monkeypatch.setattr(media.shutil, "which", lambda name: "/usr/bin/afplay")
+    monkeypatch.setattr(media.subprocess, "run",
+                        lambda cmd, **k: (calls.append(cmd), Proc())[1])
+    monkeypatch.setattr(media.time, "sleep", lambda _: None)
+    assert media.play(source, times=3, gap=0.1) == 3
+    assert len(calls) == 3
+    assert calls[0][0] == "/usr/bin/afplay" or "afplay" in calls[0][0]
+
+
+def test_play_reports_when_no_player_exists(monkeypatch, tmp_path):
+    source = write_tone(tmp_path / "p.wav", seconds=0.5)
+    monkeypatch.setattr(media.shutil, "which", lambda name: None)
+    with pytest.raises(AudioError, match="播放器"):
+        media.play(source)

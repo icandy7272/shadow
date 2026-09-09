@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import math
 import re
+import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import numpy as np
@@ -103,3 +105,36 @@ def record(dest: Path, *, seconds: float, device: str = "0") -> Path:
             f"（第一次使用需要在「系统设置 → 隐私与安全性 → 麦克风」里允许终端）"
         )
     return dest
+
+
+# --- 播放 -------------------------------------------------------------------
+
+PLAYERS = (("afplay",), ("ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"))
+
+
+def _player() -> tuple[str, ...] | None:
+    for command in PLAYERS:
+        if shutil.which(command[0]):
+            return command
+    return None
+
+
+def play(path: Path, *, times: int = 1, gap: float = 0.6) -> int:
+    """放 N 遍，返回实际放了几遍。中途 Ctrl+C 就停。"""
+    command = _player()
+    if command is None:
+        raise AudioError(
+            "找不到可用的播放器（试过 afplay 和 ffplay）。"
+            f"可以手动打开：{path}"
+        )
+    duration = probe_duration(path)
+    played = 0
+    for _ in range(max(1, times)):
+        proc = subprocess.run([*command, str(path)], capture_output=True, text=True,
+                              timeout=duration + 30)
+        if proc.returncode != 0:
+            raise AudioError(f"播放失败：\n{proc.stderr.strip()}")
+        played += 1
+        if played < times and gap > 0:
+            time.sleep(gap)
+    return played

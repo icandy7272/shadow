@@ -22,10 +22,15 @@ uv sync
 ### 每天的循环
 
 ```bash
-uv run shadow units 2                       # 看这个片段有哪几个练习单元
-uv run shadow record --segment 2 --unit 1   # 录 3 遍并立即出反馈（推荐）
-uv run shadow progress                      # 看跨天的趋势
+uv run shadow units 2                                  # 看有哪几个练习单元
+uv run shadow play --segment 2 --unit 2 -n 10          # 先听 10 遍，什么都别做
+uv run shadow record --segment 2 --unit 2 --listen 5   # 录 3 遍并立即出反馈
+uv run shadow progress                                 # 看跨天的趋势
 ```
+
+`--listen N` 会在录音前自动放 N 遍原声。实测「听几遍 → 同步跟读 → 独立说一遍」
+比逐条对着指令改有效得多：语调是靠耳朵拿的，而逐项纠正靠的是有意识控制，
+意识一次只能盯一件事，改了 A 就丢了 B。
 
 `record` 会自动按原声长度定录音时长、每遍前等你按回车、录完立刻校验（太短或静音
 当场重录），三遍录完直接跑比对并**存进数据库**——所以 `progress` 能看到跨会话的进步。

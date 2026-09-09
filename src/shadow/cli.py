@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import statistics
 import sys
+import time
 from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
@@ -258,6 +259,31 @@ def cmd_compare(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_play(args: argparse.Namespace) -> int:
+    connection = _open_db()
+    try:
+        ref_path, ref_words = _reference_for(connection, args)
+    except Exception as exc:
+        print(f"读取原声失败：{exc}", file=sys.stderr)
+        return 1
+    print(" ".join(w.text for w in ref_words))
+    print(f"\n放 {args.times} 遍（Ctrl+C 停）\n")
+    try:
+        for index in range(1, args.times + 1):
+            print(f"  {index}/{args.times}", end="\r", flush=True)
+            media.play(ref_path, times=1, gap=0.0)
+            if index < args.times:
+                time.sleep(args.gap)
+    except KeyboardInterrupt:
+        print("\n停了。")
+        return 0
+    except Exception as exc:
+        print(f"\n播放失败：{exc}", file=sys.stderr)
+        return 1
+    print(f"  放完 {args.times} 遍。")
+    return 0
+
+
 def cmd_record(args: argparse.Namespace) -> int:
     connection = _open_db()
     try:
@@ -277,6 +303,20 @@ def cmd_record(args: argparse.Namespace) -> int:
 
     print(f"原声：{' '.join(w.text for w in ref_words)}")
     print(f"每遍录 {seconds:.0f} 秒，共 {args.takes} 遍。\n")
+
+    if args.listen:
+        print(f"先听 {args.listen} 遍，什么都别做，让声音的形状进去：")
+        try:
+            for index in range(1, args.listen + 1):
+                print(f"  {index}/{args.listen}", end="\r", flush=True)
+                media.play(ref_path, times=1, gap=0.0)
+                if index < args.listen:
+                    time.sleep(0.6)
+            print("  听完了。      \n")
+        except KeyboardInterrupt:
+            print("\n  跳过试听。\n")
+        except Exception as exc:
+            print(f"\n  播放失败（不影响录音）：{exc}\n", file=sys.stderr)
 
     stamp = datetime.now().strftime("%m%d-%H%M%S")
     label = f"{args.segment}" if args.segment is not None else "ref"
@@ -452,9 +492,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_record.add_argument("-u", "--unit", type=int, help="片段内第 n 个练习单元")
     p_record.add_argument("-n", "--takes", type=int, default=3, help="录几遍（默认 3）")
     p_record.add_argument("--device", default="0", help="麦克风编号，默认 0")
+    p_record.add_argument("--listen", type=int, default=0,
+                          help="录之前先放几遍原声（建议 5-10）")
     p_record.add_argument("--seconds", type=float, help="每遍录多少秒，默认按原声长度自动定")
     p_record.add_argument("-o", "--out", help="输出 png 路径")
     p_record.set_defaults(func=cmd_record)
+
+    p_play = sub.add_parser("play", help="播放原声")
+    play_group = p_play.add_mutually_exclusive_group(required=True)
+    play_group.add_argument("--ref", help="原声 wav 路径")
+    play_group.add_argument("--segment", type=int, help="已导入的片段 id")
+    p_play.add_argument("-u", "--unit", type=int, help="片段内第 n 个练习单元")
+    p_play.add_argument("-n", "--times", type=int, default=1, help="放几遍（默认 1）")
+    p_play.add_argument("--gap", type=float, default=0.8, help="两遍之间隔几秒")
+    p_play.set_defaults(func=cmd_play)
 
     p_progress = sub.add_parser("progress", help="查看跨会话的练习趋势")
     p_progress.add_argument("-s", "--segment", type=int)
