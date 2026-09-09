@@ -37,6 +37,23 @@ def _rms_db(
     return 20.0 * np.log10(rms + 1e-10)
 
 
+def word_contour(prosody: "Prosody", start: float, end: float) -> tuple[float, float] | None:
+    """词内的起始与结束音高（各取前后三分之一的均值，比取单帧稳）。
+
+    返回 (起, 止)；两者之差就是这个词内部的升降走向——句尾降调正是靠它看出来的。
+    浊音帧不足时返回 None。
+    """
+    values = prosody.semitones[(prosody.times >= start) & (prosody.times < end)]
+    values = values[np.isfinite(values)]
+    if values.size == 0:
+        return None
+    if values.size < 3:
+        mean = float(np.mean(values))
+        return mean, mean
+    third = max(1, values.size // 3)
+    return float(np.mean(values[:third])), float(np.mean(values[-third:]))
+
+
 def adaptive_pitch_bounds(
     sound: parselmouth.Sound,
     *,

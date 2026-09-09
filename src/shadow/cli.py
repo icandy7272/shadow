@@ -8,16 +8,16 @@ from dataclasses import replace
 from pathlib import Path
 
 from . import config, db, media
-from .analysis.align import warp_user_times
 from .analysis.diff import accuracy as diff_accuracy
 from .analysis.diff import diff_words, matched_pairs
-from .analysis.prosody import analyse
-from .analysis.timing import word_timings
+from .analysis.prosody import analyse, word_contour
 from .drill.units import split_into_units
 from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
 from .models import Word
-from .report.plot import render_comparison
+from .analysis.rhythm import analyse_rhythm
+from .report.advice import build_advice, well_done
+from .report.blocks import Flag, render_feedback
 
 
 class CliError(RuntimeError):
@@ -71,6 +71,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 UNIT_PAD_SEC = 0.1
+MAX_ADVICE = 3
 
 
 def _segment_units(connection, segment_id: int):
@@ -178,34 +179,53 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
     tokens = diff_words([w.text for w in ref_words], [w.text for w in usr_words])
     score = diff_accuracy(tokens)
-
+    pairs = matched_pairs(tokens)
+    rhythm = analyse_rhythm(ref_words, usr_words, pairs)
     ref_prosody = analyse(ref_path)
     usr_prosody = analyse(Path(args.user))
-    warped = warp_user_times(
-        usr_prosody.times,
-        ref_words=ref_words,
-        usr_words=usr_words,
-        pairs=matched_pairs(tokens),
-        ref_duration=ref_prosody.duration,
-        usr_duration=usr_prosody.duration,
-    )
-    timings = word_timings(ref_words, usr_words, tokens)
 
-    out_path = Path(args.out or "comparison.png")
-    render_comparison(
-        ref_prosody=ref_prosody,
-        usr_prosody=usr_prosody,
-        usr_times_warped=warped,
-        timings=timings,
-        out_path=out_path,
-        title=ref_path.name,
-        accuracy=score,
+    advice = build_advice(
+        ref_words=ref_words, usr_words=usr_words, tokens=tokens, rhythm=rhythm,
+        ref_prosody=ref_prosody, usr_prosody=usr_prosody,
+    )
+    flags = tuple(
+        Flag(usr_index=usr_index, text=item.title.split("”")[-1].strip() or item.kind)
+        for item, usr_index in _flag_targets(advice, ref_words, usr_words, tokens)
     )
 
-    print(f"可懂度 {score * 100:.0f}%（{len(ref_words)} 个词）")
+    out_path = Path(args.out or "feedback.png")
+    render_feedback(
+        ref_words=ref_words, usr_words=usr_words, tokens=tokens, rhythm=rhythm,
+        ref_prosody=ref_prosody, usr_prosody=usr_prosody, flags=flags,
+        accuracy=score, text=" ".join(w.text for w in ref_words), out_path=out_path,
+    )
+
+    _print_report(tokens, score, rhythm, advice,
+                  well_done(ref_words=ref_words, usr_words=usr_words,
+                            tokens=tokens, rhythm=rhythm, advice=advice),
+                  out_path)
+    return 0
+
+
+def _flag_targets(advice, ref_words, usr_words, tokens):
+    """把诊断挂回到具体的用户词下标，供图 2 标红。"""
+    by_ref_text = {}
+    for token in tokens:
+        if token.kind == "equal" and token.usr_index is not None:
+            by_ref_text.setdefault(ref_words[token.ref_index].text, token.usr_index)
+    for item in advice[:MAX_ADVICE]:
+        for text, usr_index in by_ref_text.items():
+            if f"“{text}”" in item.title:
+                yield item, usr_index
+                break
+
+
+def _print_report(tokens, score, rhythm, advice, good, out_path) -> None:
+    print(f"\n可懂度 {score * 100:.0f}%（{sum(1 for t in tokens if t.ref_index is not None)} 个词）")
     problems = [t for t in tokens if t.kind != "equal"]
-    if problems:
-        print("机器没听对的词：")
+    if not problems:
+        print("  发音层面没问题——每个词机器都听出来了。")
+    else:
         for token in problems[:20]:
             if token.kind == "missing":
                 print(f"  漏  {token.ref_text}")
@@ -213,8 +233,24 @@ def cmd_compare(args: argparse.Namespace) -> int:
                 print(f"  错  {token.ref_text}  ->  听成 {token.usr_text}")
             else:
                 print(f"  多  {token.usr_text}")
-    print(f"对比图已写入 {out_path}")
-    return 0
+
+    pause = ("—" if rhythm.pause_ratio is None
+             else f"{rhythm.pause_ratio:.2f}x")
+    print(f"\n发声 {rhythm.speech_ratio:.2f}x    停顿 {pause}    "
+          f"整句 {rhythm.span_ratio:.2f}x")
+
+    if advice:
+        print(f"\n下一遍改这 {min(MAX_ADVICE, len(advice))} 处，按重要性排：\n")
+        for number, item in enumerate(advice[:MAX_ADVICE], 1):
+            print(f"  {number}. {item.title}")
+            print(f"     现状：{item.detail}")
+            print(f"     怎么做：{item.action}\n")
+    else:
+        print("\n这一句没有明显偏差，可以换下一个单元了。\n")
+
+    if good:
+        print(f"这些词你做对了，保持：{' / '.join(good[:12])}")
+    print(f"\n反馈图已写入 {out_path}")
 
 
 def build_parser() -> argparse.ArgumentParser:
