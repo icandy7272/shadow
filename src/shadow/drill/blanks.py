@@ -12,6 +12,7 @@ from typing import Sequence
 
 from .. import config
 from ..models import Word
+from ..text import normalise
 
 FUNCTION_WORDS = frozenset(
     """
@@ -27,7 +28,6 @@ FUNCTION_WORDS = frozenset(
 )
 
 _VOWEL_GROUPS = re.compile(r"[aeiouy]+")
-_NON_WORD = re.compile(r"[^a-z']")
 
 
 @functools.lru_cache(maxsize=1)
@@ -35,10 +35,6 @@ def _cmu() -> dict[str, list[list[str]]]:
     import cmudict
 
     return cmudict.dict()
-
-
-def normalise(text: str) -> str:
-    return _NON_WORD.sub("", text.lower())
 
 
 def count_syllables(word: str) -> int:
