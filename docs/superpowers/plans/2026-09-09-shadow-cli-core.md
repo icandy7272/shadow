@@ -1499,11 +1499,18 @@ def conn(monkeypatch, tmp_path):
 
 
 def fake_words():
-    """160 词 x 0.5s，第 79 词后有停顿 -> 应切成 2 段。"""
+    """160 词，第 79 词后有停顿 -> 应切成 2 段。
+
+    实词 market（2 音节）0.7s、功能词 the（1 音节）0.1s，每对仍占 0.8s。
+    这样 the 的弱读比值 = 0.1 / (1 x 32.0/120) = 0.375，低于 0.6 的严格阈值，
+    会被 select_blanks 选中。若两者时长相同，1 音节的 the 反而显得「偏慢」
+    （比值 1.5），一个空都挖不出来。
+    """
     words, t = [], 0.0
     for i in range(160):
-        words.append(Word(text="the" if i % 2 else "market", start=t, end=t + 0.5))
-        t += 0.5 + (0.5 if i == 79 else 0.0)
+        text, duration = ("the", 0.1) if i % 2 else ("market", 0.7)
+        words.append(Word(text=text, start=t, end=t + duration))
+        t += duration + (0.5 if i == 79 else 0.0)
     return tuple(words)
 
 
