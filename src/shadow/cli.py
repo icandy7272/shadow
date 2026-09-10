@@ -115,12 +115,14 @@ def _segment_reference(connection, segment_id: int, dest: Path, *,
                 f"片段 {segment_id} 只有 {len(units)} 个练习单元，没有第 {unit} 个"
             )
         words = units[unit - 1]
-        start = max(segment["start_sec"], words[0].start - config.UNIT_PAD_SEC)
-        end = min(segment["end_sec"], words[-1].end + config.UNIT_PAD_SEC)
+        start, end = media.unit_bounds(Path(source["audio_path"]), words,
+                                       low=segment["start_sec"],
+                                       high=segment["end_sec"])
 
     media.cut_segment(Path(source["audio_path"]), dest, start=start, end=end)
+    # 裁剪点贴到停顿上之后可能晚于转写给的首词起点，钳到 0
     rebased = tuple(
-        replace(word, start=word.start - start, end=word.end - start)
+        replace(word, start=max(0.0, word.start - start), end=word.end - start)
         for word in words
     )
     return dest, rebased, " ".join(word.text for word in rebased)

@@ -15,6 +15,7 @@ import numpy as np
 import soundfile as sf
 
 from . import config
+from .analysis.silence import quiet_midpoint
 
 
 class AudioError(RuntimeError):
@@ -44,6 +45,51 @@ def cut_segment(source: Path, dest: Path, *, start: float, end: float) -> Path:
     if proc.returncode != 0:
         raise AudioError(f"ffmpeg 裁剪失败：\n{proc.stderr.strip()}")
     return dest
+
+
+def _frame_energy_db(samples, sr: int, offset: float):
+    """逐帧能量（dB）与各帧起始时刻。"""
+    win, hop = int(0.025 * sr), int(0.01 * sr)
+    if samples.size < win:
+        return np.empty(0), np.empty(0)
+    starts = np.arange(0, samples.size - win + 1, hop)
+    rms = np.array([np.sqrt(np.mean(samples[i:i + win] ** 2)) for i in starts])
+    return offset + starts / sr, 20.0 * np.log10(rms + 1e-12)
+
+
+def snap_to_silence(path: Path, at: float, *, fallback: float,
+                    window: float = None) -> float:
+    """把裁剪点挪到附近真正的停顿上。附近找不到停顿就用 fallback。
+
+    转写的词级时间戳常整体偏早几百毫秒。照它裁，上一句的尾巴会被带进来
+    ——实测某句转写说句间只隔 0.04 秒，波形里真正的停顿在 0.3 秒之后。
+    """
+    window = config.SILENCE_WINDOW_SEC if window is None else window
+    info = sf.info(str(path))
+    low = max(0.0, at - window)
+    high = min(info.duration, at + window)
+    if high - low < 0.05:
+        return fallback
+    samples, sr = sf.read(str(path), start=int(low * info.samplerate),
+                          stop=int(high * info.samplerate), dtype="float32",
+                          always_2d=False)
+    if samples.ndim > 1:
+        samples = samples.mean(axis=1)
+    times, energy = _frame_energy_db(samples, sr, low)
+    found = quiet_midpoint(times, energy)
+    return fallback if found is None else found
+
+
+def unit_bounds(source: Path, words, *, low: float, high: float):
+    """一个练习单元在素材里的裁剪区间，尽量落在真正的停顿上。
+
+    命令行与网页共用，免得两边各裁各的。
+    """
+    start = snap_to_silence(source, words[0].start,
+                            fallback=words[0].start - config.UNIT_PAD_SEC)
+    end = snap_to_silence(source, words[-1].end,
+                          fallback=words[-1].end + config.UNIT_PAD_SEC)
+    return max(low, start), min(high, end)
 
 
 def validate_attempt(path: Path) -> None:

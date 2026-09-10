@@ -69,12 +69,13 @@ def _unit_reference(connection, segment_id: int, unit: int):
     if source is None or not source["audio_path"]:
         raise HTTPException(404, "素材音频缺失")
     dest = config.segment_audio_dir() / f"{segment_id}-u{unit}.wav"
-    start = max(segment["start_sec"], words[0].start - config.UNIT_PAD_SEC)
-    end = min(segment["end_sec"], words[-1].end + config.UNIT_PAD_SEC)
+    start, end = media.unit_bounds(Path(source["audio_path"]), words,
+                                   low=segment["start_sec"], high=segment["end_sec"])
     if not dest.exists():
         media.cut_segment(Path(source["audio_path"]), dest, start=start, end=end)
+    # 裁剪点贴到停顿上之后可能晚于转写给的首词起点，钳到 0
     rebased = tuple(
-        replace(word, start=word.start - start, end=word.end - start)
+        replace(word, start=max(0.0, word.start - start), end=word.end - start)
         for word in words
     )
     return dest, rebased

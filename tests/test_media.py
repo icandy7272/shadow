@@ -171,3 +171,46 @@ def test_record_reports_failure_when_nothing_was_written(monkeypatch, tmp_path):
     monkeypatch.setattr(media.sys.stdin, "isatty", lambda: False, raising=False)
     with pytest.raises(AudioError, match="麦克风"):
         media.record(dest, seconds=1.0)
+
+
+def test_unit_bounds_cuts_in_the_pause_not_where_the_transcript_says(tmp_path):
+    """转写常整体偏早几百毫秒。照它裁，上一句的尾巴会被带进来。"""
+    import numpy as np
+    import soundfile as sf
+
+    from shadow import media
+    from shadow.models import Word
+
+    sr = 16000
+    tone = lambda n: 0.4 * np.sin(2 * np.pi * 180 * np.arange(n) / sr)  # noqa: E731
+    # 上一句 0.0-1.0，真正的停顿 1.0-1.25，本句 1.25-2.2
+    source = tmp_path / "src.wav"
+    sf.write(source, np.concatenate([
+        tone(int(1.0 * sr)), np.zeros(int(0.25 * sr)), tone(int(0.95 * sr)),
+    ]).astype("float32"), sr)
+
+    # 转写偏早 0.3 秒：说本句从 0.95 开始
+    words = (Word(text="but", start=0.95, end=1.6), Word(text="then", start=1.6, end=2.1))
+    start, end = media.unit_bounds(source, words, low=0.0, high=2.2)
+
+    assert 1.05 < start < 1.22          # 落在停顿里，而不是 0.85
+    assert end == pytest.approx(2.2, abs=0.01)
+
+
+def test_unit_bounds_falls_back_when_the_words_run_together(tmp_path):
+    """句子之间没有停顿时，只能信时间戳，照旧留一点余量。"""
+    import numpy as np
+    import soundfile as sf
+
+    from shadow import config, media
+    from shadow.models import Word
+
+    sr = 16000
+    source = tmp_path / "solid.wav"
+    sf.write(source, (0.4 * np.sin(2 * np.pi * 180 * np.arange(2 * sr) / sr)
+                      ).astype("float32"), sr)
+
+    words = (Word(text="a", start=0.6, end=1.4),)
+    start, _end = media.unit_bounds(source, words, low=0.0, high=2.0)
+
+    assert start == pytest.approx(0.6 - config.UNIT_PAD_SEC, abs=0.01)
