@@ -77,6 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_attempts_run ON attempts(run_id);
 MIGRATIONS = (
     ("practice_runs", "unit_index", "INTEGER"),
     ("practice_runs", "unit_text", "TEXT"),
+    ("practice_runs", "gapfill_heard", "INTEGER"),
     ("attempts", "metrics_json", "TEXT"),
 )
 
@@ -226,11 +227,14 @@ def set_blind_rating(conn: sqlite3.Connection, run_id: int, rating: int) -> None
 
 
 def set_gapfill(
-    conn: sqlite3.Connection, run_id: int, correct: int, total: int
+    conn: sqlite3.Connection, run_id: int, correct: int, total: int,
+    heard: int | None = None,
 ) -> None:
+    """heard = 答对且自称是听出来的数量，与靠语法推断的分开记。"""
     conn.execute(
-        "UPDATE practice_runs SET gapfill_correct = ?, gapfill_total = ? WHERE id = ?",
-        (correct, total, run_id),
+        "UPDATE practice_runs SET gapfill_correct = ?, gapfill_total = ?,"
+        " gapfill_heard = ? WHERE id = ?",
+        (correct, total, heard, run_id),
     )
     conn.commit()
 

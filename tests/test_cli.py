@@ -462,7 +462,7 @@ def test_drill_scores_and_records(monkeypatch, capsys):
 def test_drill_lets_you_replay(monkeypatch, capsys):
     segment_id = _seed_with_blanks()
     plays: list[int] = []
-    answers = iter(["?", "have", "been"])
+    answers = iter(["??", "have", "been"])
     monkeypatch.setattr(cli.media, "play", lambda *a, **k: plays.append(1) or 1)
     monkeypatch.setattr(cli.time, "sleep", lambda _: None)
     monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(

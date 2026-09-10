@@ -66,3 +66,33 @@ def test_context_never_leaks_another_blank():
     assert "to" not in blanks[1].left.split()    # 第 1 空的答案
     assert "____" in blanks[0].right
     assert "____" in blanks[1].left
+
+
+def test_question_mark_marks_an_answer_as_guessed():
+    from shadow.drill.gapfill import parse_answer
+
+    assert parse_answer("up") == __import__(
+        "shadow.drill.gapfill", fromlist=["Response"]).Response(guess="up")
+    guessed = parse_answer("up?")
+    assert guessed.guess == "up" and guessed.guessed is True
+    assert guessed.heard is False
+    assert parse_answer("").guess is None
+    assert parse_answer("  ?  ").guess is None
+
+
+def test_tally_separates_heard_from_guessed():
+    from shadow.drill.gapfill import Response, tally
+
+    blanks = blanks_of(make())
+    # 两个都对，但第二个是猜的
+    correct, total, heard = tally(
+        blanks, [Response("to"), Response("you", guessed=True)]
+    )
+    assert (correct, total, heard) == (2, 2, 1)
+
+
+def test_wrong_answer_counts_as_neither():
+    from shadow.drill.gapfill import Response, tally
+
+    blanks = blanks_of(make())
+    assert tally(blanks, [Response("of"), Response(None)]) == (0, 2, 0)

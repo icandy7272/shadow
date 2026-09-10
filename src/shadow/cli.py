@@ -14,7 +14,7 @@ from . import config, db, media
 from .analysis.diff import accuracy as diff_accuracy
 from .analysis.diff import diff_words, matched_pairs, unreliable_indices
 from .analysis.prosody import analyse, word_contour
-from .drill.gapfill import blanks_of, render, score
+from .drill.gapfill import blanks_of, parse_answer, render, tally
 from .drill.units import split_into_units
 from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
@@ -388,11 +388,13 @@ def cmd_drill(args: argparse.Namespace) -> int:
         return 0
 
     print(f"精听填空 · {len(ref_words)} 个词，{len(blanks)} 个空")
-    print("先听几遍，再逐个填。听不清就输入 ? 重听。\n")
+    print("先听几遍，再逐个填。听不清就输入 ?? 重听。")
+    print("听出来的直接写；靠上下文猜的，在词后加个问号（如 up?）——"
+          "功能词太好猜了，不分开就测不出听力。\n")
     _play_times(ref_path, args.times)
     print(f"{render(ref_words)}\n")
 
-    answers: list[str | None] = []
+    answers = []
     for blank in blanks:
         prompt = f"  {blank.number}. …{blank.left} [____] {blank.right}…  "
         while True:
@@ -401,19 +403,21 @@ def cmd_drill(args: argparse.Namespace) -> int:
             except (EOFError, KeyboardInterrupt):
                 print("\n已取消。", file=sys.stderr)
                 return 1
-            if guess == "?":
+            if guess == "??":
                 _play_times(ref_path, 1, label="重听")
                 continue
-            answers.append(guess or None)
+            answers.append(parse_answer(guess))
             break
 
-    correct, total = score(blanks, answers)
-    print(f"\n{correct}/{total} 对\n")
-    for blank, guess in zip(blanks, answers):
-        if blank.matches(guess or ""):
-            print(f"  ✓ {blank.answer}")
+    correct, total, heard = tally(blanks, answers)
+    print(f"\n{correct}/{total} 对，其中 {heard} 个是听出来的\n")
+    for blank, response in zip(blanks, answers):
+        if response.guess and blank.matches(response.guess):
+            mark = "✓" if response.heard else "○"
+            note = "" if response.heard else "   （靠上下文推的，不算听力）"
+            print(f"  {mark} {blank.answer}{note}")
         else:
-            wrote = f"你填了 “{guess}”" if guess else "跳过了"
+            wrote = f"你填了 “{response.guess}”" if response.guess else "跳过了"
             print(f"  ✗ {blank.answer:<10} {wrote}"
                   f"   —— 原声只有 {blank.duration * 1000:.0f} 毫秒，被吞掉了")
     print(f"\n原文：{' '.join(w.text for w in ref_words)}")
@@ -422,7 +426,7 @@ def cmd_drill(args: argparse.Namespace) -> int:
         run_id = db.start_run(connection, segment_id=args.segment,
                               unit_index=args.unit,
                               unit_text=" ".join(w.text for w in ref_words))
-        db.set_gapfill(connection, run_id, correct, total)
+        db.set_gapfill(connection, run_id, correct, total, heard)
         db.finish_run(connection, run_id)
         print("\n记下了。")
     else:
@@ -642,11 +646,13 @@ def cmd_progress(args: argparse.Namespace) -> int:
         takes = db.run_metrics(connection, row["id"])
         if not takes:
             if row["gapfill_total"]:
-                rate = row["gapfill_correct"] / row["gapfill_total"] * 100
-                text = (row["unit_text"] or "")[:44]
+                heard = row["gapfill_heard"]
+                text = (row["unit_text"] or "")[:40]
+                listened = ("—" if heard is None
+                            else f"听出 {heard}/{row['gapfill_total']}")
                 print(f"{_local_time(row['started_at']):<14}{'填空':>5}"
-                      f"{row['gapfill_correct']}/{row['gapfill_total']:<5}"
-                      f"{rate:>5.0f}%{'':>7}   {text}")
+                      f"{row['gapfill_correct']}/{row['gapfill_total']:<4}"
+                      f"{listened:>10}{'':>4}   {text}")
                 continue
             if row["blind_rating"] is not None:
                 text = (row["unit_text"] or "")[:44]

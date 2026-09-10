@@ -67,9 +67,49 @@ def render(words: Sequence[Word], *, revealed: Sequence[int] = ()) -> str:
     return " ".join(parts)
 
 
+GUESS_MARK = "?"
+
+
+@dataclass(frozen=True, slots=True)
+class Response:
+    guess: str | None
+    guessed: bool = False      # True = 靠上下文推的，不是听出来的
+
+    @property
+    def heard(self) -> bool:
+        return bool(self.guess) and not self.guessed
+
+
+def parse_answer(raw: str) -> Response:
+    """词后加问号表示「是推出来的」。
+
+    功能词恰恰是最容易从语法推断出来的一类词——put me ___ for adoption
+    闭着眼也能填 up。不区分听到与推断，填空就测不出听力。
+    """
+    text = (raw or "").strip()
+    if not text:
+        return Response(guess=None)
+    if text.endswith(GUESS_MARK):
+        return Response(guess=text[:-1].strip() or None, guessed=True)
+    return Response(guess=text)
+
+
 def score(blanks: Sequence[Blank], answers: Sequence[str | None]) -> tuple[int, int]:
     """返回 (答对数, 总数)。跳过的空算错。"""
     correct = sum(
         1 for blank, guess in zip(blanks, answers) if guess and blank.matches(guess)
     )
     return correct, len(blanks)
+
+
+def tally(
+    blanks: Sequence[Blank], responses: Sequence[Response]
+) -> tuple[int, int, int]:
+    """返回 (答对, 总数, 答对且是听出来的)。后者才是真听力。"""
+    correct = heard = 0
+    for blank, response in zip(blanks, responses):
+        if response.guess and blank.matches(response.guess):
+            correct += 1
+            if response.heard:
+                heard += 1
+    return correct, len(blanks), heard
