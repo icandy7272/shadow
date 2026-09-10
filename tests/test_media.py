@@ -65,15 +65,6 @@ def test_list_input_devices_parses_ffmpeg_output(monkeypatch):
     )
 
 
-def test_record_surfaces_permission_hint_on_failure(monkeypatch, tmp_path):
-    class Proc:
-        returncode = 1
-        stdout = ""
-        stderr = "abort() called"
-
-    monkeypatch.setattr(media.subprocess, "run", lambda *a, **k: Proc())
-    with pytest.raises(AudioError, match="麦克风"):
-        media.record(tmp_path / "x.wav", seconds=1.0)
 
 
 def test_play_repeats_and_counts(monkeypatch, tmp_path):
@@ -116,3 +107,67 @@ def test_beep_never_breaks_recording(monkeypatch, tmp_path):
     monkeypatch.setattr(media, "play", lambda *a, **k: (_ for _ in ()).throw(
         AudioError("没有播放器")))
     media.beep()        # 吞掉异常，不抛
+
+
+class FakeProcess:
+    def __init__(self, dest, *, finishes_after=None):
+        self.dest = dest
+        self.stdin = self
+        self.written = []
+        self._polls = 0
+        self._finishes_after = finishes_after
+
+    def write(self, text):
+        self.written.append(text)
+
+    def flush(self):
+        pass
+
+    def poll(self):
+        self._polls += 1
+        if self._finishes_after is not None and self._polls > self._finishes_after:
+            return 0
+        return None
+
+    def communicate(self, timeout=None):
+        write_tone(self.dest, seconds=1.0)
+        return "", ""
+
+    def terminate(self):
+        pass
+
+    def kill(self):
+        pass
+
+
+def test_record_stops_when_you_press_enter(monkeypatch, tmp_path):
+    dest = tmp_path / "r.wav"
+    fake = FakeProcess(dest)
+    monkeypatch.setattr(media.subprocess, "Popen", lambda *a, **k: fake)
+    monkeypatch.setattr(media.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(media.sys.stdin, "readline", lambda: "\n", raising=False)
+    monkeypatch.setattr(media.select, "select", lambda *a: ([media.sys.stdin], [], []))
+    media.record(dest, seconds=30.0)
+    assert fake.written == ["q"]        # 用 q 让 ffmpeg 正常收尾，别 kill 掉丢文件
+
+
+def test_record_runs_to_the_cap_without_input(monkeypatch, tmp_path):
+    dest = tmp_path / "r.wav"
+    fake = FakeProcess(dest, finishes_after=2)
+    monkeypatch.setattr(media.subprocess, "Popen", lambda *a, **k: fake)
+    monkeypatch.setattr(media.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(media.select, "select", lambda *a: ([], [], []))
+    media.record(dest, seconds=1.0)
+    assert fake.written == []
+
+
+def test_record_reports_failure_when_nothing_was_written(monkeypatch, tmp_path):
+    class Empty(FakeProcess):
+        def communicate(self, timeout=None):
+            return "", "abort() called"
+
+    dest = tmp_path / "missing.wav"
+    monkeypatch.setattr(media.subprocess, "Popen", lambda *a, **k: Empty(dest))
+    monkeypatch.setattr(media.sys.stdin, "isatty", lambda: False, raising=False)
+    with pytest.raises(AudioError, match="麦克风"):
+        media.record(dest, seconds=1.0)

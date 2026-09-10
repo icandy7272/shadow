@@ -536,7 +536,8 @@ def cmd_record(args: argparse.Namespace) -> int:
 
     span = ref_words[-1].end - ref_words[0].start if ref_words else 5.0
     # 多给一点余量：麦克风有启动延迟，且提示音后到开口有反应时间
-    seconds = args.seconds or min(span * 1.8 + 2.0, 120.0)
+    # 可以敲回车提前结束，所以上限给宽一点，宁可等也别切掉尾巴
+    seconds = args.seconds or min(span * 2.5 + 4.0, 120.0)
 
     devices = media.list_input_devices()
     if devices:
@@ -567,7 +568,7 @@ def cmd_record(args: argparse.Namespace) -> int:
         dest = config.attempt_audio_dir() / f"{label}-{stamp}-{index}.wav"
         print("  嘀一声之后开始说 …", end="", flush=True)
         media.beep()
-        print("\r  录音中，说吧            ", end="", flush=True)
+        print("\r  录音中——说完敲回车结束      ", end="", flush=True)
         try:
             media.record(dest, seconds=seconds, device=args.device)
             media.validate_attempt(dest)

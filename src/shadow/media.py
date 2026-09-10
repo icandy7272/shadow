@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import math
 import re
+import select
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -86,22 +88,54 @@ def list_input_devices() -> tuple[tuple[str, str], ...]:
     return tuple(devices)
 
 
-def record(dest: Path, *, seconds: float, device: str = "0") -> Path:
-    """从麦克风录一段，直接产出 16k 单声道 wav。"""
+def record(
+    dest: Path,
+    *,
+    seconds: float,
+    device: str = "0",
+    stop_on_enter: bool = True,
+) -> Path:
+    """从麦克风录一段，直接产出 16k 单声道 wav。
+
+    说完敲回车即可结束，不必干等到时长上限——固定时长会让人不确定
+    有没有录进去，进而反复重读。seconds 退化成安全上限。
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.run(
-        [
-            "ffmpeg", "-y", "-loglevel", "error",
-            "-f", "avfoundation", "-i", f":{device}",
-            "-t", f"{seconds:.2f}",
-            "-ar", str(config.SAMPLE_RATE), "-ac", "1",
-            "-c:a", "pcm_s16le", str(dest),
-        ],
-        capture_output=True, text=True, timeout=seconds + 30,
+    command = [
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-f", "avfoundation", "-i", f":{device}",
+        "-t", f"{seconds:.2f}",
+        "-ar", str(config.SAMPLE_RATE), "-ac", "1",
+        "-c:a", "pcm_s16le", str(dest),
+    ]
+    process = subprocess.Popen(
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, text=True,
     )
-    if proc.returncode != 0 or not dest.exists():
+
+    if stop_on_enter and sys.stdin.isatty():
+        deadline = time.monotonic() + seconds + 2.0
+        while process.poll() is None and time.monotonic() < deadline:
+            ready, _, _ = select.select([sys.stdin], [], [], 0.2)
+            if not ready:
+                continue
+            sys.stdin.readline()
+            try:
+                process.stdin.write("q")     # ffmpeg 收到 q 会正常收尾并写出文件
+                process.stdin.flush()
+            except (BrokenPipeError, ValueError):
+                process.terminate()
+            break
+
+    try:
+        _, errors = process.communicate(timeout=seconds + 30)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        _, errors = process.communicate()
+
+    if not dest.exists() or probe_duration(dest) <= 0:
         raise AudioError(
-            f"录音失败：\n{proc.stderr.strip()}\n"
+            f"录音失败：\n{(errors or '').strip()}\n"
             f"（第一次使用需要在「系统设置 → 隐私与安全性 → 麦克风」里允许终端）"
         )
     return dest
