@@ -58,11 +58,15 @@ def feedback_view(review, limit: int, *, audio: dict) -> dict:
                       for s in rhythm.spans],
         },
         "pitch": [
-            {"text": s.text, "x": round(s.x, 5),
+            {"text": s.text,
              "refWidth": round(s.ref_width, 5), "usrWidth": round(s.usr_width, 5),
              "refTrace": [_round(v) for v in s.ref_trace],
              "usrTrace": [_round(v) for v in s.usr_trace],
-             "flag": s.flag}
+             "flag": s.flag,
+             # 播放时把当前时刻映射到是哪一格
+             "refAt": [round(s.ref_start, 3), round(s.ref_end, 3)],
+             "usrAt": (None if s.usr_start is None
+                       else [round(s.usr_start, 3), round(s.usr_end, 3)])}
             for s in slots
         ],
     }

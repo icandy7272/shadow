@@ -239,6 +239,10 @@ def test_takes_endpoint_runs_the_whole_review(client, tmp_path, monkeypatch):
         "It", "was", "a", "start"]
     assert [s["text"] for s in data["view"]["pitch"]] == ["It", "was", "a", "start"]
     assert len(data["view"]["pitch"][0]["refTrace"]) > 2
+    # 播放时要把当前时刻映射到是哪一格，所以每格带上各自音频里的秒数
+    first = data["view"]["pitch"][0]
+    assert first["refAt"][0] < first["refAt"][1]
+    assert first["usrAt"][0] < first["usrAt"][1]
     # 同时播放要知道两条音轨在哪，以及各自第一个词从第几秒开始——
     # 起点对齐了，图上同一个 x 才是同一刻
     audio = data["view"]["audio"]

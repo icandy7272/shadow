@@ -95,6 +95,11 @@ class Slot:
     ref_trace: tuple[float | None, ...]
     usr_trace: tuple[float | None, ...]
     flag: str | None
+    # 各自音频里的绝对秒数。播放时要把当前时刻映射到是哪一格。
+    ref_start: float
+    ref_end: float
+    usr_start: float | None
+    usr_end: float | None
 
 
 def lag_annotations(
@@ -188,8 +193,8 @@ def pitch_slots(
     for start, ref_width, usr_width, index, usr_index in placed:
         word = ref_words[index]
         usr_trace: tuple[float | None, ...] = ()
-        if usr_index is not None:
-            usr = usr_words[usr_index]
+        usr = usr_words[usr_index] if usr_index is not None else None
+        if usr is not None:
             usr_trace = word_trace(usr_prosody, usr.start, usr.end)
         slots.append(Slot(
             text=word.text.strip(TRIM),
@@ -200,5 +205,8 @@ def pitch_slots(
             ref_trace=word_trace(ref_prosody, word.start, word.end),
             usr_trace=usr_trace,
             flag=flagged.get(usr_index) if usr_index is not None else None,
+            ref_start=word.start, ref_end=word.end,
+            usr_start=None if usr is None else usr.start,
+            usr_end=None if usr is None else usr.end,
         ))
     return tuple(slots)

@@ -110,24 +110,38 @@ button:disabled { opacity: .5; cursor: default; }
 
 /* ---------- 两张对比图 ---------- */
 .figures { margin-top: 18px; }
-.fig { margin: 0 0 22px; }
-.fig figcaption { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+.fig { margin: 0 0 24px; }
+.fig figcaption { color: var(--muted); font-size: 13px; margin-bottom: 10px;
+  line-height: 1.5; }
 .fig figcaption i { font-style: normal; margin-left: 14px; white-space: nowrap; }
 .legend-ref { color: var(--accent); }
 .legend-ref::before { content: "– – "; letter-spacing: -1px; }
 .legend-usr { color: var(--warn); }
 .legend-usr::before { content: "▬ "; }
 
+.playbar { display: flex; align-items: center; gap: 8px; margin: 0 0 18px;
+  flex-wrap: wrap; }
+.playbar button { padding: 6px 12px; font-size: 14px; }
+.playbar button.playing { border-color: var(--warn); color: var(--warn); }
+.playbar button.primary.playing { background: var(--warn); color: #fff; }
+.playbar-hint { color: var(--muted); font-size: 12px; }
+
 .fig-body { position: relative; }
+.playhead { position: absolute; top: -2px; bottom: -2px; left: 46px; right: 0;
+  pointer-events: none; z-index: 6; }
+.playhead i { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
+  background: var(--fg); opacity: .5; border-radius: 1px; }
+
+/* 图 1 · 节奏 */
 .lane { display: flex; align-items: center; }
 .lane .tag { flex: none; width: 46px; text-align: right; padding-right: 10px;
   font-size: 13px; color: var(--muted); }
 .lane.ref .tag { color: var(--accent); }
 .lane.usr .tag { color: var(--warn); }
 .track { position: relative; flex: 1; height: 34px; }
-.blk { position: absolute; top: 0; height: 34px; display: flex;
-  align-items: center; justify-content: center; border-radius: 6px;
-  font-size: 14px; white-space: nowrap; overflow: visible; }
+.blk { position: absolute; top: 0; height: 34px; line-height: 32px;
+  text-align: center; border-radius: 6px; font-size: 13px; padding: 0 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lane.ref .blk { background: rgba(31, 119, 180, .16);
   border: 1px solid rgba(31, 119, 180, .5); color: var(--accent); }
 .lane.usr .blk { background: rgba(214, 39, 40, .14);
@@ -151,27 +165,24 @@ button:disabled { opacity: .5; cursor: default; }
 .ticks span { position: absolute; top: 3px; transform: translateX(-50%);
   font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.fig-body.pitch { margin-left: 4px; }
+/* 图 2 · 音高。词多了就横向滚动——硬塞进一屏，词标会叠成一堆 */
+.pitch-scroll { overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
+.fig-body.pitch .playhead { left: 0; }
+/* 每格一条淡底，把折线和词绑在一起看 */
+.slot-bands { position: absolute; top: 20px; bottom: 20px; left: 0; right: 0;
+  z-index: 0; }
+.slot-bands .band { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.slot-bands .band.odd { background: var(--fg); opacity: .035; }
+.slot-labels, .slot-flags, .quads { position: relative; z-index: 1; }
 .slot-labels, .slot-flags { position: relative; height: 22px; }
-.slot-labels span { position: absolute; transform: translateX(-50%);
-  font-size: 14px; white-space: nowrap; }
-.slot-flags span { position: absolute; transform: translateX(-50%);
-  font-size: 12px; color: var(--warn); white-space: nowrap; }
-.quads { width: 100%; display: block; overflow: visible; }
+.slot-labels span { position: absolute; font-size: 13px; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-flags span { position: absolute; font-size: 12px; color: var(--warn);
+  text-align: center; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.quads { display: block; overflow: visible; }
 .quads .baseline { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
-.quads .ref { fill: none; stroke: var(--accent); stroke-width: 1.7;
-  stroke-dasharray: 5 3; }
 .quads polyline { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.quads .ref { stroke: var(--accent); stroke-width: 1.7; stroke-dasharray: 5 3; }
 .quads .usr { stroke: rgba(214, 39, 40, .55); stroke-width: 4; }
 .quads .usr.flagged { stroke: var(--warn); stroke-width: 5.5; }
-
-.playbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
-  flex-wrap: wrap; }
-.playbar button { padding: 6px 12px; font-size: 14px; }
-.playbar button.playing { border-color: var(--warn); color: var(--warn); }
-.playbar button.primary.playing { background: var(--warn); color: #fff; }
-.playbar-hint { color: var(--muted); font-size: 12px; }
-.playhead { position: absolute; top: -2px; bottom: -2px; left: 46px; right: 0;
-  pointer-events: none; z-index: 6; }
-.playhead i { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
-  background: var(--fg); opacity: .5; border-radius: 1px; }
