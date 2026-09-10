@@ -75,7 +75,6 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-UNIT_PAD_SEC = 0.1
 MAX_ADVICE = 3
 
 
@@ -116,8 +115,8 @@ def _segment_reference(connection, segment_id: int, dest: Path, *,
                 f"片段 {segment_id} 只有 {len(units)} 个练习单元，没有第 {unit} 个"
             )
         words = units[unit - 1]
-        start = max(segment["start_sec"], words[0].start - UNIT_PAD_SEC)
-        end = min(segment["end_sec"], words[-1].end + UNIT_PAD_SEC)
+        start = max(segment["start_sec"], words[0].start - config.UNIT_PAD_SEC)
+        end = min(segment["end_sec"], words[-1].end + config.UNIT_PAD_SEC)
 
     media.cut_segment(Path(source["audio_path"]), dest, start=start, end=end)
     rebased = tuple(

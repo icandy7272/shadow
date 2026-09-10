@@ -100,3 +100,68 @@ button:disabled { opacity: .5; cursor: default; }
   margin: 10px 0; }
 .result .issue b { font-weight: 600; }
 .result .issue span { color: var(--muted); display: block; font-size: 13px; }
+
+.pager { display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; margin: 4px 2px 0; }
+.pager a { color: var(--muted); text-decoration: none; font-size: 14px; }
+.pager a.next { margin-left: auto; color: #fff; background: var(--accent);
+  padding: 10px 18px; border-radius: 8px; font-size: 15px; font-weight: 500; }
+.pager a.next:hover { filter: brightness(1.08); }
+
+/* ---------- 两张对比图 ---------- */
+.figures { margin-top: 18px; }
+.fig { margin: 0 0 22px; }
+.fig figcaption { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+.fig figcaption i { font-style: normal; margin-left: 14px; white-space: nowrap; }
+.legend-ref { color: var(--accent); }
+.legend-ref::before { content: "– – "; letter-spacing: -1px; }
+.legend-usr { color: var(--warn); }
+.legend-usr::before { content: "▬ "; }
+
+.fig-body { position: relative; }
+.lane { display: flex; align-items: center; }
+.lane .tag { flex: none; width: 46px; text-align: right; padding-right: 10px;
+  font-size: 13px; color: var(--muted); }
+.lane:first-child .tag { color: var(--accent); }
+.lane:last-child .tag { color: var(--warn); }
+.track { position: relative; flex: 1; height: 34px; }
+.blk { position: absolute; top: 0; height: 34px; display: flex;
+  align-items: center; justify-content: center; border-radius: 6px;
+  font-size: 14px; white-space: nowrap; overflow: visible; }
+.lane:first-child .blk { background: rgba(31, 119, 180, .16);
+  border: 1px solid rgba(31, 119, 180, .5); color: var(--accent); }
+.lane:last-child .blk { background: rgba(214, 39, 40, .14);
+  border: 1px solid rgba(214, 39, 40, .5); color: var(--warn); }
+.track .span { position: absolute; top: -4px; bottom: -4px;
+  background: rgba(214, 39, 40, .14); border-radius: 4px; }
+.track .span-flag { position: absolute; left: 50%; bottom: 100%;
+  transform: translateX(-50%); white-space: nowrap; font-size: 12px;
+  color: var(--warn); }
+
+.gap { position: relative; height: 34px; margin-left: 46px; }
+.lag-layer { width: 100%; height: 100%; display: block; }
+.lag-layer .lag { stroke: var(--muted); stroke-width: .8; opacity: .35; }
+.lag-layer .lag.marked { stroke: var(--warn); stroke-width: 1.6; opacity: .9; }
+.lag-note { position: absolute; top: 50%; transform: translate(-50%, -50%);
+  background: var(--card); padding: 0 4px; font-size: 12px; color: var(--warn);
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.ticks { position: relative; height: 20px; margin: 6px 0 0 46px;
+  border-top: 1px solid var(--line); }
+.ticks span { position: absolute; top: 3px; transform: translateX(-50%);
+  font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.fig-body.pitch { margin-left: 4px; }
+.slot-labels, .slot-flags { position: relative; height: 22px; }
+.slot-labels span { position: absolute; transform: translateX(-50%);
+  font-size: 14px; white-space: nowrap; }
+.slot-flags span { position: absolute; transform: translateX(-50%);
+  font-size: 12px; color: var(--warn); white-space: nowrap; }
+.quads { width: 100%; display: block; overflow: visible; }
+.quads .baseline { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
+.quads .ref { fill: none; stroke: var(--accent); stroke-width: 1.7;
+  stroke-dasharray: 5 3; }
+.quads .usr { fill: rgba(214, 39, 40, .22); stroke: rgba(214, 39, 40, .5);
+  stroke-width: .8; }
+.quads .usr.flagged { fill: rgba(214, 39, 40, .45); stroke: var(--warn);
+  stroke-width: 1.6; }

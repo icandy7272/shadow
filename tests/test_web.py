@@ -59,6 +59,19 @@ def test_practice_page_hides_the_text_behind_locked_steps(client, tmp_path):
     assert "盲听" in body
 
 
+def test_practice_page_links_to_the_neighbouring_units(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    body = client.get(f"/practice/{segment_id}/1").text
+    # 第一句没有上一句，只该出现下一句
+    assert f'href="/practice/{segment_id}/2"' in body
+    assert f'href="/practice/{segment_id}/0"' not in body
+
+    body = client.get(f"/practice/{segment_id}/2").text
+    assert f'href="/practice/{segment_id}/1"' in body
+    # 只有两句，最后一句不该有下一句
+    assert f'href="/practice/{segment_id}/3"' not in body
+
+
 def test_unknown_unit_is_a_404(client, tmp_path):
     segment_id = _seed(tmp_path)
     assert client.get(f"/practice/{segment_id}/99").status_code == 404
@@ -70,6 +83,26 @@ def test_audio_is_cut_on_demand(client, tmp_path):
     assert response.status_code == 200
     assert response.headers["content-type"] == "audio/wav"
     assert (config.segment_audio_dir() / f"{segment_id}-u2.wav").exists()
+
+
+def test_reference_words_are_rebased_onto_the_cut_audio(client, tmp_path):
+    """词的时间戳是整段素材里的绝对秒数，裁出来的单元音频只有一两秒。
+
+    不平移的话，按绝对秒数去这段音频里取音高会一帧都取不到，
+    图 2 的原声轮廓会整条变平——比对的基准整个失效。
+    """
+    import soundfile as sf
+
+    from shadow.web import app as web
+
+    segment_id = _seed(tmp_path)
+    connection = db.connect()
+    path, words = web._unit_reference(connection, segment_id, 2)
+    connection.close()
+
+    # 单元 2 在素材里从 1.5 秒开始，裁剪时前面留了 0.1 秒余量
+    assert words[0].start == pytest.approx(0.1, abs=0.01)
+    assert words[-1].end < sf.info(path).duration + 0.01
 
 
 def test_rating_is_stored(client, tmp_path):
@@ -201,8 +234,11 @@ def test_takes_endpoint_runs_the_whole_review(client, tmp_path, monkeypatch):
     data = _stream(response)[-1]["result"]
     assert data["count"] == 2
     assert data["accuracy"] == 100
-    assert data["chart"].startswith("/feedback/")
-    assert client.get(data["chart"]).status_code == 200
+    # 反馈是几何数据，不是图片——图片里的字太小
+    assert [b["text"] for b in data["view"]["rhythm"]["ref"]] == [
+        "It", "was", "a", "start"]
+    assert [s["text"] for s in data["view"]["pitch"]] == ["It", "was", "a", "start"]
+    assert data["view"]["pitch"][0]["refFrom"] is not None
 
     connection = db.connect()
     row = db.list_runs(connection, segment_id=segment_id)[0]
@@ -231,12 +267,12 @@ def test_takes_endpoint_streams_progress_before_the_result(client, tmp_path,
     lines = _stream(response)
     progress = lines[:-1]
 
-    # 原声一步、两遍录音两步、出图一步
-    assert [p["done"] for p in progress] == [0, 1, 2, 3]
-    assert {p["total"] for p in progress} == {4}
+    # 原声一步，两遍录音两步
+    assert [p["done"] for p in progress] == [0, 1, 2]
+    assert {p["total"] for p in progress} == {3}
     assert progress[0]["label"] == "转写原声"
     assert progress[1]["label"] == "转写第 1/2 遍"
-    assert progress[-1]["label"] == "出图"
+    assert progress[-1]["label"] == "转写第 2/2 遍"
     assert "result" in lines[-1]
 
 
@@ -284,11 +320,6 @@ def test_takes_rejects_a_silent_recording(client, tmp_path):
     )
     assert response.status_code == 400
     assert "静音" in response.json()["detail"]
-
-
-def test_feedback_route_refuses_paths_outside_its_folder(client, tmp_path):
-    _seed(tmp_path)
-    assert client.get("/feedback/..%2F..%2Fshadow.db").status_code == 404
 
 
 def test_practice_page_has_the_recording_controls(client, tmp_path):

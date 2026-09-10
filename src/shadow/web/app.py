@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 from datetime import datetime
@@ -25,6 +26,7 @@ from ..analysis.diff import accuracy as _accuracy
 from ..drill.gapfill import blanks_of
 from ..drill.units import is_usable, split_into_units
 from .. import review as review_mod
+from .view import feedback_view
 
 log = logging.getLogger(__name__)
 HERE = Path(__file__).parent
@@ -54,18 +56,32 @@ def _unit_words(connection, segment_id: int, unit: int):
     return segment, units[unit - 1]
 
 
-def _unit_audio(connection, segment_id: int, unit: int) -> Path:
-    """按需裁出单元音频并缓存。"""
+def _unit_reference(connection, segment_id: int, unit: int):
+    """按需裁出单元音频并缓存，同时把词的时间戳平移到以裁剪起点为 0。
+
+    库里的时间戳是整段素材里的绝对秒数，裁出来的单元音频只有一两秒。
+    不平移的话，按绝对秒数去这段音频里取音高会一帧都取不到，
+    图 2 的原声轮廓会整条变平，跟着连升降调的判断也一起失效。
+    命令行的 _segment_reference 一直是这么做的，网页这边漏了。
+    """
     segment, words = _unit_words(connection, segment_id, unit)
     source = db.get_source(connection, segment["source_id"])
     if source is None or not source["audio_path"]:
         raise HTTPException(404, "素材音频缺失")
     dest = config.segment_audio_dir() / f"{segment_id}-u{unit}.wav"
-    start = max(segment["start_sec"], words[0].start - 0.1)
-    end = min(segment["end_sec"], words[-1].end + 0.1)
+    start = max(segment["start_sec"], words[0].start - config.UNIT_PAD_SEC)
+    end = min(segment["end_sec"], words[-1].end + config.UNIT_PAD_SEC)
     if not dest.exists():
         media.cut_segment(Path(source["audio_path"]), dest, start=start, end=end)
-    return dest
+    rebased = tuple(
+        replace(word, start=word.start - start, end=word.end - start)
+        for word in words
+    )
+    return dest, rebased
+
+
+def _unit_audio(connection, segment_id: int, unit: int) -> Path:
+    return _unit_reference(connection, segment_id, unit)[0]
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -192,14 +208,6 @@ def save_gapfill(payload: dict = Body(...)):
 MAX_ADVICE = 3
 
 
-@app.get("/feedback/{name}")
-def feedback_image(name: str):
-    path = (config.data_dir() / "feedback" / name).resolve()
-    if path.parent != (config.data_dir() / "feedback").resolve() or not path.exists():
-        raise HTTPException(404, "找不到这张图")
-    return FileResponse(path, media_type="image/png")
-
-
 @app.post("/api/takes")
 async def submit_takes(
     segment: Annotated[int, Form()],
@@ -210,8 +218,7 @@ async def submit_takes(
     """转写加比对要跑十几秒，结果分行流式返回，前端拿它画进度条。"""
     connection = _db()
     try:
-        _, ref_words = _unit_words(connection, segment, unit)
-        ref_path = _unit_audio(connection, segment, unit)
+        ref_path, ref_words = _unit_reference(connection, segment, unit)
     finally:
         connection.close()
 
@@ -250,7 +257,7 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp):
 
     生成器跑在 Starlette 的线程池里，sqlite 连接不能跨线程用，写库时现开一个。
     """
-    total = len(paths) + 2          # 原声一步，每遍一步，出图一步
+    total = len(paths) + 1          # 原声一步，每遍一步
     try:
         steps = review_mod.run(ref_path, ref_words, paths)
         while True:
@@ -267,12 +274,6 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp):
                                    "换个安静点的环境重录。"})
             return
 
-        yield _event({"done": total - 1, "total": total, "label": "出图"})
-        charts = config.data_dir() / "feedback"
-        charts.mkdir(parents=True, exist_ok=True)
-        name = f"{segment}-u{unit}-{stamp}.png"
-        review_mod.chart(result, charts / name, MAX_ADVICE)
-
         connection = _db()
         try:
             run_id = _run_for(connection, segment, unit, run_id, ref_words)
@@ -281,13 +282,13 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp):
         finally:
             connection.close()
 
-        yield _event({"result": _review_payload(result, run_id, name)})
+        yield _event({"result": _review_payload(result, run_id)})
     except Exception as exc:
         log.exception("片段 %s 单元 %s 的比对失败", segment, unit)
         yield _event({"error": f"比对失败：{exc}"})
 
 
-def _review_payload(result, run_id: int, chart_name: str) -> dict:
+def _review_payload(result, run_id: int) -> dict:
     summary = result.summary
     best = result.best
     problems = [
@@ -297,7 +298,7 @@ def _review_payload(result, run_id: int, chart_name: str) -> dict:
     ]
     return {
         "run_id": run_id,
-        "chart": f"/feedback/{chart_name}",
+        "view": feedback_view(result, MAX_ADVICE),
         "count": summary.count,
         "skipped": [{"name": n, "drift": round(d, 1)} for n, d in result.skipped],
         "accuracy": round(summary.accuracy.median * 100),

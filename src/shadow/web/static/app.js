@@ -271,7 +271,7 @@ if (root) {
             `<div class="issue"><b>${i.title}</b>（${i.hits}/${i.total} 次）` +
             `<span>${i.detail}</span><span>${i.action}</span></div>`).join("")
         : "<p class='ok'>没有反复出现的问题。</p>") +
-      (data.good.length ? `<p class="guessed">做对了，保持：${data.good.join(" / ")}</p>` : "") +
-      `<img src="${data.chart}" alt="反馈图">`;
+      (data.good.length ? `<p class="guessed">做对了，保持：${data.good.join(" / ")}</p>` : "");
+    box.append(renderFigures(data.view));
   });
 }

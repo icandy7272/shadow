@@ -64,5 +64,15 @@
     <div class="result" id="rec-result" hidden></div>
   </section>
 
+  <nav class="pager">
+    {% if unit > 1 %}
+    <a href="/practice/{{ segment }}/{{ unit - 1 }}">← 上一句</a>
+    {% else %}<span></span>{% endif %}
+    {% if unit < total_units %}
+    <a class="next" href="/practice/{{ segment }}/{{ unit + 1 }}"
+       >练下一句（{{ unit + 1 }}/{{ total_units }}）→</a>
+    {% endif %}
+  </nav>
+
 </div>
 {% endblock %}
