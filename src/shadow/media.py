@@ -138,3 +138,35 @@ def play(path: Path, *, times: int = 1, gap: float = 0.6) -> int:
         if played < times and gap > 0:
             time.sleep(gap)
     return played
+
+
+CUE_FREQ_HZ = 880.0
+CUE_SECONDS = 0.14
+
+
+def cue_path() -> Path:
+    return config.data_dir() / "cue.wav"
+
+
+def ensure_cue() -> Path:
+    """提示音只生成一次，之后复用。"""
+    path = cue_path()
+    if path.exists():
+        return path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    samples = int(CUE_SECONDS * config.SAMPLE_RATE)
+    t = np.arange(samples) / config.SAMPLE_RATE
+    tone = 0.35 * np.sin(2 * np.pi * CUE_FREQ_HZ * t)
+    fade = max(1, samples // 8)          # 去掉首尾爆音
+    tone[:fade] *= np.linspace(0.0, 1.0, fade)
+    tone[-fade:] *= np.linspace(1.0, 0.0, fade)
+    sf.write(path, tone.astype(np.float32), config.SAMPLE_RATE)
+    return path
+
+
+def beep() -> None:
+    """开录提示音。戴着耳机时看不见终端，必须用声音提示。"""
+    try:
+        play(ensure_cue(), times=1, gap=0.0)
+    except Exception:
+        pass       # 提示音失败不该影响录音

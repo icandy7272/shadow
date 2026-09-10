@@ -360,6 +360,7 @@ def test_record_plays_the_reference_before_every_take(monkeypatch, tmp_path):
     connection.close()
     plays: list[int] = []
     monkeypatch.setattr(cli.media, "play", lambda *a, **k: plays.append(1) or 1)
+    monkeypatch.setattr(cli.media, "beep", lambda: None)   # 提示音不计入试听次数
     monkeypatch.setattr(cli.media, "record",
                         lambda dest, **k: write_tone(dest, seconds=3.0))
     monkeypatch.setattr(cli.media, "list_input_devices", lambda: ())
@@ -390,3 +391,25 @@ def test_small_sample_does_not_claim_the_unit_is_done(monkeypatch, tmp_path, cap
     out = capsys.readouterr().out
     assert "样本太少" in out
     assert "可以换下一个单元" not in out
+
+
+def test_record_signals_before_each_take(monkeypatch, tmp_path, capsys):
+    """戴着耳机看不见终端，开录必须有声音提示。"""
+    connection, segment_id = _seed_segment()
+    connection.close()
+    beeps: list[int] = []
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.media, "beep", lambda: beeps.append(1))
+    monkeypatch.setattr(cli.media, "record",
+                        lambda dest, **k: write_tone(dest, seconds=3.0))
+    monkeypatch.setattr(cli.media, "list_input_devices", lambda: ())
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: "")
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=i * 0.5, end=i * 0.5 + 0.4)
+        for i, t in enumerate(["should", "have", "been", "there"])
+    ))
+    assert cli.main(["record", "--segment", str(segment_id), "--unit", "1",
+                     "--takes", "2", "-o", str(tmp_path / "r.png")]) == 0
+    assert len(beeps) == 2
+    assert "嘀一声" in capsys.readouterr().out

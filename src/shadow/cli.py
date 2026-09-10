@@ -425,7 +425,8 @@ def cmd_record(args: argparse.Namespace) -> int:
         return 1
 
     span = ref_words[-1].end - ref_words[0].start if ref_words else 5.0
-    seconds = args.seconds or min(span * 1.8 + 1.5, 120.0)
+    # 多给一点余量：麦克风有启动延迟，且提示音后到开口有反应时间
+    seconds = args.seconds or min(span * 1.8 + 2.0, 120.0)
 
     devices = media.list_input_devices()
     if devices:
@@ -454,13 +455,16 @@ def cmd_record(args: argparse.Namespace) -> int:
             return 1
         _listen_before_take(ref_path, args.listen)
         dest = config.attempt_audio_dir() / f"{label}-{stamp}-{index}.wav"
+        print("  嘀一声之后开始说 …", end="", flush=True)
+        media.beep()
+        print("\r  录音中，说吧            ", end="", flush=True)
         try:
             media.record(dest, seconds=seconds, device=args.device)
             media.validate_attempt(dest)
         except Exception as exc:
             print(f"  第 {index} 遍不可用：{exc}", file=sys.stderr)
             return 1
-        print(f"  录好了 → {dest.name}")
+        print(f"\r  录好了 → {dest.name}          ")
         paths.append(dest)
 
     print()

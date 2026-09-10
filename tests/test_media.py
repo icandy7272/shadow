@@ -98,3 +98,21 @@ def test_play_reports_when_no_player_exists(monkeypatch, tmp_path):
     monkeypatch.setattr(media.shutil, "which", lambda name: None)
     with pytest.raises(AudioError, match="播放器"):
         media.play(source)
+
+
+def test_cue_is_generated_once_and_reused(monkeypatch, tmp_path):
+    monkeypatch.setenv("SHADOW_DATA_DIR", str(tmp_path))
+    first = media.ensure_cue()
+    assert first.exists()
+    stamp = first.stat().st_mtime_ns
+    assert media.ensure_cue().stat().st_mtime_ns == stamp   # 不重新生成
+    info = sf.info(first)
+    assert 0.05 < info.duration < 0.5
+    assert info.samplerate == 16000
+
+
+def test_beep_never_breaks_recording(monkeypatch, tmp_path):
+    monkeypatch.setenv("SHADOW_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(media, "play", lambda *a, **k: (_ for _ in ()).throw(
+        AudioError("没有播放器")))
+    media.beep()        # 吞掉异常，不抛
