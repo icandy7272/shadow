@@ -18,7 +18,7 @@ from .drill.units import split_into_units
 from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
 from .models import Word
-from .analysis.rhythm import analyse_rhythm
+from .analysis.rhythm import alignment_drift, analyse_rhythm
 from .report.advice import PAUSE_KINDS, build_advice, well_done
 from .report.blocks import Flag, PauseNote, render_feedback
 from .report.takes import TakeMetrics, TakeSummary, summarise
@@ -185,11 +185,19 @@ def _compare(connection, *, ref_path, ref_words, paths, out_path,
     ref_prosody = analyse(ref_path)
     metrics: list[TakeMetrics] = []
     details = []
+    skipped: list[tuple[str, float]] = []
     for path in paths:
         usr_words = transcribe_words(path)
         tokens = diff_words([w.text for w in ref_words], [w.text for w in usr_words])
         rhythm = analyse_rhythm(ref_words, usr_words, matched_pairs(tokens))
         usr_prosody = analyse(path)
+
+        drift = alignment_drift(usr_words, usr_prosody)
+        if drift is not None and drift > config.ALIGNMENT_TOLERANCE_SEC:
+            # 时间戳整体错位，这一遍的每项测量都取自错误的音频位置
+            skipped.append((path.name, drift))
+            continue
+
         advice = build_advice(
             ref_words=ref_words, usr_words=usr_words, tokens=tokens,
             rhythm=rhythm, ref_prosody=ref_prosody, usr_prosody=usr_prosody,
@@ -199,6 +207,15 @@ def _compare(connection, *, ref_path, ref_words, paths, out_path,
             pause_ratio=rhythm.pause_ratio, advice=advice,
         ))
         details.append((path, usr_words, tokens, rhythm, usr_prosody, advice))
+
+    if skipped:
+        for name, drift in skipped:
+            print(f"⚠ 跳过 {name}：转写时间戳偏离实际发声 {drift:.1f} 秒，"
+                  f"该遍的测量不可信。", file=sys.stderr)
+    if not metrics:
+        print("所有录音的时间戳都对不上，无法比对。换个更安静的环境重录试试。",
+              file=sys.stderr)
+        return 1
 
     summary = summarise(metrics)
     _, usr_words, tokens, rhythm, usr_prosody, advice = details[summary.representative]
@@ -556,7 +573,11 @@ def _print_summary(summary: TakeSummary, paths, tokens, out_path) -> None:
                   "说明还没形成稳定的模式——先把同一句读稳，再谈往原声靠。")
 
     if not summary.issues:
-        print("\n没有反复出现的问题，可以换下一个单元了。\n")
+        if summary.count < 3:
+            print(f"\n这 {summary.count} 遍里没有共同的问题——但样本太少，"
+                  f"说明不了稳定性。再录几遍才作数。\n")
+        else:
+            print("\n没有反复出现的问题，可以换下一个单元了。\n")
     else:
         shown = summary.issues[:MAX_ADVICE]
         head = (f"\n反复出现的问题，按重要性排（先看每次都犯的）：\n"

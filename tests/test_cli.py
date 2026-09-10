@@ -373,3 +373,20 @@ def test_record_plays_the_reference_before_every_take(monkeypatch, tmp_path):
                      "--takes", "3", "--listen", "2",
                      "-o", str(tmp_path / "r.png")]) == 0
     assert len(plays) == 6      # 3 遍 x 每遍听 2 次
+
+
+def test_small_sample_does_not_claim_the_unit_is_done(monkeypatch, tmp_path, capsys):
+    reference = write_tone(tmp_path / "ref.wav")
+    takes = [write_tone(tmp_path / f"t{i}.wav") for i in range(2)]
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=i * 0.5, end=i * 0.5 + 0.4)
+        for i, t in enumerate(["should", "have", "been", "there"])
+    ))
+    argv = ["compare", "--ref", str(reference)]
+    for take in takes:
+        argv += ["--user", str(take)]
+    argv += ["-o", str(tmp_path / "x.png")]
+    assert cli.main(argv) == 0
+    out = capsys.readouterr().out
+    assert "样本太少" in out
+    assert "可以换下一个单元" not in out

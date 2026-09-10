@@ -123,3 +123,28 @@ def analyse_rhythm(
         gaps=tuple(gaps),
         lags=tuple(sorted(lags)),
     )
+
+
+def speech_region(prosody, *, floor_db: float = None) -> tuple[float, float] | None:
+    """从波形能量找出实际发声的起止，与转写时间戳无关。"""
+    import numpy as np
+
+    from .. import config
+
+    threshold = config.SPEECH_FLOOR_DB if floor_db is None else floor_db
+    loud = np.where(prosody.energy_db > threshold)[0]
+    if loud.size == 0:
+        return None
+    return float(prosody.times[loud[0]]), float(prosody.times[loud[-1]])
+
+
+def alignment_drift(words, prosody) -> float | None:
+    """转写首词起点与波形首个有声帧的偏差。None 表示无法判断。
+
+    Whisper 的词级时间戳偶尔整体错位，此时每项测量都取自错误的音频位置，
+    而结果看起来完全正常——只能靠这个偏差查出来。
+    """
+    region = speech_region(prosody)
+    if region is None or not words:
+        return None
+    return abs(words[0].start - region[0])

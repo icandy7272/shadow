@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import math
 import statistics
 from dataclasses import dataclass
 from typing import Sequence
@@ -80,7 +81,9 @@ def summarise(takes: Sequence[TakeMetrics], *, min_share: float = 0.5) -> TakeSu
             seen.add(key)
             grouped.setdefault(key, []).append(item)
 
-    threshold = max(1, round(total * min_share))
+    # 两遍时「半数以上」等于「出现过一次」，没有任何过滤作用。
+    # 只有一遍时无从判断一致性，只能全报；两遍及以上至少要犯两次才算数。
+    threshold = 1 if total == 1 else max(2, math.ceil(total * min_share))
     issues = [
         ConsistentIssue(
             hits=len(items),

@@ -84,3 +84,50 @@ def test_slightly_longer_pause_is_not_flagged():
 def test_pause_gap_carries_user_index():
     usr = make([("a", 0.0, 0.4), ("b", 0.9, 0.4), ("c", 1.3, 0.4)])
     assert analyse_rhythm(REF, usr, ALL).gaps[0].usr_index == 0
+
+
+def _prosody(duration, loud_from, loud_to):
+    import numpy as np
+
+    from shadow.analysis.prosody import Prosody
+
+    times = np.arange(0.0, duration, 0.01)
+    energy = np.full(times.shape, -40.0)
+    energy[(times >= loud_from) & (times <= loud_to)] = -5.0
+    return Prosody(times=times, f0_hz=np.full(times.shape, 100.0),
+                   semitones=np.zeros(times.shape), energy_db=energy,
+                   duration=duration)
+
+
+def test_speech_region_ignores_leading_and_trailing_silence():
+    from shadow.analysis.rhythm import speech_region
+
+    assert speech_region(_prosody(4.0, 0.5, 3.0)) == pytest.approx((0.5, 3.0), abs=0.02)
+
+
+def test_speech_region_is_none_when_everything_is_quiet():
+    from shadow.analysis.rhythm import speech_region
+
+    assert speech_region(_prosody(2.0, 5.0, 5.0)) is None
+
+
+def test_alignment_drift_catches_shifted_timestamps():
+    """实测：0.17s 就开口，Whisper 却把整句定位到 3.64s 之后。"""
+    from shadow.analysis.rhythm import alignment_drift
+
+    words = make([("a", 3.64, 0.3), ("b", 4.0, 0.3)])
+    assert alignment_drift(words, _prosody(6.0, 0.17, 3.0)) == pytest.approx(3.47, abs=0.05)
+
+
+def test_alignment_drift_is_small_when_timestamps_are_sane():
+    from shadow.analysis.rhythm import alignment_drift
+
+    words = make([("a", 0.20, 0.3), ("b", 0.6, 0.3)])
+    assert alignment_drift(words, _prosody(4.0, 0.17, 3.0)) < 0.1
+
+
+def test_alignment_drift_is_none_without_audio_or_words():
+    from shadow.analysis.rhythm import alignment_drift
+
+    assert alignment_drift((), _prosody(2.0, 0.1, 1.0)) is None
+    assert alignment_drift(make([("a", 0.0, 0.3)]), _prosody(2.0, 5.0, 5.0)) is None

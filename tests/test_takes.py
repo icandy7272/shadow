@@ -76,3 +76,27 @@ def test_representative_take_is_closest_to_median_speed():
 def test_pause_ratio_absent_when_no_take_has_one():
     s = summarise([take(pause=None), take(pause=None)])
     assert s.pause_ratio is None
+
+
+def test_two_takes_require_both_to_agree():
+    # 两遍时「半数以上」等于「出现过一次」，等于没过滤
+    s = summarise([take(items=[advice("stretched", 0, 2.0)]), take()])
+    assert s.issues == ()
+    s = summarise([take(items=[advice("stretched", 0, 2.0)]),
+                   take(items=[advice("stretched", 0, 1.8)])])
+    assert len(s.issues) == 1
+
+
+def test_single_take_reports_everything_it_saw():
+    s = summarise([take(items=[advice("stretched", 0, 2.0)])])
+    assert len(s.issues) == 1
+    assert s.issues[0].hits == 1
+
+
+def test_five_takes_need_a_real_majority():
+    items = [advice("stretched", 0, 1.5)]
+    s = summarise([take(items=items), take(items=items), take(), take(), take()])
+    assert s.issues == ()          # 2/5 不算反复出现
+    s = summarise([take(items=items), take(items=items), take(items=items),
+                   take(), take()])
+    assert len(s.issues) == 1      # 3/5 算

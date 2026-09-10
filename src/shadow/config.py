@@ -53,6 +53,13 @@ PITCH_CEILING_HZ = 500.0
 PITCH_ADAPT_MIN_VOICED = 5
 PITCH_ADAPT_SPAN = 2.0
 
+# --- 转写对齐校验 ---
+# Whisper 的词级时间戳偶尔整体错位（实测某次录音 0.17s 就开口，
+# 时间戳却把整句定位到 3.64s 之后）。错位的 take 每一项测量都取自错误的
+# 音频位置，且完全无声——必须查出来剔除，而不是算进中位数。
+ALIGNMENT_TOLERANCE_SEC = 1.0
+SPEECH_FLOOR_DB = -20.0
+
 # --- 录音校验 ---
 MIN_ATTEMPT_SEC = 1.0
 MIN_ATTEMPT_RMS_DB = -50.0
