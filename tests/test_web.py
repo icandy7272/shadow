@@ -232,3 +232,43 @@ def test_practice_page_has_the_recording_controls(client, tmp_path):
     assert 'id="start-record"' in body
     assert 'id="stop-take"' in body
     assert 'id="prelisten"' in body
+
+
+def _seed_without_blanks(tmp_path):
+    import numpy as np
+    import soundfile as sf
+
+    connection = db.connect()
+    db.init_db(connection)
+    source = config.source_audio_dir() / "2.wav"
+    t = np.arange(16000 * 4) / 16000
+    sf.write(source, (0.4 * np.sin(2 * np.pi * 200 * t)).astype("float32"), 16000)
+    source_id = db.create_source(connection, url="https://x/z", title="Z",
+                                 duration_sec=4.0)
+    db.finish_source(connection, source_id, audio_path=str(source))
+    words = tuple(
+        Word(text=t_, start=a, end=a + 0.4)
+        for t_, a in (("Thank", 0.0), ("you", 0.5), ("all.", 1.0))
+    )
+    db.insert_segments(connection, source_id,
+                       (Segment(idx=0, start=0.0, end=1.4, words=words),))
+    segment_id = db.list_segments(connection, source_id)[0]["id"]
+    connection.close()
+    return segment_id
+
+
+def test_step_two_is_omitted_when_there_is_nothing_to_fill(client, tmp_path):
+    """没有挖空位时那一步无事可做，不该还要点一次「对答案」才解锁。"""
+    segment_id = _seed_without_blanks(tmp_path)
+    body = client.get(f"/practice/{segment_id}/1").text
+    assert 'id="step-drill"' not in body
+    assert "对答案" not in body
+    assert 'id="step-record"' in body
+    assert '<span class="n">2</span> 跟读' in body      # 跟读顺位变成第 2 步
+
+
+def test_step_two_is_present_when_there_are_blanks(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    body = client.get(f"/practice/{segment_id}/2").text
+    assert 'id="step-drill"' in body
+    assert '<span class="n">3</span> 跟读' in body

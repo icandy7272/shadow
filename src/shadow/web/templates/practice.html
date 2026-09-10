@@ -22,6 +22,7 @@
     <p class="saved" hidden></p>
   </section>
 
+  {% if blanks %}
   <section class="step locked" id="step-drill">
     <h2><span class="n">2</span> 精听填空</h2>
     <p class="hint">听出来的直接填；靠上下文猜的，勾上「猜的」。
@@ -43,13 +44,13 @@
         {{ ' ' }}
       {%- endfor -%}
     </p>
-    {% if not blanks %}<p class="hint">这一句没有挖空位，直接进下一步。</p>{% endif %}
     <button class="primary" id="submit-drill">对答案</button>
     <div class="result" hidden></div>
   </section>
+  {% endif %}
 
   <section class="step locked" id="step-record">
-    <h2><span class="n">3</span> 跟读</h2>
+    <h2><span class="n">{{ 3 if blanks else 2 }}</span> 跟读</h2>
     <p class="hint">每遍录音前会自动放几次原声——听和说之间不能有间隔。
       听完嘀一声就开始说，说完点「说完了」。</p>
     <div class="row">

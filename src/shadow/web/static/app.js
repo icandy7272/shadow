@@ -80,13 +80,16 @@ if (root) {
       const note = listenStep.querySelector(".saved");
       note.hidden = false;
       note.textContent = response.ok ? "记下了。" : "保存失败。";
-      document.getElementById("step-drill").classList.remove("locked");
+      // 没有挖空位时第二步整个不存在，直接解锁跟读，不让人多点一次
+      const next = document.getElementById("step-drill")
+                || document.getElementById("step-record");
+      next.classList.remove("locked");
     });
   });
 
-  // 第二步：填空
+  // 第二步：填空（这一句没有挖空位时整段不存在）
   const drillStep = document.getElementById("step-drill");
-  document.getElementById("submit-drill").addEventListener("click", async () => {
+  document.getElementById("submit-drill")?.addEventListener("click", async () => {
     const answers = [...drillStep.querySelectorAll(".slot")].map((slot) => ({
       index: Number(slot.querySelector("input[type=text]").dataset.index),
       guess: slot.querySelector("input[type=text]").value.trim(),
