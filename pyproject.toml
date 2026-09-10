@@ -10,13 +10,17 @@ dependencies = [
     "soundfile>=0.12",
     "matplotlib>=3.8",
     "cmudict>=1.0",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
 ]
 
 [project.scripts]
 shadow = "shadow.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "httpx>=0.27"]
 
 [build-system]
 requires = ["hatchling"]

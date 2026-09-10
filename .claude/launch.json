@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "shadow-web",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "shadow", "serve", "--port", "8765"],
+      "port": 8765
+    }
+  ]
+}

@@ -754,6 +754,16 @@ def _local_time(stamp: str) -> str:
         return stamp[:16]
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    _open_db()      # 确保库和目录就绪
+    print(f"打开 http://{args.host}:{args.port}")
+    uvicorn.run("shadow.web.app:app", host=args.host, port=args.port,
+                reload=args.reload, log_level="warning")
+    return 0
+
+
 def cmd_progress(args: argparse.Namespace) -> int:
     connection = _open_db()
     runs = db.list_runs(connection, segment_id=args.segment, unit_index=args.unit)
@@ -983,6 +993,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_play.add_argument("--max-sec", type=float,
                           help="练习单元的最长秒数，超过会在最大停顿处再断（默认 6）")
     p_play.set_defaults(func=cmd_play)
+
+    p_serve = sub.add_parser("serve", help="启动网页版")
+    p_serve.add_argument("--host", default="127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8000)
+    p_serve.add_argument("--reload", action="store_true", help="改代码自动重载")
+    p_serve.set_defaults(func=cmd_serve)
 
     p_progress = sub.add_parser("progress", help="查看跨会话的练习趋势")
     p_progress.add_argument("-s", "--segment", type=int)

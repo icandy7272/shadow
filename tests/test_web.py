@@ -1,0 +1,117 @@
+import pytest
+from fastapi.testclient import TestClient
+
+from shadow import config, db
+from shadow.models import Segment, Word
+
+
+@pytest.fixture()
+def client(monkeypatch, tmp_path):
+    monkeypatch.setenv("SHADOW_DATA_DIR", str(tmp_path))
+    from shadow.web.app import app
+
+    return TestClient(app)
+
+
+def _seed(tmp_path):
+    """一个片段，两句话，第二句有两个挖空位。"""
+    import numpy as np
+    import soundfile as sf
+
+    connection = db.connect()
+    db.init_db(connection)
+    source = config.source_audio_dir() / "1.wav"
+    t = np.arange(16000 * 8) / 16000
+    sf.write(source, (0.4 * np.sin(2 * np.pi * 200 * t)).astype("float32"), 16000)
+    source_id = db.create_source(connection, url="https://x/y", title="T",
+                                 duration_sec=8.0)
+    db.finish_source(connection, source_id, audio_path=str(source))
+    spec = [("Hello", 0.0, 0.4), ("there.", 0.5, 0.4),
+            ("It", 1.5, 0.3), ("was", 1.9, 0.1),
+            ("a", 2.0, 0.1), ("start.", 2.2, 0.4)]
+    words = tuple(
+        Word(text=t_, start=a, end=a + d, is_blank=t_ in {"was", "a"})
+        for t_, a, d in spec
+    )
+    db.insert_segments(connection, source_id,
+                       (Segment(idx=0, start=0.0, end=2.6, words=words),))
+    segment_id = db.list_segments(connection, source_id)[0]["id"]
+    connection.close()
+    return segment_id
+
+
+def test_index_lists_units(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    body = client.get("/").text
+    assert "Hello there." in body
+    assert f"/practice/{segment_id}/2" in body
+
+
+def test_index_is_helpful_when_empty(client):
+    assert "还没有导入素材" in client.get("/").text
+
+
+def test_practice_page_hides_the_text_behind_locked_steps(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    body = client.get(f"/practice/{segment_id}/2").text
+    # 第二、三步默认锁住；样式把锁住的内容整个折叠，避免盲听前泄题
+    assert body.count('class="step locked"') == 2
+    assert "盲听" in body
+
+
+def test_unknown_unit_is_a_404(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    assert client.get(f"/practice/{segment_id}/99").status_code == 404
+
+
+def test_audio_is_cut_on_demand(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    response = client.get(f"/audio/{segment_id}/2")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "audio/wav"
+    assert (config.segment_audio_dir() / f"{segment_id}-u2.wav").exists()
+
+
+def test_rating_is_stored(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    response = client.post("/api/rating",
+                           data={"segment": segment_id, "unit": 2, "rating": 4})
+    assert response.status_code == 200
+    connection = db.connect()
+    assert db.list_runs(connection, segment_id=segment_id)[0]["blind_rating"] == 4
+    connection.close()
+
+
+def test_rating_rejects_out_of_range(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    assert client.post("/api/rating",
+                       data={"segment": segment_id, "unit": 2, "rating": 9}
+                       ).status_code == 400
+
+
+def test_gapfill_separates_heard_from_guessed(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    payload = {
+        "segment": segment_id, "unit": 2, "replays": 2,
+        "answers": [
+            {"index": 1, "guess": "was", "guessed": False},
+            {"index": 2, "guess": "a", "guessed": True},
+        ],
+    }
+    data = client.post("/api/gapfill", json=payload).json()
+    assert (data["correct"], data["total"], data["heard"]) == (2, 2, 1)
+    assert data["items"][1]["heard"] is False
+
+    connection = db.connect()
+    row = db.list_runs(connection, segment_id=segment_id)[0]
+    assert (row["gapfill_correct"], row["gapfill_heard"], row["gapfill_replays"]) == (2, 1, 2)
+    connection.close()
+
+
+def test_gapfill_reports_the_swallowed_duration_on_a_miss(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    payload = {"segment": segment_id, "unit": 2, "replays": 0,
+               "answers": [{"index": 1, "guess": "were", "guessed": False}]}
+    data = client.post("/api/gapfill", json=payload).json()
+    assert data["items"][0]["correct"] is False
+    assert data["items"][0]["ms"] == 100

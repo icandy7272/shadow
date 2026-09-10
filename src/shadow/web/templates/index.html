@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>练习单元</h1>
+{% if not catalogue %}
+  <p class="empty">还没有导入素材。先在命令行跑
+    <code>uv run shadow import &lt;url&gt;</code></p>
+{% else %}
+<table class="units">
+  <thead><tr><th>片段</th><th>句子</th><th>时长</th><th>空</th><th>练过</th></tr></thead>
+  <tbody>
+  {% for item in catalogue %}
+    <tr class="{{ 'done' if item.runs else '' }}">
+      <td class="num">{{ item.segment }}·{{ item.unit }}</td>
+      <td><a href="/practice/{{ item.segment }}/{{ item.unit }}">{{ item.text }}</a></td>
+      <td class="num">{{ '%.1f'|format(item.seconds) }}s</td>
+      <td class="num">{{ item.blanks or '' }}</td>
+      <td class="num">{{ item.runs or '' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

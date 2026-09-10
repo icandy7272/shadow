@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block subtitle %}<span class="crumb">片段 {{ segment }} · 单元 {{ unit }}/{{ total_units }}</span>{% endblock %}
+{% block content %}
+<div id="practice" data-segment="{{ segment }}" data-unit="{{ unit }}">
+
+  <section class="step" id="step-listen">
+    <h2><span class="n">1</span> 盲听</h2>
+    <p class="hint">不看文字，就听。听完给自己打个分。</p>
+    <div class="row">
+      <button class="play" data-src="/audio/{{ segment }}/{{ unit }}">▶ 播放（{{ seconds }}s）</button>
+      <span class="plays"></span>
+    </div>
+    <div class="rating">
+      <button data-rating="1">1 几乎没听懂</button>
+      <button data-rating="2">2 抓到几个词</button>
+      <button data-rating="3">3 大意懂了</button>
+      <button data-rating="4">4 基本都懂</button>
+      <button data-rating="5">5 每个词都清楚</button>
+    </div>
+    <p class="saved" hidden></p>
+  </section>
+
+  <section class="step locked" id="step-drill">
+    <h2><span class="n">2</span> 精听填空</h2>
+    <p class="hint">听出来的直接填；靠上下文猜的，勾上「猜的」。
+      功能词太好猜了，不分开就测不出听力。</p>
+    <div class="row">
+      <button class="play" data-src="/audio/{{ segment }}/{{ unit }}">▶ 重听</button>
+      <span class="plays"></span>
+    </div>
+    <p class="sentence">
+      {%- for w in words -%}
+        {%- if w.is_blank -%}
+          <span class="slot"><input type="text" size="6" autocomplete="off"
+            data-index="{{ loop.index0 }}"><label><input type="checkbox"> 猜的</label></span>
+        {%- else -%}
+          <span class="w">{{ w.text }}</span>
+        {%- endif -%}
+        {{ ' ' }}
+      {%- endfor -%}
+    </p>
+    {% if not blanks %}<p class="hint">这一句没有挖空位，直接进下一步。</p>{% endif %}
+    <button class="primary" id="submit-drill">对答案</button>
+    <div class="result" hidden></div>
+  </section>
+
+  <section class="step locked" id="step-record">
+    <h2><span class="n">3</span> 跟读</h2>
+    <p class="hint">每遍录音前会自动放几次原声——听和说之间不能有间隔。</p>
+    <p class="todo">这一步还没做完，先用命令行：
+      <code>uv run shadow record --segment {{ segment }} --unit {{ unit }} --listen 4</code></p>
+  </section>
+
+</div>
+{% endblock %}
