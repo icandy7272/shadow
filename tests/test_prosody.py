@@ -293,3 +293,28 @@ def test_word_pitch_is_none_when_there_is_barely_any_voicing(tmp_path):
     prosody = analyse(_write_sweep(tmp_path / "quiet.wav",
                                    [(200, 200, 0.05), (0, 0, 0.9)]))
     assert word_pitch(prosody, 0.2, 0.9) is None
+
+
+def test_word_pitch_keeps_both_halves_across_a_stop_consonant(tmp_path):
+    """dropped 中间的 /p/ 本来就没有浊音。只认最长的一段会把前半个词丢掉，
+    升调因此被判成没升——真出过这个错。"""
+    from shadow.analysis.prosody import analyse, word_pitch
+
+    prosody = analyse(_write_sweep(
+        tmp_path / "stop.wav",
+        [(110, 150, 0.4), (0, 0, 0.12), (170, 230, 0.5)],
+    ))
+    move = word_pitch(prosody, 0.02, 1.0).move
+
+    assert move is not None
+    assert move > 4          # 从 110Hz 一路升到 230Hz，一个八度多一点
+
+
+def test_word_pitch_still_ignores_a_detached_blip(tmp_path):
+    from shadow.analysis.prosody import analyse, word_pitch
+
+    prosody = analyse(_write_sweep(
+        tmp_path / "blip2.wav",
+        [(220, 110, 0.8), (0, 0, 0.15), (300, 300, 0.1)],
+    ))
+    assert word_pitch(prosody, 0.05, 1.05).move < -5

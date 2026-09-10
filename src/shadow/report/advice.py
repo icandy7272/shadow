@@ -17,6 +17,8 @@ from ..models import Word
 PAUSE_KINDS = frozenset({"missed_pause", "long_pause", "extra_pause"})
 
 STRETCH_RATIO = 1.4
+STRETCH_MIN_SEC = 0.12   # 拖长得少于这么多秒就别提：转写的词边界本身就有
+                         # 几十毫秒误差，说了也不可操作
 PITCH_GAP_ST = 3.0
 SLOPE_GAP_ST = 2.5
 STRONG_SLOPE_ST = 3.0
@@ -109,13 +111,22 @@ def build_advice(
                 ))
 
     ratio = rhythm.speech_ratio
+    # 隔壁词没对上，说明那条词边界靠不住——连读时 “out of” 的界线本来就是估的，
+    # 机器听错一个词，相邻那个词的时长跟着一起不可信。
+    matched_refs = {t.ref_index for t in tokens
+                    if t.kind == KIND_EQUAL and t.usr_index is not None}
+    solid = {i for i in matched_refs
+             if (i - 1 in matched_refs or i == 0)
+             and (i + 1 in matched_refs or i == len(ref_words) - 1)}
     for token in tokens:
         if token.kind != KIND_EQUAL or token.usr_index is None:
             continue
         ref, usr = ref_words[token.ref_index], usr_words[token.usr_index]
 
         stretch = _stretch(ref, usr, ratio)
-        if stretch > STRETCH_RATIO:
+        excess = usr.duration - ref.duration * ratio
+        if (stretch > STRETCH_RATIO and excess >= STRETCH_MIN_SEC
+                and token.ref_index in solid):
             found.append(Advice(
                 kind="stretched",
                 flag="拖长了",

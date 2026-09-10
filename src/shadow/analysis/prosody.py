@@ -56,21 +56,30 @@ def word_trace(prosody: "Prosody", start: float, end: float, *,
     return tuple(out)
 
 
-def _longest_voiced_run(trace) -> list[float]:
-    """词内最长的一段连续浊音。
+def _voiced_body(trace) -> list[float]:
+    """词内的浊音点，去掉两端可能蹭进来的一小截。
 
-    词边界是估出来的，末尾常蹭到下一个词的开头——那一小段会把判定整个带偏，
-    只认最长的连续段就自然甩掉它。
+    词边界是估出来的，末尾常蹭到下一个词的开头，那一小段能把判定整个带偏。
+    但不能只留最长的一段：dropped 中间的 /p/ 本来就没有浊音，那样会把前半个
+    词整个丢掉，升调被判成没升。所以只修剪两端，中间的断口照缝。
     """
-    best: list[float] = []
+    runs: list[list[float]] = []
     run: list[float] = []
     for value in trace:
         if value is None:
-            best = run if len(run) > len(best) else best
+            if run:
+                runs.append(run)
             run = []
             continue
         run.append(value)
-    return run if len(run) > len(best) else best
+    if run:
+        runs.append(run)
+
+    if len(runs) > 1 and len(runs[0]) <= config.WORD_EDGE_RUN_MAX:
+        runs = runs[1:]
+    if len(runs) > 1 and len(runs[-1]) <= config.WORD_EDGE_RUN_MAX:
+        runs = runs[:-1]
+    return [value for one in runs for value in one]
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +98,7 @@ def word_pitch(prosody: "Prosody", start: float, end: float) -> "WordPitch | Non
     真出过把降调判成升调的事。宁可不判，也别给出与听感相反的结论。
     句尾另有 terminal_fall，不靠这个。
     """
-    run = _longest_voiced_run(word_trace(prosody, start, end))
+    run = _voiced_body(word_trace(prosody, start, end))
     if len(run) < config.WORD_MOVE_MIN_POINTS:
         return None
     third = max(1, len(run) // 3)

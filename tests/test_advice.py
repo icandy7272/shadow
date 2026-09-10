@@ -162,3 +162,37 @@ def test_pause_advice_is_not_merged_with_the_word_own_issue():
     today = {a.kind for a in advice if a.ref_index == 0}
     assert "missed_pause" in today
     assert today & {"flat_rise", "pitch_off", "stretched"}
+
+
+def test_a_tiny_word_is_not_flagged_for_a_tiny_overrun():
+    """原声 60 毫秒的词，你说了 170 毫秒——比例是 2.8 倍，绝对值只差 110 毫秒。
+    转写的词边界本来就有几十毫秒的误差，这种「问题」不可操作，只会稀释真问题。"""
+    usr = make([("today", 0.0, 0.4), ("i", 0.9, 0.17), ("want", 1.3, 0.4),
+                ("it", 1.7, 0.4)])
+    ref = make([("today", 0.0, 0.4), ("i", 0.9, 0.06), ("want", 1.3, 0.4),
+                ("it", 1.7, 0.4)])
+    tokens = diff_words([w.text for w in ref], [w.text for w in usr])
+    pairs = tuple((x.ref_index, x.usr_index) for x in tokens if x.kind == "equal")
+    advice = build_advice(
+        ref_words=ref, usr_words=usr, tokens=tokens,
+        rhythm=analyse_rhythm(ref, usr, pairs),
+        ref_prosody=prosody_from(FLAT, 2.2), usr_prosody=prosody_from(FLAT, 2.2),
+    )
+    assert not [a for a in advice if a.kind == "stretched" and "i" in a.title]
+
+
+def test_no_stretch_verdict_next_to_a_word_the_machine_missed():
+    """隔壁词没对上，说明那条词边界靠不住，这个词的时长也就没法比。
+    连读时 "out of" 的界线本来就是估的。"""
+    ref = make([("today", 0.0, 0.4), ("i", 0.9, 0.4), ("want", 1.3, 0.16),
+                ("it", 1.7, 0.4)])
+    usr = make([("today", 0.0, 0.4), ("i", 0.9, 0.4), ("want", 1.3, 0.5),
+                ("odd", 1.9, 0.4)])
+    tokens = diff_words([w.text for w in ref], [w.text for w in usr])
+    pairs = tuple((x.ref_index, x.usr_index) for x in tokens if x.kind == "equal")
+    advice = build_advice(
+        ref_words=ref, usr_words=usr, tokens=tokens,
+        rhythm=analyse_rhythm(ref, usr, pairs),
+        ref_prosody=prosody_from(FLAT, 2.4), usr_prosody=prosody_from(FLAT, 2.4),
+    )
+    assert not [a for a in advice if a.kind == "stretched" and "want" in a.title]

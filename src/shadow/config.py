@@ -59,6 +59,7 @@ PITCH_ADAPT_SPAN = 2.0
 # 时间戳却把整句定位到 3.64s 之后）。错位的 take 每一项测量都取自错误的
 # 音频位置，且完全无声——必须查出来剔除，而不是算进中位数。
 ALIGNMENT_TOLERANCE_SEC = 1.0
+WORD_EDGE_RUN_MAX = 2      # 词两端这么短的一小截浊音，当作蹭进来的邻词
 WORD_MOVE_MIN_POINTS = 5   # 少于这么多段就别谈「词内怎么走的」
 WORD_MOVE_ARCH_ST = 2.0    # 中间比两端高/低过这么多，就当形状不单调
 WORD_TRACE_POINTS = 14   # 一个词的音高画成几段，够看出先扬后抑
