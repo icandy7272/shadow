@@ -46,7 +46,7 @@ class Take:
 class Review:
     summary: TakeSummary
     takes: tuple[Take, ...]
-    skipped: tuple[tuple[str, float], ...]
+    skipped: tuple[tuple[int, str, float], ...]   # (第几遍, 文件名, 晚了多少秒)
     shaky: frozenset[int]
     ref_words: tuple[Word, ...]
     ref_prosody: object
@@ -85,14 +85,14 @@ def run(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
 
     takes: list[Take] = []
     metrics: list[TakeMetrics] = []
-    skipped: list[tuple[str, float]] = []
+    skipped: list[tuple[int, str, float]] = []
     for index, path in enumerate(paths, 1):
         yield Step(stage="take", done=index, total=total, index=index)
         words = transcribe(path)
         prosody = analyse(path)
         drift = alignment_drift(words, prosody)
         if drift is not None and drift > ALIGNMENT_TOLERANCE_SEC:
-            skipped.append((path.name, drift))
+            skipped.append((index, path.name, drift))
             continue
         # 对齐检查过了才挪，先挪的话那道防线就永远查不出错位
         words = snap_first_word(words, prosody)

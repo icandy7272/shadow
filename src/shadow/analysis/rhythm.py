@@ -162,12 +162,17 @@ def snap_first_word(words, prosody, *, tolerance: float = 0.05):
 
 
 def alignment_drift(words, prosody) -> float | None:
-    """转写首词起点与波形首个有声帧的偏差。None 表示无法判断。
+    """转写比实际发声晚了多少。None 表示无法判断。
 
     Whisper 的词级时间戳偶尔整体错位，此时每项测量都取自错误的音频位置，
     而结果看起来完全正常——只能靠这个偏差查出来。
+
+    只看「晚」的一侧。录音开头空一两秒是常事：等提示音、深吸一口气，
+    而 Whisper 惯于把首词起点铺到 0，两者之差看着很大，实际什么问题都没有，
+    snap_first_word 会把起点对回来。为此丢掉一整遍录音，是这个判据最常见的
+    误伤。真正危险的是转写晚于发声——那说明开头有词没进转写。
     """
     region = speech_region(prosody)
     if region is None or not words:
         return None
-    return abs(words[0].start - region[0])
+    return max(0.0, words[0].start - region[0])

@@ -194,3 +194,29 @@ def test_snapping_never_swallows_the_whole_word(tmp_path):
 
     # 发声点已经越过首词的结尾，挪过去等于把这个词抹掉，那就别挪
     assert snap_first_word(words, prosody) == words
+
+
+def test_leading_silence_is_not_treated_as_drift(tmp_path):
+    """等提示音、深吸一口气，开头空一两秒很正常。首词起点会被 snap 对回来，
+    不该因此把整遍录音丢掉。"""
+    from shadow.analysis.prosody import analyse
+    from shadow.analysis.rhythm import alignment_drift
+    from shadow.models import Word
+
+    prosody = analyse(_tone_after(tmp_path / "late.wav", 1.4))
+    words = (Word(text="a", start=0.0, end=1.8), Word(text="b", start=1.8, end=2.4))
+
+    assert alignment_drift(words, prosody) == pytest.approx(0.0, abs=0.01)
+
+
+def test_a_transcript_that_starts_after_the_speech_is_still_drift(tmp_path):
+    """转写晚于发声：开头有词没进转写，或整条时间线整体后移。
+    这种每项测量都会取自错误的音频位置，而结果看起来完全正常。"""
+    from shadow.analysis.prosody import analyse
+    from shadow.analysis.rhythm import alignment_drift
+    from shadow.models import Word
+
+    prosody = analyse(_tone_after(tmp_path / "early.wav", 0.05, tone_sec=1.5))
+    words = (Word(text="a", start=1.2, end=1.5),)
+
+    assert alignment_drift(words, prosody) > 1.0

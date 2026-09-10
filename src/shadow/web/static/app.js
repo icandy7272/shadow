@@ -292,7 +292,7 @@ if (root) {
       data.rejected.map((r) =>
         `<p class="bad">第 ${r.index} 遍没收进来：${r.reason}</p>`).join("") +
       data.skipped.map((s) =>
-        `<p class="bad">跳过 ${s.name}：时间戳偏离 ${s.drift} 秒，该遍不可信</p>`).join("") +
+        `<p class="bad">跳过第 ${s.index} 遍：开头有 ${s.drift} 秒的话没进转写，比不了</p>`).join("") +
       (data.problems.length
         ? "<p>机器没听对的词：" + data.problems.map((p) =>
             p.kind === "missing" ? `漏 ${p.ref}`

@@ -322,7 +322,8 @@ def _review_payload(result, run_id: int, *, audio: dict, rejected=()) -> dict:
         "run_id": run_id,
         "view": feedback_view(result, MAX_ADVICE, audio=audio),
         "count": summary.count,
-        "skipped": [{"name": n, "drift": round(d, 1)} for n, d in result.skipped],
+        "skipped": [{"index": i, "drift": round(d, 1)}
+                    for i, _n, d in result.skipped],
         "rejected": list(rejected),
         "accuracy": round(summary.accuracy.median * 100),
         "speech": round(summary.speech_ratio.median, 2),

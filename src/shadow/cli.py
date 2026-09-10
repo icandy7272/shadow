@@ -185,8 +185,8 @@ def _compare(connection, *, ref_path, ref_words, paths, out_path,
              segment_id=None, unit_index=None, args=None, run_id=None) -> int:
     result = review.evaluate(ref_path, ref_words, paths,
                              transcribe=transcribe_words)
-    for name, drift in (result.skipped if result else ()):
-        print(f"⚠ 跳过 {name}：转写时间戳偏离实际发声 {drift:.1f} 秒，"
+    for index, name, drift in (result.skipped if result else ()):
+        print(f"⚠ 跳过第 {index} 遍（{name}）：转写比实际发声晚了 {drift:.1f} 秒，"
               f"该遍的测量不可信。", file=sys.stderr)
     if result is None:
         print("所有录音的时间戳都对不上，无法比对。换个更安静的环境重录试试。",

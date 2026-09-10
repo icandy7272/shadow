@@ -11,6 +11,8 @@ const PITCH_MIN = 90;     // 整句都是平的时候也别塌成一条线
 const MIN_SLOT_PX = 52;   // 一格至少这么宽，否则词标会挤成一团
 const SLOT_GAP_PX = 8;
 const FALLBACK_WIDTH = 760;
+const PRE_ROLL = 0.15;    // 两条都提前一点起播：正好切在词头会削掉爆破音的起音，
+                          // 两边削掉的还不一样多，听着就像没对齐
 
 const svgNS = "http://www.w3.org/2000/svg";
 
@@ -175,7 +177,8 @@ function layout(slots, available) {
 function pitchFigure(slots) {
   const node = el("figure", "fig");
   const caption = el("figcaption", null,
-    "图 2 · 音高：一词一格，线的高低 = 音高，线的走向 = 这个词从头到尾怎么走的。");
+    "图 2 · 音高：一词一格（横轴不是时间），线的高低 = 音高，"
+    + "线的走向 = 这个词从头到尾怎么走的。");
   caption.append(el("i", "legend-ref", "原声（虚线）"));
   caption.append(el("i", "legend-usr", "你（实心）"));
   node.append(caption);
@@ -263,20 +266,31 @@ function pitchFigure(slots) {
     for (let i = 0; i < slots.length; i += 1) {
       const at = useRef ? slots[i].refAt : slots[i].usrAt;
       if (!at) continue;
-      if (time < at[0]) return placed.xs[i];
+      if (time < at[0]) return { x: placed.xs[i], index: -1 };
       if (time < at[1]) {
         const share = (time - at[0]) / Math.max(at[1] - at[0], 1e-6);
-        return placed.xs[i] + share * placed.widths[i];
+        return { x: placed.xs[i] + share * placed.widths[i], index: i };
       }
     }
-    return placed.total;
+    return { x: placed.total, index: -1 };
+  }
+
+  // 横轴不是时间，指针在长词上慢、短词上快。把当前那一格点亮，
+  // 这种快慢才读得懂：不是走得不稳，是正走在哪个词上。
+  function highlight(index) {
+    bands.childNodes.forEach((node, i) =>
+      node.classList.toggle("active", i === index));
+    labels.childNodes.forEach((node, i) =>
+      node.classList.toggle("active", i === index));
   }
 
   return {
     node,
     move(frame) {
-      const x = locate(frame);
-      if (x === null) return;
+      const at = locate(frame);
+      if (at === null) return;
+      const x = at.x;
+      highlight(at.index);
       head.hidden = false;
       head.firstChild.style.left = `${x}px`;
       // 长句子要横向滚动，别让播放头跑出视野
@@ -286,7 +300,7 @@ function pitchFigure(slots) {
         scroll.scrollLeft = Math.max(0, x - scroll.clientWidth / 2);
       }
     },
-    hide() { head.hidden = true; },
+    hide() { head.hidden = true; highlight(-1); },
   };
 }
 
@@ -311,6 +325,11 @@ function playback(rhythm, audio, onFrame, onStopped) {
     ? Promise.resolve()
     : new Promise((done) => media.addEventListener("loadedmetadata", done,
                                                    { once: true })));
+
+  // 定位没落定就 play，会从旧位置开始放然后跳一下
+  const settled = (media) => (media.seeking
+    ? new Promise((done) => media.addEventListener("seeked", done, { once: true }))
+    : Promise.resolve());
 
   function graph() {
     if (context) return;
@@ -352,8 +371,10 @@ function playback(rhythm, audio, onFrame, onStopped) {
     tracks.forEach((media) => {
       const panner = panners.get(media);
       if (panner) panner.pan.value = spread ? (media === ref ? -0.8 : 0.8) : 0;
-      media.currentTime = offsets.get(media);
+      media.currentTime = Math.max(0, offsets.get(media) - PRE_ROLL);
     });
+    await Promise.all(tracks.map(settled));
+    if (mine !== session) return;
     tracks.forEach((media) => media.play());
 
     // 跟音频自己的时钟走，不用墙上时间：起播有几十毫秒延迟，缓冲还可能再顿一下。
