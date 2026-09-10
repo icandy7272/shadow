@@ -12,7 +12,7 @@ from typing import Generator, Sequence
 from .analysis.diff import accuracy as diff_accuracy
 from .analysis.diff import diff_words, matched_pairs, unreliable_indices
 from .analysis.prosody import analyse
-from .analysis.rhythm import alignment_drift, analyse_rhythm
+from .analysis.rhythm import alignment_drift, analyse_rhythm, snap_first_word
 from .ingest.transcriber import transcribe_words
 from .models import Word
 from .report.advice import PAUSE_KINDS, build_advice, well_done
@@ -74,6 +74,8 @@ def run(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
 
     yield Step(stage="reference", done=0, total=total)
     ref_prosody = analyse(ref_path)
+    # 首词起点常被转写往前铺到片段开头，对到真正的发声点上
+    ref_words = snap_first_word(ref_words, ref_prosody)
     # 库内文本来自长上下文转写，可能把缩读还原成完整形式，与音频对不上。
     # 这些词不能用来判用户对错。
     shaky = unreliable_indices(
@@ -92,6 +94,8 @@ def run(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
         if drift is not None and drift > ALIGNMENT_TOLERANCE_SEC:
             skipped.append((path.name, drift))
             continue
+        # 对齐检查过了才挪，先挪的话那道防线就永远查不出错位
+        words = snap_first_word(words, prosody)
         tokens = diff_words([w.text for w in ref_words], [w.text for w in words])
         rhythm = analyse_rhythm(ref_words, words, matched_pairs(tokens))
         advice = build_advice(

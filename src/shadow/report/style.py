@@ -27,7 +27,7 @@ LABELS_ZH = {
     "ref": "原声", "usr": "你", "accuracy": "可懂度", "seconds": "秒",
     "rhythm_title": "图 1 · 节奏：真实秒数，块宽 = 时长，空隙 = 真实停顿",
     "rhythm_hint": "红线标出你在这个词上已经落后多少",
-    "pitch_title": "图 2 · 音高：一词一格，块的高低 = 音高，块的斜度 = 词内升降（向下斜 = 降调）",
+    "pitch_title": "图 2 · 音高：一词一格，线的高低 = 音高，线的走向 = 这个词从头到尾怎么走的",
     "ref_legend": "原声（虚线）", "usr_legend": "你（实心）",
     "speech": "发声", "pause": "停顿", "missed_pause": "这里该停没停",
 }
@@ -36,7 +36,7 @@ LABELS_EN = {
     "ref": "reference", "usr": "you", "accuracy": "intelligibility", "seconds": "s",
     "rhythm_title": "Fig 1 - Rhythm: real seconds, block width = duration, gaps = real pauses",
     "rhythm_hint": "red lines show how far behind you are at that word",
-    "pitch_title": "Fig 2 - Pitch: one slot per word, height = pitch, slant = movement within the word",
+    "pitch_title": "Fig 2 - Pitch: one slot per word, height = pitch, the line traces how the word moves",
     "ref_legend": "reference (dashed)", "usr_legend": "you (solid)",
     "speech": "speech", "pause": "pauses", "missed_pause": "missed pause",
 }

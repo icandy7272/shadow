@@ -11,6 +11,10 @@ from ..analysis.diff import matched_pairs
 from ..report import geometry
 
 
+def _round(value):
+    return None if value is None else round(value, 2)
+
+
 def _block(block) -> dict:
     return {"text": block.text, "start": round(block.start, 4),
             "width": round(block.width, 4)}
@@ -56,9 +60,8 @@ def feedback_view(review, limit: int, *, audio: dict) -> dict:
         "pitch": [
             {"text": s.text, "x": round(s.x, 5),
              "refWidth": round(s.ref_width, 5), "usrWidth": round(s.usr_width, 5),
-             "refFrom": round(s.ref_from, 3), "refTo": round(s.ref_to, 3),
-             "usrFrom": None if s.usr_from is None else round(s.usr_from, 3),
-             "usrTo": None if s.usr_to is None else round(s.usr_to, 3),
+             "refTrace": [_round(v) for v in s.ref_trace],
+             "usrTrace": [_round(v) for v in s.usr_trace],
              "flag": s.flag}
             for s in slots
         ],

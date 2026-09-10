@@ -138,6 +138,29 @@ def speech_region(prosody, *, floor_db: float = None) -> tuple[float, float] | N
     return float(prosody.times[loud[0]]), float(prosody.times[loud[-1]])
 
 
+def snap_first_word(words, prosody, *, tolerance: float = 0.05):
+    """把首词起点对到真正的发声点，返回新序列。
+
+    Whisper 常把第一个词的起点一直铺到片段开头：词块因此被撑长、位置偏早，
+    同时播放两条音轨也对不齐，词内音高还会取到一段静音。
+    只往后挪：发声早于首词起点意味着可能漏了词，那是另一回事。
+
+    要在 alignment_drift 判过之后再用——先挪了，那道防线就永远查不出错位。
+    """
+    from dataclasses import replace
+
+    if not words:
+        return tuple(words)
+    region = speech_region(prosody)
+    if region is None:
+        return tuple(words)
+    onset = region[0]
+    first = words[0]
+    if onset <= first.start + tolerance or onset >= first.end:
+        return tuple(words)
+    return (replace(first, start=onset),) + tuple(words[1:])
+
+
 def alignment_drift(words, prosody) -> float | None:
     """转写首词起点与波形首个有声帧的偏差。None 表示无法判断。
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-from ..analysis.prosody import Prosody, word_contour
+from ..analysis.prosody import Prosody, word_trace
 from ..analysis.rhythm import Rhythm
 from ..models import Word
 
@@ -81,16 +81,19 @@ class RhythmView:
 
 @dataclass(frozen=True, slots=True)
 class Slot:
-    """音高图里的一格：一个词占一格，宽度是相对时长，高度是半音。"""
+    """音高图里的一格：一个词占一格，宽度是相对时长，走向是半音序列。
+
+    存整条走向而不是首尾两个数：句尾降调常是「先扬后抑」，
+    两点摘要会把它画成上扬，与耳朵听到的相反。
+    走向里的 None 是无浊音的段（清辅音、气声），画的时候断开。
+    """
 
     text: str
     x: float
     ref_width: float
     usr_width: float
-    ref_from: float
-    ref_to: float
-    usr_from: float | None
-    usr_to: float | None
+    ref_trace: tuple[float | None, ...]
+    usr_trace: tuple[float | None, ...]
     flag: str | None
 
 
@@ -184,20 +187,18 @@ def pitch_slots(
     slots = []
     for start, ref_width, usr_width, index, usr_index in placed:
         word = ref_words[index]
-        ref_contour = word_contour(ref_prosody, word.start, word.end) or (0.0, 0.0)
-        usr_contour = None
+        usr_trace: tuple[float | None, ...] = ()
         if usr_index is not None:
             usr = usr_words[usr_index]
-            usr_contour = word_contour(usr_prosody, usr.start, usr.end) or (0.0, 0.0)
+            usr_trace = word_trace(usr_prosody, usr.start, usr.end)
         slots.append(Slot(
             text=word.text.strip(TRIM),
             x=start / total,
             ref_width=max(ref_width / total, MIN_SLOT_WIDTH),
             usr_width=(max(usr_width / total, MIN_SLOT_WIDTH)
                        if usr_index is not None else 0.0),
-            ref_from=ref_contour[0], ref_to=ref_contour[1],
-            usr_from=None if usr_contour is None else usr_contour[0],
-            usr_to=None if usr_contour is None else usr_contour[1],
+            ref_trace=word_trace(ref_prosody, word.start, word.end),
+            usr_trace=usr_trace,
             flag=flagged.get(usr_index) if usr_index is not None else None,
         ))
     return tuple(slots)

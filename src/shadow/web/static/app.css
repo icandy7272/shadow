@@ -161,10 +161,9 @@ button:disabled { opacity: .5; cursor: default; }
 .quads .baseline { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
 .quads .ref { fill: none; stroke: var(--accent); stroke-width: 1.7;
   stroke-dasharray: 5 3; }
-.quads .usr { fill: rgba(214, 39, 40, .22); stroke: rgba(214, 39, 40, .5);
-  stroke-width: .8; }
-.quads .usr.flagged { fill: rgba(214, 39, 40, .45); stroke: var(--warn);
-  stroke-width: 1.6; }
+.quads polyline { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.quads .usr { stroke: rgba(214, 39, 40, .55); stroke-width: 4; }
+.quads .usr.flagged { stroke: var(--warn); stroke-width: 5.5; }
 
 .playbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
   flex-wrap: wrap; }

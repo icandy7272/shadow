@@ -54,6 +54,25 @@ def word_contour(prosody: "Prosody", start: float, end: float) -> tuple[float, f
     return float(np.mean(values[:third])), float(np.mean(values[-third:]))
 
 
+def word_trace(prosody: "Prosody", start: float, end: float, *,
+               points: int = config.WORD_TRACE_POINTS) -> tuple[float | None, ...]:
+    """词内音高的实际走向：等分成 points 段，每段取中位数，无浊音的段为 None。
+
+    只取首尾两个数会把「先扬后抑」抹平——句尾降调恰恰是这个形状，
+    两点摘要会把它画成上扬，与耳朵听到的相反。
+    每段取中位数而非均值：词尾常有气声、嘎裂声，单帧跳变很常见。
+    """
+    if end <= start or points < 1:
+        return ()
+    edges = np.linspace(start, end, points + 1)
+    out: list[float | None] = []
+    for low, high in zip(edges[:-1], edges[1:]):
+        window = prosody.semitones[(prosody.times >= low) & (prosody.times < high)]
+        window = window[np.isfinite(window)]
+        out.append(float(np.median(window)) if window.size else None)
+    return tuple(out)
+
+
 def bounds_from_voiced(
     voiced: np.ndarray, *, floor: float, ceiling: float
 ) -> tuple[float, float]:

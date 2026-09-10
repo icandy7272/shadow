@@ -5,7 +5,7 @@
 
 const GAP = 34;           // 两行之间留给落后连线的高度
 const PER_SEMITONE = 7;   // 一个半音多少 px，固定不变，句与句之间才可比
-const BLOCK_HALF = 7;     // 音高块的半高
+const TRACE_PAD = 10;     // 折线上下留白，笔画不贴边
 const PITCH_PAD = 8;      // 上下各留一点，块不贴边
 const PITCH_MIN = 90;     // 整句都是平的时候也别塌成一条线
 
@@ -52,11 +52,19 @@ function lane(role, name, blocks, spans, seconds) {
 function playback(rhythm, audio, head) {
   const ref = new Audio(audio.ref);
   const usr = new Audio(audio.usr);
+  [ref, usr].forEach((media) => { media.preload = "auto"; });
   const offsets = new Map([[ref, audio.refOffset], [usr, audio.usrOffset]]);
   const panners = new Map();
   let context = null;
   let timer = null;
+  let session = 0;
   let onStop = () => {};
+
+  // 元数据没到位时 currentTime 定位会被忽略，两条音轨就会各从头播，听着一前一后
+  const ready = (media) => (media.readyState >= 1
+    ? Promise.resolve()
+    : new Promise((done) => media.addEventListener("loadedmetadata", done,
+                                                   { once: true })));
 
   function graph() {
     if (context) return;
@@ -74,6 +82,7 @@ function playback(rhythm, audio, head) {
   }
 
   function stop() {
+    session += 1;
     if (timer) clearInterval(timer);
     timer = null;
     [ref, usr].forEach((media) => media.pause());
@@ -81,26 +90,31 @@ function playback(rhythm, audio, head) {
     onStop();
   }
 
-  function play(tracks, spread, whenStopped) {
+  async function play(tracks, spread, whenStopped) {
     stop();
+    const mine = session;
     graph();
-    if (context.state === "suspended") context.resume();
+    if (context.state === "suspended") await context.resume();
+    await Promise.all(tracks.map(ready));
+    if (mine !== session) return;          // 加载期间被叫停了
+
     onStop = whenStopped;
     tracks.forEach((media) => {
       const panner = panners.get(media);
       if (panner) panner.pan.value = spread ? (media === ref ? -0.8 : 0.8) : 0;
       media.currentTime = offsets.get(media);
-      media.play();
     });
+    tracks.forEach((media) => media.play());
 
-    const started = performance.now();
     head.hidden = false;
     const line = head.firstChild;
-    // 用 setInterval 而不是 requestAnimationFrame：切到别的标签页时 rAF 会整个停掉，
-    // 声音还在放，播放头却卡住，按钮也永远停在「停」上。
+    // 播放头跟音频自己的时钟走，不用墙上时间：起播有几十毫秒的延迟，
+    // 缓冲还可能再顿一下，跟墙上时间对不上，线就贴不住词。
+    // 计时用 setInterval 而不是 requestAnimationFrame：切到别的标签页 rAF 会整个
+    // 停掉，声音还在放而播放头卡住，按钮永远停在「停」上。
     timer = setInterval(() => {
-      const elapsed = (performance.now() - started) / 1000;
-      line.style.left = `${Math.min(1, elapsed / rhythm.seconds) * 100}%`;
+      const elapsed = Math.max(...tracks.map((m) => m.currentTime - offsets.get(m)));
+      line.style.left = `${Math.max(0, Math.min(1, elapsed / rhythm.seconds)) * 100}%`;
       if (tracks.every((media) => media.ended) || elapsed > rhythm.seconds + 0.6) {
         stop();
       }
@@ -194,15 +208,25 @@ function rhythmFigure(rhythm, audio) {
   return figure;
 }
 
-function quad(y, x0, x1, from, to, attrs) {
-  const y0 = y(from);
-  const y1 = y(to);
-  return svg("polygon", {
-    points: `${x0},${y0 - BLOCK_HALF} ${x0},${y0 + BLOCK_HALF} ` +
-            `${x1},${y1 + BLOCK_HALF} ${x1},${y1 - BLOCK_HALF}`,
-    "vector-effect": "non-scaling-stroke",
-    ...attrs,
+// 一个词的音高走向画成折线。null 处断开——那里没有浊音。
+function traceLine(canvas, y, x0, width, trace, className) {
+  if (!trace || !trace.length) return;
+  const step = width / trace.length;
+  let run = [];
+  const flush = () => {
+    if (run.length > 1) {
+      canvas.append(svg("polyline", {
+        points: run.join(" "), class: className,
+        "vector-effect": "non-scaling-stroke",
+      }));
+    }
+    run = [];
+  };
+  trace.forEach((value, index) => {
+    if (value === null) { flush(); return; }
+    run.push(`${x0 + (index + 0.5) * step},${y(value)}`);
   });
+  flush();
 }
 
 // 纵轴按这一句实际用到的音域收紧，免得图上一大半是空白。
@@ -210,13 +234,15 @@ function quad(y, x0, x1, from, to, attrs) {
 function pitchScale(slots) {
   const values = [];
   slots.forEach((slot) => {
-    values.push(slot.refFrom, slot.refTo);
-    if (slot.usrFrom !== null) values.push(slot.usrFrom, slot.usrTo);
+    [slot.refTrace, slot.usrTrace].forEach((trace) => {
+      (trace || []).forEach((v) => { if (v !== null) values.push(v); });
+    });
   });
+  if (!values.length) values.push(0);
   const top = Math.max(...values);
   const bottom = Math.min(...values);
   const height = Math.max(
-    PITCH_MIN, (top - bottom) * PER_SEMITONE + 2 * BLOCK_HALF + 2 * PITCH_PAD);
+    PITCH_MIN, (top - bottom) * PER_SEMITONE + 2 * TRACE_PAD + 2 * PITCH_PAD);
   const zero = (height - (top - bottom) * PER_SEMITONE) / 2 + top * PER_SEMITONE;
   return { height, y: (semitones) => zero - semitones * PER_SEMITONE };
 }
@@ -225,7 +251,7 @@ function pitchScale(slots) {
 function pitchFigure(slots) {
   const figure = el("figure", "fig");
   const caption = el("figcaption", null,
-    "图 2 · 音高：一词一格，块的高低 = 音高，块的斜度 = 词内升降（向下斜 = 降调）。");
+    "图 2 · 音高：一词一格，线的高低 = 音高，线的走向 = 这个词从头到尾怎么走的。");
   caption.append(el("i", "legend-ref", "原声（虚线）"));
   caption.append(el("i", "legend-usr", "你（实心）"));
   figure.append(caption);
@@ -244,14 +270,12 @@ function pitchFigure(slots) {
   slots.forEach((slot) => {
     const x0 = slot.x * 1000;
     let width = slot.refWidth;
-    if (slot.usrFrom !== null) {
-      canvas.append(quad(scale.y, x0, x0 + slot.usrWidth * 1000,
-                         slot.usrFrom, slot.usrTo,
-                         { class: slot.flag ? "usr flagged" : "usr" }));
+    if (slot.usrTrace && slot.usrTrace.length) {
+      traceLine(canvas, scale.y, x0, slot.usrWidth * 1000, slot.usrTrace,
+                slot.flag ? "usr flagged" : "usr");
       width = Math.max(slot.refWidth, slot.usrWidth);
     }
-    canvas.append(quad(scale.y, x0, x0 + slot.refWidth * 1000,
-                       slot.refFrom, slot.refTo, { class: "ref" }));
+    traceLine(canvas, scale.y, x0, slot.refWidth * 1000, slot.refTrace, "ref");
 
     const centre = `${(slot.x + width / 2) * 100}%`;
     const label = el("span", null, slot.text);

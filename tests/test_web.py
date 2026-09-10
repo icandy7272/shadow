@@ -238,7 +238,7 @@ def test_takes_endpoint_runs_the_whole_review(client, tmp_path, monkeypatch):
     assert [b["text"] for b in data["view"]["rhythm"]["ref"]] == [
         "It", "was", "a", "start"]
     assert [s["text"] for s in data["view"]["pitch"]] == ["It", "was", "a", "start"]
-    assert data["view"]["pitch"][0]["refFrom"] is not None
+    assert len(data["view"]["pitch"][0]["refTrace"]) > 2
     # 同时播放要知道两条音轨在哪，以及各自第一个词从第几秒开始——
     # 起点对齐了，图上同一个 x 才是同一刻
     audio = data["view"]["audio"]

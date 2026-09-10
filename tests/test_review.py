@@ -1,6 +1,7 @@
 """review.run 的进度事件——网页版进度条全靠它。"""
 
 import numpy as np
+import pytest
 import soundfile as sf
 
 from shadow import review
@@ -55,3 +56,27 @@ def test_evaluate_returns_none_when_no_take_is_usable(tmp_path):
                              transcribe=lambda p: WORDS if p == ref else late)
 
     assert result is None
+
+
+def test_run_snaps_both_sides_to_their_real_onset(tmp_path):
+    """两边的首词起点都对到真正的发声点，同时播放才对得齐。"""
+    import numpy as np
+    import soundfile as sf
+
+    sr = 16000
+    tone = 0.4 * np.sin(2 * np.pi * 150 * np.arange(sr) / sr)
+    quiet = np.zeros(int(0.4 * sr), dtype="float32")
+    ref = tmp_path / "ref.wav"
+    take = tmp_path / "take.wav"
+    sf.write(ref, np.concatenate([quiet, tone]).astype("float32"), sr)
+    sf.write(take, np.concatenate([quiet, tone]).astype("float32"), sr)
+
+    # 转写都说从 0 开始，实际两条都是 0.4 秒之后才出声
+    words = tuple(Word(text=x, start=a, end=a + d)
+                  for x, a, d in (("It", 0.0, 0.7), ("was", 0.7, 0.7)))
+    result = review.evaluate(ref, words, [take], transcribe=lambda _p: words)
+
+    assert result is not None
+    assert result.ref_words[0].start == pytest.approx(0.4, abs=0.06)
+    assert result.best.words[0].start == pytest.approx(0.4, abs=0.06)
+    assert result.ref_words[1] == words[1]

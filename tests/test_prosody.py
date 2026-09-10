@@ -190,3 +190,49 @@ def test_terminal_fall_is_none_without_pitch():
     prosody = _speech([])
     assert terminal_fall(prosody, _words([("a", 0.0, 0.5)])) is None
     assert terminal_fall(prosody, ()) is None
+
+
+def test_word_trace_keeps_a_rise_then_fall_that_two_points_would_flatten(tmp_path):
+    """句尾降调常是「先扬后抑」。只取首尾均值会把它画成上扬——真出过这个错。"""
+    import numpy as np
+    import soundfile as sf
+
+    from shadow.analysis.prosody import analyse, word_contour, word_trace
+
+    sr = 16000
+    t_ = np.arange(sr) / sr                       # 1 秒
+    # 前半升 120→200 Hz，后半降回 100 Hz
+    freq = np.where(t_ < 0.5, 120 + 160 * t_, 200 - 200 * (t_ - 0.5))
+    phase = 2 * np.pi * np.cumsum(freq) / sr
+    path = tmp_path / "arch.wav"
+    sf.write(path, (0.4 * np.sin(phase)).astype("float32"), sr)
+
+    prosody = analyse(path)
+    trace = [v for v in word_trace(prosody, 0.05, 0.95) if v is not None]
+    assert len(trace) >= 6
+
+    peak = max(range(len(trace)), key=lambda i: trace[i])
+    assert 0 < peak < len(trace) - 1                 # 峰在中间
+    assert trace[peak] - trace[-1] > 3               # 峰之后确实沉下去了
+
+    # 两点摘要看不出这个峰，这正是它不够用的地方
+    start, stop = word_contour(prosody, 0.05, 0.95)
+    assert max(start, stop) < trace[peak]
+
+
+def test_word_trace_marks_unvoiced_slots_as_none(tmp_path):
+    import numpy as np
+    import soundfile as sf
+
+    from shadow.analysis.prosody import analyse, word_trace
+
+    sr = 16000
+    tone = 0.4 * np.sin(2 * np.pi * 150 * np.arange(sr // 2) / sr)
+    path = tmp_path / "half.wav"
+    sf.write(path, np.concatenate([tone, np.zeros(sr // 2)]).astype("float32"), sr)
+
+    trace = analyse(path)
+    values = word_trace(trace, 0.0, 1.0, points=10)
+    assert len(values) == 10
+    assert values[0] is not None
+    assert values[-1] is None

@@ -90,8 +90,9 @@ def test_pitch_slots_run_left_to_right_within_the_unit_interval(prosody):
     assert slots[0].x == 0.0
     assert all(0.0 <= s.x <= 1.0 for s in slots)
     assert slots[-1].x + slots[-1].ref_width <= 1.0 + 1e-9
-    # 每格都有原声轮廓；配上的词才有你的轮廓
-    assert all(s.usr_from is not None for s in slots)
+    # 每格都有原声走向；配上的词才有你的走向
+    assert all(any(v is not None for v in s.ref_trace) for s in slots)
+    assert all(s.usr_trace for s in slots)
 
 
 def test_an_unmatched_word_gets_no_block_of_yours(prosody):
@@ -99,5 +100,14 @@ def test_an_unmatched_word_gets_no_block_of_yours(prosody):
         ref_words=REF, usr_words=USR, pairs=[(0, 0), (2, 2)],
         ref_prosody=prosody, usr_prosody=prosody,
     )
-    assert slots[1].usr_from is None
+    assert slots[1].usr_trace == ()
     assert slots[1].usr_width == 0.0
+
+
+def test_a_slot_carries_the_whole_shape_not_just_its_ends(prosody):
+    """两点摘要会把「先扬后抑」画成上扬。格子里要带上整条走向。"""
+    slots = geometry.pitch_slots(
+        ref_words=REF, usr_words=USR, pairs=[(0, 0)],
+        ref_prosody=prosody, usr_prosody=prosody,
+    )
+    assert len(slots[0].ref_trace) > 2

@@ -14,8 +14,7 @@ from typing import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.lines import Line2D
-from matplotlib.patches import FancyBboxPatch, Polygon
+from matplotlib.patches import FancyBboxPatch
 
 from ..analysis.diff import KIND_EQUAL, DiffToken
 from ..analysis.prosody import Prosody
@@ -26,15 +25,34 @@ from .geometry import Flag, PauseNote  # noqa: F401  给命令行和网页共用
 from .style import FLAG_COLOUR, MUTED_COLOUR, REF_COLOUR, USR_COLOUR, configure_labels
 
 SEMITONE_SCALE = 0.11
-BLOCK_HALF = 0.13
 
 
-def _quad(x0: float, x1: float, y0: float, y1: float, **kwargs) -> Polygon:
-    return Polygon(
-        [(x0, y0 - BLOCK_HALF), (x0, y0 + BLOCK_HALF),
-         (x1, y1 + BLOCK_HALF), (x1, y1 - BLOCK_HALF)],
-        closed=True, **kwargs,
-    )
+def _polyline(ax, x0: float, width: float, trace, **kwargs) -> None:
+    """把一个词的音高走向画成折线。None 处断开——那里没有浊音。"""
+    if not trace:
+        return
+    step = width / len(trace)
+    xs: list[float] = []
+    ys: list[float] = []
+    for index, value in enumerate(trace):
+        if value is None:
+            if len(xs) > 1:
+                ax.plot(xs, ys, **kwargs)
+            xs, ys = [], []
+            continue
+        xs.append(x0 + (index + 0.5) * step)
+        ys.append(value * SEMITONE_SCALE)
+    if len(xs) > 1:
+        ax.plot(xs, ys, **kwargs)
+
+
+def _pitch_limits(slots) -> tuple[float, float]:
+    values = [v * SEMITONE_SCALE for slot in slots
+              for trace in (slot.ref_trace, slot.usr_trace)
+              for v in trace if v is not None]
+    if not values:
+        return -1.0, 1.0
+    return min(values) - 0.25, max(values) + 0.45
 
 
 def _draw_rhythm(ax, labels, view) -> None:
@@ -81,36 +99,31 @@ def _draw_rhythm(ax, labels, view) -> None:
 
 def _draw_pitch(ax, labels, slots) -> None:
     ax.axhline(0, color=MUTED_COLOUR, lw=0.8, ls=":", zorder=0)
+    low, high = _pitch_limits(slots)
     for slot in slots:
-        ax.add_patch(_quad(slot.x, slot.x + slot.ref_width,
-                           slot.ref_from * SEMITONE_SCALE,
-                           slot.ref_to * SEMITONE_SCALE,
-                           facecolor="none", edgecolor=REF_COLOUR, lw=1.7,
-                           ls=(0, (4, 2)), zorder=3))
+        _polyline(ax, slot.x, slot.ref_width, slot.ref_trace,
+                  color=REF_COLOUR, lw=1.7, ls=(0, (4, 2)), zorder=3)
         label_width = slot.ref_width
-        if slot.usr_from is not None:
-            ax.add_patch(_quad(slot.x, slot.x + slot.usr_width,
-                               slot.usr_from * SEMITONE_SCALE,
-                               slot.usr_to * SEMITONE_SCALE,
-                               facecolor=USR_COLOUR,
-                               alpha=0.45 if slot.flag else 0.22,
-                               edgecolor=USR_COLOUR,
-                               lw=1.6 if slot.flag else 0.7, zorder=2))
+        if slot.usr_trace:
+            _polyline(ax, slot.x, slot.usr_width, slot.usr_trace,
+                      color=USR_COLOUR, lw=5.0 if slot.flag else 3.5,
+                      alpha=0.75 if slot.flag else 0.45,
+                      solid_capstyle="round", zorder=2)
             label_width = max(slot.ref_width, slot.usr_width)
             if slot.flag:
-                ax.text(slot.x + label_width / 2, -0.60, slot.flag, ha="center",
-                        va="top", fontsize=8.5, color=FLAG_COLOUR, zorder=5)
-        ax.text(slot.x + label_width / 2, 0.50, slot.text,
-                ha="center", va="bottom",
+                ax.text(slot.x + label_width / 2, low + 0.05, slot.flag,
+                        ha="center", va="bottom", fontsize=8.5,
+                        color=FLAG_COLOUR, zorder=5)
+        ax.text(slot.x + label_width / 2, high - 0.05, slot.text,
+                ha="center", va="top",
                 fontsize=min(12, max(7, 190 * label_width)), color="#222222", zorder=4)
 
-    ax.legend(handles=[
-        Line2D([0], [0], color=REF_COLOUR, lw=1.8, ls="--", label=labels["ref_legend"]),
-        Line2D([0], [0], color=USR_COLOUR, lw=6, alpha=0.4, label=labels["usr_legend"]),
-    ], loc="upper right", frameon=False, fontsize=11, ncol=2)
-    ax.set_title(labels["pitch_title"], fontsize=12, loc="left")
+    # 图例写进标题：放在角上总会压住某个词的标注
+    ax.set_title(f"{labels['pitch_title']}。"
+                 f"{labels['ref_legend']} / {labels['usr_legend']}",
+                 fontsize=12, loc="left")
     ax.set_xlim(-0.01, 1.01)
-    ax.set_ylim(-1.05, 0.92)
+    ax.set_ylim(low, high)
     ax.axis("off")
 
 
