@@ -1286,7 +1286,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve = sub.add_parser("serve", help="启动网页版")
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8000)
-    p_serve.add_argument("--reload", action="store_true", help="改代码自动重载")
+    # 默认开自动重载：本地单人工具，服务一开就是一整天，
+    # 改了代码而页面还跑着旧进程，给出的反馈会是错的，而且看不出来。
+    p_serve.add_argument("--no-reload", dest="reload", action="store_false",
+                         help="关掉改代码自动重载")
+    p_serve.set_defaults(reload=True)
     p_serve.set_defaults(func=cmd_serve)
 
     p_progress = sub.add_parser("progress", help="查看跨会话的练习趋势")

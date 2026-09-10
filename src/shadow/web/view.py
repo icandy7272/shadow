@@ -16,7 +16,7 @@ def _block(block) -> dict:
             "width": round(block.width, 4)}
 
 
-def feedback_view(review, limit: int) -> dict:
+def feedback_view(review, limit: int, *, audio: dict) -> dict:
     """图 1 的节奏几何 + 图 2 的音高格子，单位与命令行那张图完全一致。"""
     from .. import review as review_mod
 
@@ -33,6 +33,11 @@ def feedback_view(review, limit: int) -> dict:
     )
     return {
         "text": " ".join(w.text for w in review.ref_words),
+        # 两条音轨各自第一个词从第几秒开始。同时播放时各自跳到这里，
+        # 起点对齐了，图上同一个 x 才是同一刻。
+        "audio": {**audio,
+                  "refOffset": round(review.ref_words[0].start, 3),
+                  "usrOffset": round(take.words[0].start, 3)},
         "accuracy": round(_accuracy(take.tokens) * 100),
         "speech": round(take.rhythm.speech_ratio, 2),
         "pause": (None if take.rhythm.pause_ratio is None

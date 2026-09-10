@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 import pytest
 import soundfile as sf
@@ -650,3 +652,21 @@ def test_practice_stops_cleanly_if_recording_is_cancelled(monkeypatch, tmp_path)
     # 什么都没记下的一轮不该算作练过，否则「练了 3 次」里混着取消
     assert db.list_runs(connection, segment_id=segment_id) == []
     connection.close()
+
+
+def test_serve_reloads_by_default(monkeypatch):
+    """服务一开就是一整天。改了代码却还跑着旧进程，反馈会是错的且看不出来。"""
+    seen = {}
+
+    class FakeUvicorn:
+        @staticmethod
+        def run(app, **kwargs):
+            seen.update(kwargs)
+
+    monkeypatch.setitem(sys.modules, "uvicorn", FakeUvicorn)
+    assert cli.main(["serve"]) == 0
+    assert seen["reload"] is True
+
+    seen.clear()
+    assert cli.main(["serve", "--no-reload"]) == 0
+    assert seen["reload"] is False

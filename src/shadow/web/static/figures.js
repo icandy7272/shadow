@@ -24,8 +24,8 @@ function svg(tag, attrs) {
   return node;
 }
 
-function lane(name, blocks, spans, seconds) {
-  const row = el("div", "lane");
+function lane(role, name, blocks, spans, seconds) {
+  const row = el("div", `lane ${role}`);
   row.append(el("span", "tag", name));
   const track = el("div", "track");
   spans.forEach((span) => {
@@ -45,7 +45,106 @@ function lane(name, blocks, spans, seconds) {
   return row;
 }
 
-function rhythmFigure(rhythm) {
+// 同时播放原声和你的录音。
+//
+// 两条人声叠在一起会糊成一团，所以分到左右耳——耳机里能直接听出谁走在前面。
+// 两条各自跳到自己的第一个词再起播：起点对齐了，图上同一个 x 才是同一刻。
+function playback(rhythm, audio, head) {
+  const ref = new Audio(audio.ref);
+  const usr = new Audio(audio.usr);
+  const offsets = new Map([[ref, audio.refOffset], [usr, audio.usrOffset]]);
+  const panners = new Map();
+  let context = null;
+  let timer = null;
+  let onStop = () => {};
+
+  function graph() {
+    if (context) return;
+    context = new (window.AudioContext || window.webkitAudioContext)();
+    [ref, usr].forEach((media) => {
+      const source = context.createMediaElementSource(media);
+      if (context.createStereoPanner) {
+        const panner = context.createStereoPanner();
+        source.connect(panner).connect(context.destination);
+        panners.set(media, panner);
+      } else {
+        source.connect(context.destination);   // 老浏览器没有声道平移，合在一起也能听
+      }
+    });
+  }
+
+  function stop() {
+    if (timer) clearInterval(timer);
+    timer = null;
+    [ref, usr].forEach((media) => media.pause());
+    head.hidden = true;
+    onStop();
+  }
+
+  function play(tracks, spread, whenStopped) {
+    stop();
+    graph();
+    if (context.state === "suspended") context.resume();
+    onStop = whenStopped;
+    tracks.forEach((media) => {
+      const panner = panners.get(media);
+      if (panner) panner.pan.value = spread ? (media === ref ? -0.8 : 0.8) : 0;
+      media.currentTime = offsets.get(media);
+      media.play();
+    });
+
+    const started = performance.now();
+    head.hidden = false;
+    const line = head.firstChild;
+    // 用 setInterval 而不是 requestAnimationFrame：切到别的标签页时 rAF 会整个停掉，
+    // 声音还在放，播放头却卡住，按钮也永远停在「停」上。
+    timer = setInterval(() => {
+      const elapsed = (performance.now() - started) / 1000;
+      line.style.left = `${Math.min(1, elapsed / rhythm.seconds) * 100}%`;
+      if (tracks.every((media) => media.ended) || elapsed > rhythm.seconds + 0.6) {
+        stop();
+      }
+    }, 16);
+  }
+
+  return { ref, usr, play, stop, playing: () => timer !== null };
+}
+
+
+function playbar(rhythm, audio, head) {
+  const bar = el("div", "playbar");
+  const player = playback(rhythm, audio, head);
+  const both = el("button", "primary", "▶ 同时播放");
+  const one = el("button", null, "只听原声");
+  const mine = el("button", null, "只听我的");
+  const buttons = [both, one, mine];
+
+  const reset = () => {
+    both.textContent = "▶ 同时播放";
+    buttons.forEach((b) => b.classList.remove("playing"));
+  };
+  const start = (button, tracks, spread, label) => {
+    if (player.playing()) {
+      player.stop();
+      if (button.classList.contains("playing")) return;
+    }
+    reset();
+    button.classList.add("playing");
+    if (button === both) both.textContent = "■ 停";
+    player.play(tracks, spread, reset);
+  };
+
+  both.addEventListener("click", () => start(both, [player.ref, player.usr], true));
+  one.addEventListener("click", () => start(one, [player.ref], false));
+  mine.addEventListener("click", () => start(mine, [player.usr], false));
+
+  bar.append(both, one, mine,
+             el("span", "playbar-hint", "戴耳机：原声在左，你的在右"));
+  return bar;
+}
+
+
+function rhythmFigure(rhythm, audio) {
   const seconds = rhythm.seconds || 1;
   const figure = el("figure", "fig");
   figure.append(el("figcaption", null,
@@ -53,7 +152,12 @@ function rhythmFigure(rhythm) {
     "红线标出你在这个词上已经落后多少（横轴单位：秒）"));
 
   const body = el("div", "fig-body");
-  body.append(lane("原声", rhythm.ref,
+  const head = el("div", "playhead");
+  head.hidden = true;
+  head.append(el("i"));
+  body.append(head);
+  if (audio) figure.append(playbar(rhythm, audio, head));
+  body.append(lane("ref", "原声", rhythm.ref,
                    rhythm.spans.filter((s) => s.row === "ref"), seconds));
 
   const gap = el("div", "gap");
@@ -76,7 +180,7 @@ function rhythmFigure(rhythm) {
   });
   body.append(gap);
 
-  body.append(lane("你", rhythm.usr,
+  body.append(lane("usr", "你", rhythm.usr,
                    rhythm.spans.filter((s) => s.row === "usr"), seconds));
   figure.append(body);
 
@@ -168,6 +272,6 @@ function pitchFigure(slots) {
 // 给 app.js 用：返回一个包含两张图的元素
 function renderFigures(view) {  // eslint-disable-line no-unused-vars
   const box = el("div", "figures");
-  box.append(rhythmFigure(view.rhythm), pitchFigure(view.pitch));
+  box.append(rhythmFigure(view.rhythm, view.audio), pitchFigure(view.pitch));
   return box;
 }

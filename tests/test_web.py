@@ -239,6 +239,14 @@ def test_takes_endpoint_runs_the_whole_review(client, tmp_path, monkeypatch):
         "It", "was", "a", "start"]
     assert [s["text"] for s in data["view"]["pitch"]] == ["It", "was", "a", "start"]
     assert data["view"]["pitch"][0]["refFrom"] is not None
+    # 同时播放要知道两条音轨在哪，以及各自第一个词从第几秒开始——
+    # 起点对齐了，图上同一个 x 才是同一刻
+    audio = data["view"]["audio"]
+    assert audio["ref"] == f"/audio/{segment_id}/2"
+    assert audio["usr"].startswith("/take/")
+    assert client.get(audio["usr"]).status_code == 200
+    assert audio["refOffset"] == pytest.approx(0.1, abs=0.01)
+    assert audio["usrOffset"] >= 0.0
 
     connection = db.connect()
     row = db.list_runs(connection, segment_id=segment_id)[0]
@@ -302,6 +310,17 @@ def test_takes_endpoint_reports_unusable_recordings_in_the_stream(client, tmp_pa
 def test_practice_page_has_a_progress_bar(client, tmp_path):
     segment_id = _seed(tmp_path)
     assert 'id="rec-progress"' in client.get(f"/practice/{segment_id}/2").text
+
+
+def test_take_audio_is_served_and_stays_inside_its_folder(client, tmp_path):
+    _seed(tmp_path)
+    name = "1-u1-0101-000000-1.wav"
+    (config.attempt_audio_dir() / name).write_bytes(_wav_bytes())
+
+    ok = client.get(f"/take/{name}")
+    assert ok.status_code == 200
+    assert ok.headers["content-type"] == "audio/wav"
+    assert client.get("/take/..%2F..%2Fshadow.db").status_code == 404
 
 
 def test_takes_rejects_a_silent_recording(client, tmp_path):

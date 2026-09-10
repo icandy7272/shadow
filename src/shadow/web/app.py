@@ -208,6 +208,16 @@ def save_gapfill(payload: dict = Body(...)):
 MAX_ADVICE = 3
 
 
+@app.get("/take/{name}")
+def take_audio(name: str):
+    """回放某一遍录音。只认录音目录里的文件名，不接受路径。"""
+    folder = config.attempt_audio_dir().resolve()
+    path = (folder / name).resolve()
+    if path.parent != folder or not path.exists():
+        raise HTTPException(404, "录音不存在")
+    return FileResponse(path, media_type="audio/wav")
+
+
 @app.post("/api/takes")
 async def submit_takes(
     segment: Annotated[int, Form()],
@@ -282,13 +292,15 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp):
         finally:
             connection.close()
 
-        yield _event({"result": _review_payload(result, run_id)})
+        yield _event({"result": _review_payload(
+            result, run_id, audio={"ref": f"/audio/{segment}/{unit}",
+                                   "usr": f"/take/{result.best.path.name}"})})
     except Exception as exc:
         log.exception("片段 %s 单元 %s 的比对失败", segment, unit)
         yield _event({"error": f"比对失败：{exc}"})
 
 
-def _review_payload(result, run_id: int) -> dict:
+def _review_payload(result, run_id: int, *, audio: dict) -> dict:
     summary = result.summary
     best = result.best
     problems = [
@@ -298,7 +310,7 @@ def _review_payload(result, run_id: int) -> dict:
     ]
     return {
         "run_id": run_id,
-        "view": feedback_view(result, MAX_ADVICE),
+        "view": feedback_view(result, MAX_ADVICE, audio=audio),
         "count": summary.count,
         "skipped": [{"name": n, "drift": round(d, 1)} for n, d in result.skipped],
         "accuracy": round(summary.accuracy.median * 100),

@@ -122,15 +122,15 @@ button:disabled { opacity: .5; cursor: default; }
 .lane { display: flex; align-items: center; }
 .lane .tag { flex: none; width: 46px; text-align: right; padding-right: 10px;
   font-size: 13px; color: var(--muted); }
-.lane:first-child .tag { color: var(--accent); }
-.lane:last-child .tag { color: var(--warn); }
+.lane.ref .tag { color: var(--accent); }
+.lane.usr .tag { color: var(--warn); }
 .track { position: relative; flex: 1; height: 34px; }
 .blk { position: absolute; top: 0; height: 34px; display: flex;
   align-items: center; justify-content: center; border-radius: 6px;
   font-size: 14px; white-space: nowrap; overflow: visible; }
-.lane:first-child .blk { background: rgba(31, 119, 180, .16);
+.lane.ref .blk { background: rgba(31, 119, 180, .16);
   border: 1px solid rgba(31, 119, 180, .5); color: var(--accent); }
-.lane:last-child .blk { background: rgba(214, 39, 40, .14);
+.lane.usr .blk { background: rgba(214, 39, 40, .14);
   border: 1px solid rgba(214, 39, 40, .5); color: var(--warn); }
 .track .span { position: absolute; top: -4px; bottom: -4px;
   background: rgba(214, 39, 40, .14); border-radius: 4px; }
@@ -165,3 +165,14 @@ button:disabled { opacity: .5; cursor: default; }
   stroke-width: .8; }
 .quads .usr.flagged { fill: rgba(214, 39, 40, .45); stroke: var(--warn);
   stroke-width: 1.6; }
+
+.playbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  flex-wrap: wrap; }
+.playbar button { padding: 6px 12px; font-size: 14px; }
+.playbar button.playing { border-color: var(--warn); color: var(--warn); }
+.playbar button.primary.playing { background: var(--warn); color: #fff; }
+.playbar-hint { color: var(--muted); font-size: 12px; }
+.playhead { position: absolute; top: -2px; bottom: -2px; left: 46px; right: 0;
+  pointer-events: none; z-index: 6; }
+.playhead i { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
+  background: var(--fg); opacity: .5; border-radius: 1px; }
