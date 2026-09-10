@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from ..analysis.diff import KIND_EQUAL, DiffToken
-from ..analysis.prosody import Prosody, word_contour
+from ..analysis.prosody import Prosody, terminal_fall, word_contour
 from ..analysis.rhythm import MIN_PAUSE_SEC, Rhythm
 from ..models import Word
 
@@ -20,6 +20,8 @@ STRETCH_RATIO = 1.4
 PITCH_GAP_ST = 3.0
 SLOPE_GAP_ST = 2.5
 STRONG_SLOPE_ST = 3.0
+STRONG_FALL_ST = 5.0
+FALL_GAP_ST = 4.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +117,25 @@ def build_advice(
         if rc is None or uc is None:
             continue
         ref_move, usr_move = rc[1] - rc[0], uc[1] - uc[0]
+
+        if token.ref_index == len(ref_words) - 1:
+            # 句尾单独用跨词的降幅衡量，词内起止会与听感相反
+            ref_fall = terminal_fall(ref_prosody, ref_words)
+            usr_fall = terminal_fall(usr_prosody, usr_words)
+            if (ref_fall is not None and usr_fall is not None
+                    and ref_fall < -STRONG_FALL_ST
+                    and usr_fall > ref_fall + FALL_GAP_ST):
+                found.append(Advice(
+                    kind="flat_fall",
+                    flag="句尾没沉下去",
+                    ref_index=token.ref_index,
+                    score=abs(usr_fall - ref_fall) / FALL_GAP_ST,
+                    title=f"“{ref.text}” 收尾没沉下去",
+                    detail=(f"原声到句尾沉下去 {abs(ref_fall):.0f} 个半音，"
+                            f"你只沉了 {abs(usr_fall):.0f} 个。"),
+                    action=f"读到 “{ref.text}” 时整个把声音丢下去，像句号砸下来。",
+                ))
+            continue
 
         if ref_move < -STRONG_SLOPE_ST and usr_move > ref_move + SLOPE_GAP_ST:
             found.append(Advice(

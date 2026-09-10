@@ -72,6 +72,33 @@ def bounds_from_voiced(
     return low, max(high, low * 2.0)
 
 
+def _word_values(prosody: "Prosody", start: float, end: float) -> np.ndarray:
+    values = prosody.semitones[(prosody.times >= start) & (prosody.times < end)]
+    return values[np.isfinite(values)]
+
+
+def terminal_fall(prosody: "Prosody", words) -> float | None:
+    """句尾降幅：末词的最低点相对末两词的最高点。负得越多，收得越沉。
+
+    只看词内起止是错的——句尾降调常常跨在词边界上。实测 "It started before
+    I was born." 里 was 收在 −2.7、born 从 −4.9 起，那 2.2 个半音的下坠
+    完全落在词与词之间，词内指标反而报成「升 3.2」，与听感相反。
+
+    取末两词的最高点作参照，既覆盖词内下坠（短句如 "That's it."），
+    也覆盖跨词下坠（长句），且不受句子长短影响。
+    """
+    if not words:
+        return None
+    last = _word_values(prosody, words[-1].start, words[-1].end)
+    if last.size == 0:
+        return None
+    tail = words[-2:] if len(words) > 1 else words[-1:]
+    window = np.concatenate([_word_values(prosody, w.start, w.end) for w in tail])
+    if window.size == 0:
+        return None
+    return float(last.min() - window.max())
+
+
 def adaptive_pitch_bounds(
     sound: parselmouth.Sound,
     *,

@@ -426,8 +426,13 @@ def cmd_listen(args: argparse.Namespace) -> int:
 
     rating = _ask_blind_rating()
 
+    # 只揭晓挖空版：给「原来是这句」的反馈，但把被弱读的功能词继续藏着，
+    # 否则紧接着的 drill 直接知道答案。
+    blanks = blanks_of(ref_words)
     print("\n原文：")
-    print(f"  {' '.join(w.text for w in ref_words)}\n")
+    print(f"  {render(ref_words)}\n")
+    if blanks:
+        print(f"（{len(blanks)} 个被弱读的词还藏着——用 shadow drill 把它们听出来）\n")
 
     if rating is None:
         print("没记分数。")

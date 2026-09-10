@@ -143,3 +143,50 @@ def test_bounds_work_with_only_a_handful_of_frames():
 
 def test_bounds_fall_back_when_almost_nothing_is_voiced():
     assert bounds_from_voiced(np.full(2, 100.0), floor=75.0, ceiling=500.0) == (75.0, 500.0)
+
+
+def _speech(segments, duration=3.0):
+    """按 (start, end, 起始半音, 结束半音) 造一段合成韵律。"""
+    from shadow.analysis.prosody import Prosody
+
+    times = np.arange(0.0, duration, 0.01)
+    st = np.full(times.shape, np.nan)
+    for start, end, head, tail in segments:
+        mask = (times >= start) & (times < end)
+        if mask.any():
+            st[mask] = np.linspace(head, tail, mask.sum())
+    return Prosody(times=times, f0_hz=np.full(times.shape, 120.0), semitones=st,
+                   energy_db=np.zeros(times.shape), duration=duration)
+
+
+def _words(spec):
+    from shadow.models import Word
+
+    return tuple(Word(text=t, start=a, end=b) for t, a, b in spec)
+
+
+def test_terminal_fall_catches_a_drop_across_the_word_boundary():
+    """was 收在 −2.7、born 从 −4.9 起：下坠跨在词边界上，词内指标会报成「升」。"""
+    from shadow.analysis.prosody import terminal_fall, word_contour
+
+    prosody = _speech([(1.0, 1.4, -0.7, -2.7), (1.5, 2.0, -4.9, -1.7)])
+    words = _words([("was", 1.0, 1.4), ("born", 1.5, 2.0)])
+    within = word_contour(prosody, 1.5, 2.0)
+    assert within[1] - within[0] > 0            # 词内看起来是升的
+    assert terminal_fall(prosody, words) < -3.0  # 跨词看是明显下坠
+
+
+def test_terminal_fall_also_covers_a_within_word_drop():
+    from shadow.analysis.prosody import terminal_fall
+
+    prosody = _speech([(1.0, 1.4, 0.0, 0.5), (1.5, 2.0, 1.0, -6.0)])
+    words = _words([("that's", 1.0, 1.4), ("it", 1.5, 2.0)])
+    assert terminal_fall(prosody, words) < -6.0
+
+
+def test_terminal_fall_is_none_without_pitch():
+    from shadow.analysis.prosody import terminal_fall
+
+    prosody = _speech([])
+    assert terminal_fall(prosody, _words([("a", 0.0, 0.5)])) is None
+    assert terminal_fall(prosody, ()) is None

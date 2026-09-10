@@ -486,3 +486,16 @@ def test_progress_shows_gapfill_rate(monkeypatch, capsys):
     assert cli.main(["progress"]) == 0
     out = capsys.readouterr().out
     assert "填空" in out and "2/2" in out
+
+
+def test_listen_does_not_reveal_the_words_drill_will_ask_for(monkeypatch, capsys):
+    """listen 若揭晓全文，紧接着的 drill 就直接知道答案了。"""
+    segment_id = _seed_with_blanks()
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: "3")
+    assert cli.main(["listen", "--segment", str(segment_id), "--unit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "should" in out and "there" in out      # 非挖空词照常揭晓
+    assert "____" in out                          # 挖空词继续藏着
+    assert "shadow drill" in out
