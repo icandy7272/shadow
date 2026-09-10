@@ -9,14 +9,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import Body, FastAPI, Form, HTTPException, Request
+from datetime import datetime
+from typing import Annotated
+
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import config, db, media
+from ..analysis.diff import accuracy as _accuracy
 from ..drill.gapfill import blanks_of
 from ..drill.units import is_usable, split_into_units
+from .. import review as review_mod
 
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=str(HERE / "templates"))
@@ -125,16 +130,24 @@ def audio(segment_id: int, unit: int):
                         media_type="audio/wav")
 
 
+def _run_for(connection, segment: int, unit: int, run_id: int | None, words):
+    """同一次练习的三步记进同一行，与命令行 practice 一致。"""
+    if run_id is not None:
+        return run_id
+    return db.start_run(connection, segment_id=segment, unit_index=unit,
+                        unit_text=" ".join(w.text for w in words))
+
+
 @app.post("/api/rating")
 def save_rating(segment: int = Form(...), unit: int = Form(...),
-                rating: int = Form(...)):
+                rating: int = Form(...), run_id: int | None = Form(None)):
     if not 1 <= rating <= 5:
         raise HTTPException(400, "评分必须是 1-5")
     connection = _db()
     _, words = _unit_words(connection, segment, unit)
-    run_id = db.start_run(connection, segment_id=segment, unit_index=unit,
-                          unit_text=" ".join(w.text for w in words))
+    run_id = _run_for(connection, segment, unit, run_id, words)
     db.set_blind_rating(connection, run_id, rating)
+    # 每步结束都收尾一次：只做了第一步就离开的话，记录也该算数
     db.finish_run(connection, run_id)
     return {"ok": True, "run_id": run_id}
 
@@ -165,9 +178,96 @@ def save_gapfill(payload: dict = Body(...)):
         })
 
     replays = int(payload.get("replays") or 0)
-    run_id = db.start_run(connection, segment_id=segment, unit_index=unit,
-                          unit_text=" ".join(w.text for w in words))
+    run_id = _run_for(connection, segment, unit, payload.get("run_id"), words)
     db.set_gapfill(connection, run_id, correct, len(blanks), heard, replays)
     db.finish_run(connection, run_id)
     return {"correct": correct, "total": len(blanks), "heard": heard,
             "replays": replays, "items": items, "run_id": run_id}
+
+
+MAX_ADVICE = 3
+
+
+@app.get("/feedback/{name}")
+def feedback_image(name: str):
+    path = (config.data_dir() / "feedback" / name).resolve()
+    if path.parent != (config.data_dir() / "feedback").resolve() or not path.exists():
+        raise HTTPException(404, "找不到这张图")
+    return FileResponse(path, media_type="image/png")
+
+
+@app.post("/api/takes")
+async def submit_takes(
+    segment: Annotated[int, Form()],
+    unit: Annotated[int, Form()],
+    files: Annotated[list[UploadFile], File()],
+    run_id: Annotated[int | None, Form()] = None,
+):
+    connection = _db()
+    _, ref_words = _unit_words(connection, segment, unit)
+    ref_path = _unit_audio(connection, segment, unit)
+
+    stamp = datetime.now().strftime("%m%d-%H%M%S")
+    paths = []
+    for index, upload in enumerate(files, 1):
+        dest = config.attempt_audio_dir() / f"{segment}-u{unit}-{stamp}-{index}.wav"
+        try:
+            media.convert_upload(await upload.read(), dest)
+            media.validate_attempt(dest)
+        except Exception as exc:
+            raise HTTPException(400, f"第 {index} 遍不可用：{exc}") from exc
+        paths.append(dest)
+
+    result = review_mod.evaluate(ref_path, ref_words, paths)
+    if result is None:
+        raise HTTPException(
+            422, "所有录音的转写时间戳都对不上，没法比较。换个安静点的环境重录。"
+        )
+
+    charts = config.data_dir() / "feedback"
+    charts.mkdir(parents=True, exist_ok=True)
+    name = f"{segment}-u{unit}-{stamp}.png"
+    review_mod.chart(result, charts / name, MAX_ADVICE)
+
+    run_id = _run_for(connection, segment, unit, run_id, ref_words)
+    _store_takes(connection, run_id, result)
+    db.finish_run(connection, run_id)
+
+    summary = result.summary
+    best = result.best
+    problems = [
+        {"kind": t.kind, "ref": t.ref_text, "usr": t.usr_text}
+        for t in best.tokens
+        if t.kind != "equal" and t.ref_index not in result.shaky
+    ]
+    return {
+        "run_id": run_id,
+        "chart": f"/feedback/{name}",
+        "count": summary.count,
+        "skipped": [{"name": n, "drift": round(d, 1)} for n, d in result.skipped],
+        "accuracy": round(summary.accuracy.median * 100),
+        "speech": round(summary.speech_ratio.median, 2),
+        "pause": None if summary.pause_ratio is None
+                 else round(summary.pause_ratio.median, 2),
+        "problems": problems,
+        "issues": [
+            {"title": i.advice.title, "detail": i.advice.detail,
+             "action": i.advice.action, "hits": i.hits, "total": i.total}
+            for i in summary.issues[:MAX_ADVICE]
+        ],
+        "good": list(review_mod.good_words(result))[:12],
+    }
+
+
+def _store_takes(connection, run_id: int, result) -> None:
+    for take in result.takes:
+        connection_metrics = {
+            "accuracy": _accuracy(take.tokens),
+            "speech_ratio": take.rhythm.speech_ratio,
+            "pause_ratio": take.rhythm.pause_ratio,
+            "issues": [{"kind": a.kind, "ref_index": a.ref_index,
+                        "score": a.score, "title": a.title} for a in take.advice],
+        }
+        db.add_attempt(connection, run_id=run_id, audio_path=str(take.path),
+                       asr_text=" ".join(w.text for w in take.words),
+                       metrics=connection_metrics)

@@ -50,9 +50,16 @@
 
   <section class="step locked" id="step-record">
     <h2><span class="n">3</span> 跟读</h2>
-    <p class="hint">每遍录音前会自动放几次原声——听和说之间不能有间隔。</p>
-    <p class="todo">这一步还没做完，先用命令行：
-      <code>uv run shadow record --segment {{ segment }} --unit {{ unit }} --listen 4</code></p>
+    <p class="hint">每遍录音前会自动放几次原声——听和说之间不能有间隔。
+      听完嘀一声就开始说，说完点「说完了」。</p>
+    <div class="row">
+      <label class="repeat">录 <input type="number" id="takes" value="3" min="1" max="6"> 遍</label>
+      <label class="repeat">每遍前听 <input type="number" id="prelisten" value="4" min="0" max="20"> 次</label>
+      <button class="primary" id="start-record">开始</button>
+    </div>
+    <p class="status" id="rec-status"></p>
+    <button id="stop-take" hidden>说完了</button>
+    <div class="result" id="rec-result" hidden></div>
   </section>
 
 </div>

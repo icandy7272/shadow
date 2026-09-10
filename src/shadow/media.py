@@ -141,6 +141,25 @@ def record(
     return dest
 
 
+def convert_upload(data: bytes, dest: Path) -> Path:
+    """浏览器录的是 webm/opus 或 mp4，统一转成 16k 单声道 wav。"""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    raw = dest.with_suffix(".upload")
+    raw.write_bytes(data)
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(raw),
+             "-ar", str(config.SAMPLE_RATE), "-ac", "1",
+             "-c:a", "pcm_s16le", str(dest)],
+            capture_output=True, text=True, timeout=120,
+        )
+    finally:
+        raw.unlink(missing_ok=True)
+    if proc.returncode != 0 or not dest.exists():
+        raise AudioError(f"录音转码失败：\n{proc.stderr.strip()}")
+    return dest
+
+
 # --- 播放 -------------------------------------------------------------------
 
 PLAYERS = (("afplay",), ("ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"))

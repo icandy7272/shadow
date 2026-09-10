@@ -79,3 +79,16 @@ button.stop { border-color: var(--warn); color: var(--warn); }
 button:disabled { opacity: .5; cursor: default; }
 
 .broken { color: var(--warn); font-size: 13px; opacity: .7; }
+
+.status { color: var(--muted); font-size: 14px; min-height: 1.4em; margin: 8px 0; }
+.status.live { color: var(--warn); font-weight: 500; }
+#stop-take { border-color: var(--warn); color: var(--warn); font-size: 16px;
+  padding: 10px 22px; }
+.result img { width: 100%; border: 1px solid var(--line); border-radius: 8px;
+  margin-top: 14px; }
+.result .metrics { display: flex; gap: 18px; flex-wrap: wrap; margin: 6px 0 12px;
+  font-variant-numeric: tabular-nums; }
+.result .issue { border-left: 3px solid var(--warn); padding: 4px 0 4px 12px;
+  margin: 10px 0; }
+.result .issue b { font-weight: 600; }
+.result .issue span { color: var(--muted); display: block; font-size: 13px; }

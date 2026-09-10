@@ -10,7 +10,7 @@ from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
 
-from . import config, db, media
+from . import config, db, media, review
 from .analysis.diff import accuracy as diff_accuracy
 from .analysis.diff import diff_words, matched_pairs, unreliable_indices
 from .analysis.prosody import analyse, word_contour
@@ -184,74 +184,25 @@ def _reference_for(connection, args):
 
 def _compare(connection, *, ref_path, ref_words, paths, out_path,
              segment_id=None, unit_index=None, args=None, run_id=None) -> int:
-    ref_prosody = analyse(ref_path)
-    # 交叉验证：库内文本来自长上下文转写，可能把缩读还原成完整形式，
-    # 与音频对不上。这些词不能用来判用户对错。
-    shaky = unreliable_indices(
-        [w.text for w in ref_words],
-        [w.text for w in transcribe_words(ref_path)],
-    )
-    metrics: list[TakeMetrics] = []
-    details = []
-    skipped: list[tuple[str, float]] = []
-    for path in paths:
-        usr_words = transcribe_words(path)
-        tokens = diff_words([w.text for w in ref_words], [w.text for w in usr_words])
-        rhythm = analyse_rhythm(ref_words, usr_words, matched_pairs(tokens))
-        usr_prosody = analyse(path)
-
-        drift = alignment_drift(usr_words, usr_prosody)
-        if drift is not None and drift > config.ALIGNMENT_TOLERANCE_SEC:
-            # 时间戳整体错位，这一遍的每项测量都取自错误的音频位置
-            skipped.append((path.name, drift))
-            continue
-
-        advice = build_advice(
-            ref_words=ref_words, usr_words=usr_words, tokens=tokens,
-            rhythm=rhythm, ref_prosody=ref_prosody, usr_prosody=usr_prosody,
-        )
-        metrics.append(TakeMetrics(
-            accuracy=diff_accuracy(tokens), speech_ratio=rhythm.speech_ratio,
-            pause_ratio=rhythm.pause_ratio, advice=advice,
-        ))
-        details.append((path, usr_words, tokens, rhythm, usr_prosody, advice))
-
-    if skipped:
-        for name, drift in skipped:
-            print(f"⚠ 跳过 {name}：转写时间戳偏离实际发声 {drift:.1f} 秒，"
-                  f"该遍的测量不可信。", file=sys.stderr)
-    if not metrics:
+    result = review.evaluate(ref_path, ref_words, paths,
+                             transcribe=transcribe_words)
+    for name, drift in (result.skipped if result else ()):
+        print(f"⚠ 跳过 {name}：转写时间戳偏离实际发声 {drift:.1f} 秒，"
+              f"该遍的测量不可信。", file=sys.stderr)
+    if result is None:
         print("所有录音的时间戳都对不上，无法比对。换个更安静的环境重录试试。",
               file=sys.stderr)
         return 1
 
-    summary = summarise(metrics)
-    _, usr_words, tokens, rhythm, usr_prosody, advice = details[summary.representative]
-
-    flags = tuple(
-        Flag(usr_index=usr_index, text=item.flag)
-        for item, usr_index in _flag_targets(advice, ref_words, tokens)
-        if item.kind not in PAUSE_KINDS
-    )
-    pause_notes = tuple(
-        PauseNote(ref_index=item.ref_index, usr_index=item.usr_index,
-                  kind=item.kind, flag=item.flag)
-        for item in advice[:MAX_ADVICE] if item.kind in PAUSE_KINDS
-    )
-    render_feedback(
-        ref_words=ref_words, usr_words=usr_words, tokens=tokens, rhythm=rhythm,
-        ref_prosody=ref_prosody, usr_prosody=usr_prosody, flags=flags,
-        pause_notes=pause_notes, accuracy=diff_accuracy(tokens),
-        text=" ".join(w.text for w in ref_words), out_path=out_path,
-    )
-
+    review.chart(result, out_path, MAX_ADVICE)
     if segment_id is not None:
-        _save_run(connection, segment_id, unit_index, details, metrics,
+        _save_run(connection, segment_id, unit_index, result,
                   unit_text=" ".join(w.text for w in ref_words), run_id=run_id)
 
-    _print_summary(summary, paths, tokens, out_path, shaky=shaky)
+    _print_summary(result.summary, paths, result.best.tokens, out_path,
+                   shaky=result.shaky, good=review.good_words(result))
     if args is not None:
-        _suggest_after_compare(connection, args, summary)
+        _suggest_after_compare(connection, args, result.summary)
     return 0
 
 
@@ -277,7 +228,7 @@ def _suggest_after_compare(connection, args, summary) -> None:
     print(f"  uv run shadow listen --segment {args.segment} --unit {following}")
 
 
-def _save_run(connection, segment_id, unit_index, details, metrics,
+def _save_run(connection, segment_id, unit_index, result,
               unit_text=None, run_id=None) -> None:
     """把这一轮存进库，进度才能跨会话累积。
 
@@ -287,23 +238,64 @@ def _save_run(connection, segment_id, unit_index, details, metrics,
     if own:
         run_id = db.start_run(connection, segment_id=segment_id,
                               unit_index=unit_index, unit_text=unit_text)
-    for (path, usr_words, _, _, _, advice), take in zip(details, metrics):
+    for take in result.takes:
         db.add_attempt(
-            connection, run_id=run_id, audio_path=str(path),
-            asr_text=" ".join(w.text for w in usr_words),
+            connection, run_id=run_id, audio_path=str(take.path),
+            asr_text=" ".join(w.text for w in take.words),
             metrics={
-                "accuracy": take.accuracy,
-                "speech_ratio": take.speech_ratio,
-                "pause_ratio": take.pause_ratio,
+                "accuracy": diff_accuracy(take.tokens),
+                "speech_ratio": take.rhythm.speech_ratio,
+                "pause_ratio": take.rhythm.pause_ratio,
                 "issues": [
                     {"kind": a.kind, "ref_index": a.ref_index,
                      "score": a.score, "title": a.title}
-                    for a in advice
+                    for a in take.advice
                 ],
             },
         )
     if own:
         db.finish_run(connection, run_id)
+
+
+BLIND_SCALE = (
+    "1  几乎没听懂",
+    "2  抓到几个词",
+    "3  大意懂了，细节丢了",
+    "4  基本都懂，个别词没抓住",
+    "5  每个词都听清了",
+)
+
+
+def _ask_blind_rating() -> int | None:
+    print("\n听懂了多少？")
+    for line in BLIND_SCALE:
+        print(f"    {line}")
+    while True:
+        try:
+            answer = input("  输入 1-5（直接回车跳过）：").strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        if not answer:
+            return None
+        if answer in "12345" and len(answer) == 1:
+            return int(answer)
+        print("  只接受 1 到 5。")
+
+
+def _play_times(ref_path, times: int, label: str = "听") -> None:
+    if times <= 0:
+        return
+    try:
+        for index in range(1, times + 1):
+            print(f"  {label} {index}/{times}", end="\r", flush=True)
+            media.play(ref_path, times=1, gap=0.0)
+            if index < times:
+                time.sleep(0.5)
+        print("               ", end="\r")
+    except KeyboardInterrupt:
+        print("\n  停了。")
+    except Exception as exc:
+        print(f"\n  播放失败：{exc}", file=sys.stderr)
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
@@ -370,6 +362,299 @@ def _play_times(ref_path, times: int, label: str = "听") -> None:
         print("\n  停了。")
     except Exception as exc:
         print(f"\n  播放失败：{exc}", file=sys.stderr)
+
+
+def _run_gapfill(ref_path, ref_words, times: int):
+    """精听填空的核心。返回 (答对, 总数, 听出来的, 重听次数)，没有空则 None。"""
+    shaky = unreliable_indices(
+        [w.text for w in ref_words],
+        [w.text for w in transcribe_words(ref_path)],
+    )
+    blanks = tuple(b for b in blanks_of(ref_words) if b.word_index not in shaky)
+    if not blanks:
+        print("这一句没有挖空位（没有被弱读的功能词）。换一句试试。")
+        return None
+
+    print(f"精听填空 · {len(ref_words)} 个词，{len(blanks)} 个空")
+    print("先听几遍，再逐个填。听不清就输入 ?? 重听。")
+    print("听出来的直接写；靠上下文猜的，在词后加个问号（如 up?）——"
+          "功能词太好猜了，不分开就测不出听力。\n")
+    _play_times(ref_path, times)
+    print(f"{render(ref_words)}\n")
+
+    answers = []
+    replays: list[int] = []
+    for blank in blanks:
+        used = 0
+        prompt = f"  {blank.number}. …{blank.left} [____] {blank.right}…  "
+        while True:
+            # 中断向上抛，由调用方决定怎么收尾（practice 需要先把记录收掉）
+            guess = input(prompt).strip()
+            if guess == "??":
+                used += 1
+                _play_times(ref_path, 1, label="重听")
+                continue
+            answers.append(parse_answer(guess))
+            replays.append(used)
+            break
+
+    correct, total, heard = tally(blanks, answers)
+    total_replays = sum(replays)
+    extra = f"，重听 {total_replays} 次" if total_replays else "，一遍过"
+    print(f"\n{correct}/{total} 对，其中 {heard} 个是听出来的{extra}\n")
+    for blank, response, used in zip(blanks, answers, replays):
+        if response.guess and blank.matches(response.guess):
+            mark = "✓" if response.heard else "○"
+            note = "" if response.heard else "   （靠上下文推的，不算听力）"
+            if response.heard and used:
+                note = f"   （重听 {used} 次才抓到）"
+            print(f"  {mark} {blank.answer}{note}")
+        else:
+            wrote = f"你填了 “{response.guess}”" if response.guess else "跳过了"
+            print(f"  ✗ {blank.answer:<10} {wrote}"
+                  f"   —— 原声只有 {blank.duration * 1000:.0f} 毫秒，被吞掉了")
+    print(f"\n原文：{' '.join(w.text for w in ref_words)}")
+
+    print(f"\n原文：{' '.join(w.text for w in ref_words)}")
+    return correct, total, heard, total_replays
+
+
+def _run_blind_listen(ref_path, ref_words, times: int, gap: float):
+    """盲听的核心。返回自评分数或 None。"""
+    print(f"盲听 · {len(ref_words)} 个词 · 放 {times} 遍")
+    print("不看文字，就听。\n")
+    try:
+        for index in range(1, times + 1):
+            print(f"  {index}/{times}", end="\r", flush=True)
+            media.play(ref_path, times=1, gap=0.0)
+            if index < times:
+                time.sleep(gap)
+        print("             ")
+    except KeyboardInterrupt:
+        print("\n停了。")
+    except Exception as exc:
+        print(f"\n播放失败：{exc}", file=sys.stderr)
+        return 1
+
+    return _ask_blind_rating()
+
+
+def _reveal(ref_words) -> None:
+    """只揭晓挖空版：给「原来是这句」的反馈，但把被弱读的词继续藏着，
+    否则紧接着的填空直接知道答案。"""
+    blanks = blanks_of(ref_words)
+    print("\n原文：")
+    print(f"  {render(ref_words)}\n")
+    if blanks:
+        print(f"（{len(blanks)} 个被弱读的词还藏着）")
+
+
+def _record_takes(args, ref_path, ref_words, seconds: float):
+    """录若干遍，返回文件路径列表；任一遍不可用则返回 None。"""
+    stamp = datetime.now().strftime("%m%d-%H%M%S")
+    label = f"{args.segment}" if args.segment is not None else "ref"
+    if args.unit is not None:
+        label += f"-u{args.unit}"
+    paths: list[Path] = []
+    for index in range(1, args.takes + 1):
+        try:
+            input(f"第 {index}/{args.takes} 遍 —— 按回车"
+                  + ("（先听，再录）" if args.listen else "开始录"))
+        except (EOFError, KeyboardInterrupt):
+            print("\n已取消。", file=sys.stderr)
+            return None
+        _listen_before_take(ref_path, args.listen)
+        dest = config.attempt_audio_dir() / f"{label}-{stamp}-{index}.wav"
+        print("  嘀一声之后开始说 …", end="", flush=True)
+        media.beep()
+        print("\r  录音中——说完敲回车结束      ", end="", flush=True)
+        try:
+            media.record(dest, seconds=seconds, device=args.device)
+            media.validate_attempt(dest)
+        except Exception as exc:
+            print(f"\n  第 {index} 遍不可用：{exc}", file=sys.stderr)
+            return None
+        print(f"\r  录好了 → {dest.name}          ")
+        paths.append(dest)
+    return paths
+
+
+def cmd_drill(args: argparse.Namespace) -> int:
+    connection = _open_db()
+    try:
+        ref_path, ref_words = _reference_for(connection, args)
+    except Exception as exc:
+        print(f"读取原声失败：{exc}", file=sys.stderr)
+        return 1
+    try:
+        result = _run_gapfill(ref_path, ref_words, args.times)
+    except (EOFError, KeyboardInterrupt):
+        print("\n已取消。", file=sys.stderr)
+        return 1
+    if result is None:
+        return 0
+    correct, total, heard, replays = result
+    if args.segment is not None:
+        run_id = db.start_run(connection, segment_id=args.segment,
+                              unit_index=args.unit,
+                              unit_text=" ".join(w.text for w in ref_words))
+        db.set_gapfill(connection, run_id, correct, total, heard, replays)
+        db.finish_run(connection, run_id)
+        print("\n记下了。")
+    else:
+        print("\n（用 --segment 才能存进进度）")
+    _next_step(args, "record --listen 4", "跟读录三遍，每遍前会自动放 4 次原声")
+    return 0
+
+
+def cmd_listen(args: argparse.Namespace) -> int:
+    connection = _open_db()
+    try:
+        ref_path, ref_words = _reference_for(connection, args)
+    except Exception as exc:
+        print(f"读取原声失败：{exc}", file=sys.stderr)
+        return 1
+    rating = _run_blind_listen(ref_path, ref_words, args.times, args.gap)
+    _reveal(ref_words)
+    if rating is None:
+        print("没记分数。")
+    elif args.segment is not None:
+        run_id = db.start_run(connection, segment_id=args.segment,
+                              unit_index=args.unit,
+                              unit_text=" ".join(w.text for w in ref_words))
+        db.set_blind_rating(connection, run_id, rating)
+        db.finish_run(connection, run_id)
+        print(f"记下了：{rating} 分。")
+    else:
+        print(f"记下了：{rating} 分（用 --segment 才能存进进度）")
+    _next_step(args, "drill", "精听填空，把藏着的功能词听出来")
+    return 0
+
+
+def cmd_practice(args: argparse.Namespace) -> int:
+    """一条命令走完四步闭环，并记成同一条练习记录。
+
+    摩擦是习惯的头号杀手，而这套东西要靠每天跑才有意义。
+    """
+    connection = _open_db()
+    try:
+        ref_path, ref_words = _reference_for(connection, args)
+    except Exception as exc:
+        print(f"读取原声失败：{exc}", file=sys.stderr)
+        return 1
+    if not ref_words:
+        print("原声转写为空，无法练习。", file=sys.stderr)
+        return 1
+
+    text = " ".join(w.text for w in ref_words)
+    run_id = None
+    if args.segment is not None:
+        run_id = db.start_run(connection, segment_id=args.segment,
+                              unit_index=args.unit, unit_text=text)
+
+    print("━━ 1/3 盲听 ━━ 不看文字，就听\n")
+    rating = _run_blind_listen(ref_path, ref_words, args.times, args.gap)
+    _reveal(ref_words)
+    if rating is None:
+        print("没记分数。")
+    else:
+        print(f"记下了：{rating} 分。")
+        if run_id is not None:
+            db.set_blind_rating(connection, run_id, rating)
+
+    print("\n━━ 2/3 精听填空 ━━\n")
+    try:
+        filled = _run_gapfill(ref_path, ref_words, args.times)
+    except (EOFError, KeyboardInterrupt):
+        print("\n已取消。", file=sys.stderr)
+        if run_id is not None:
+            db.finish_run(connection, run_id)
+            db.discard_if_empty(connection, run_id)
+        return 1
+    if filled is not None and run_id is not None:
+        db.set_gapfill(connection, run_id, *filled)
+
+    print("\n━━ 3/3 跟读 ━━\n")
+    span = ref_words[-1].end - ref_words[0].start
+    seconds = args.seconds or min(span * 2.5 + 4.0, 120.0)
+    devices = media.list_input_devices()
+    if devices:
+        current = dict(devices).get(args.device, "?")
+        print(f"麦克风 [{args.device}] {current}（换设备加 --device N）")
+    print(f"共 {args.takes} 遍，每遍前先放 {args.listen} 次原声。"
+          f"说完敲回车即可结束。\n")
+
+    paths = _record_takes(args, ref_path, ref_words, seconds)
+    if paths is None:
+        if run_id is not None:
+            db.finish_run(connection, run_id)
+            db.discard_if_empty(connection, run_id)
+        return 1
+
+    print()
+    try:
+        code = _compare(
+            connection, ref_path=ref_path, ref_words=ref_words, paths=paths,
+            out_path=Path(args.out or "feedback.png"),
+            segment_id=args.segment, unit_index=args.unit, args=args, run_id=run_id,
+        )
+    except Exception as exc:
+        print(f"比对失败：{exc}", file=sys.stderr)
+        code = 1
+    if run_id is not None:
+        db.finish_run(connection, run_id)
+        db.discard_if_empty(connection, run_id)
+    return code
+
+
+def cmd_play(args: argparse.Namespace) -> int:
+    connection = _open_db()
+    try:
+        ref_path, ref_words = _reference_for(connection, args)
+    except Exception as exc:
+        print(f"读取原声失败：{exc}", file=sys.stderr)
+        return 1
+    if args.text:
+        print(" ".join(w.text for w in ref_words))
+    else:
+        print(f"（{len(ref_words)} 个词，不显示原文——想看加 --text）")
+    print(f"\n放 {args.times} 遍（Ctrl+C 停）\n")
+    try:
+        for index in range(1, args.times + 1):
+            print(f"  {index}/{args.times}", end="\r", flush=True)
+            media.play(ref_path, times=1, gap=0.0)
+            if index < args.times:
+                time.sleep(args.gap)
+    except KeyboardInterrupt:
+        print("\n停了。")
+        return 0
+    except Exception as exc:
+        print(f"\n播放失败：{exc}", file=sys.stderr)
+        return 1
+    print(f"  放完 {args.times} 遍。")
+    return 0
+
+
+def _listen_before_take(ref_path, times: int) -> None:
+    """每遍录音前都重放原声。
+
+    实测声学记忆衰减极快：某轮第一遍（紧接试听之后）句尾降幅 −5.3，
+    接近原声的 −5.8；第二、三遍掉到 −1.1 和 −1.9。整轮只在开头听一次，
+    等于只有第一遍是在模仿，后面几遍是在背诵。
+    """
+    if times <= 0:
+        return
+    try:
+        for index in range(1, times + 1):
+            print(f"  听 {index}/{times}", end="\r", flush=True)
+            media.play(ref_path, times=1, gap=0.0)
+            if index < times:
+                time.sleep(0.5)
+        print("            ", end="\r")
+    except KeyboardInterrupt:
+        print("\n  跳过试听。")
+    except Exception as exc:
+        print(f"\n  播放失败（不影响录音）：{exc}", file=sys.stderr)
 
 
 def _run_gapfill(ref_path, ref_words, times: int):
@@ -834,7 +1119,8 @@ def _band(spread, unit: str = "x") -> str:
     return f"{spread.median:.2f}{unit}（{spread.low:.2f}–{spread.high:.2f}）"
 
 
-def _print_summary(summary: TakeSummary, paths, tokens, out_path, shaky=frozenset()) -> None:
+def _print_summary(summary: TakeSummary, paths, tokens, out_path,
+                   shaky=frozenset(), good=()) -> None:
     if summary.count > 1:
         print(f"\n{summary.count} 次录音，取中位数（括号内是范围）")
     accuracy = summary.accuracy

@@ -157,3 +157,78 @@ def test_practice_page_offers_repeat_playback(client, tmp_path):
     body = client.get(f"/practice/{segment_id}/2").text
     assert 'class="times" value="10"' in body      # 盲听默认连播 10 遍
     assert body.count('button class="stop"') == 2  # 每个播放控件都能中途停
+
+
+def _wav_bytes(seconds=2.0):
+    import io
+
+    import numpy as np
+    import soundfile as sf
+
+    t = np.arange(int(seconds * 16000)) / 16000
+    buffer = io.BytesIO()
+    sf.write(buffer, (0.4 * np.sin(2 * np.pi * 200 * t)).astype("float32"),
+             16000, format="WAV")
+    return buffer.getvalue()
+
+
+def test_takes_endpoint_runs_the_whole_review(client, tmp_path, monkeypatch):
+    from shadow import review
+    from shadow.models import Word
+
+    segment_id = _seed(tmp_path)
+    fake = lambda path: tuple(                                    # noqa: E731
+        Word(text=t, start=a, end=a + d)
+        for t, a, d in (("It", 0.0, 0.3), ("was", 0.4, 0.1),
+                        ("a", 0.5, 0.1), ("start.", 0.7, 0.4))
+    )
+    monkeypatch.setattr(review, "transcribe_words", fake)
+
+    response = client.post(
+        "/api/takes",
+        data={"segment": segment_id, "unit": 2},
+        files=[("files", ("a.wav", _wav_bytes(), "audio/wav")),
+               ("files", ("b.wav", _wav_bytes(), "audio/wav"))],
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["count"] == 2
+    assert data["accuracy"] == 100
+    assert data["chart"].startswith("/feedback/")
+    assert client.get(data["chart"]).status_code == 200
+
+    connection = db.connect()
+    row = db.list_runs(connection, segment_id=segment_id)[0]
+    assert len(db.run_metrics(connection, row["id"])) == 2
+    connection.close()
+
+
+def test_takes_rejects_a_silent_recording(client, tmp_path):
+    import io
+
+    import numpy as np
+    import soundfile as sf
+
+    segment_id = _seed(tmp_path)
+    buffer = io.BytesIO()
+    sf.write(buffer, np.zeros(32000, dtype="float32"), 16000, format="WAV")
+    response = client.post(
+        "/api/takes",
+        data={"segment": segment_id, "unit": 2},
+        files=[("files", ("silent.wav", buffer.getvalue(), "audio/wav"))],
+    )
+    assert response.status_code == 400
+    assert "静音" in response.json()["detail"]
+
+
+def test_feedback_route_refuses_paths_outside_its_folder(client, tmp_path):
+    _seed(tmp_path)
+    assert client.get("/feedback/..%2F..%2Fshadow.db").status_code == 404
+
+
+def test_practice_page_has_the_recording_controls(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    body = client.get(f"/practice/{segment_id}/2").text
+    assert 'id="start-record"' in body
+    assert 'id="stop-take"' in body
+    assert 'id="prelisten"' in body

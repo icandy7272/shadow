@@ -117,3 +117,117 @@ if (root) {
     document.getElementById("step-record").classList.remove("locked");
   });
 }
+
+// ---------- 第三步：浏览器录音 ----------
+if (root) {
+  const segment = root.dataset.segment;
+  const unit = root.dataset.unit;
+  const status = document.getElementById("rec-status");
+  const stopButton = document.getElementById("stop-take");
+  const startButton = document.getElementById("start-record");
+  const src = `/audio/${segment}/${unit}`;
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  const playOnce = () => new Promise((resolve) => {
+    const audio = new Audio(src);
+    audio.addEventListener("ended", resolve, { once: true });
+    audio.addEventListener("error", resolve, { once: true });
+    audio.play();
+  });
+
+  // 嘀一声：戴着耳机时看不见屏幕，必须用声音提示开录
+  const beep = async () => {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.14);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+    await sleep(220);
+    ctx.close();
+  };
+
+  const recordOne = (stream) => new Promise((resolve) => {
+    const chunks = [];
+    const recorder = new MediaRecorder(stream);
+    recorder.addEventListener("dataavailable", (e) => chunks.push(e.data));
+    recorder.addEventListener("stop", () => resolve(new Blob(chunks)));
+    stopButton.hidden = false;
+    stopButton.onclick = () => { stopButton.hidden = true; recorder.stop(); };
+    recorder.start();
+  });
+
+  startButton?.addEventListener("click", async () => {
+    const takes = Math.max(1, Number(document.getElementById("takes").value) || 1);
+    const pre = Math.max(0, Number(document.getElementById("prelisten").value) || 0);
+    startButton.disabled = true;
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      status.textContent = "拿不到麦克风权限。浏览器地址栏左侧可以重新允许。";
+      startButton.disabled = false;
+      return;
+    }
+
+    const blobs = [];
+    for (let take = 1; take <= takes; take += 1) {
+      status.classList.remove("live");
+      for (let i = 1; i <= pre; i += 1) {
+        status.textContent = `第 ${take}/${takes} 遍 —— 先听 ${i}/${pre}`;
+        await playOnce();
+        await sleep(400);
+      }
+      status.textContent = `第 ${take}/${takes} 遍 —— 嘀一声之后开始说`;
+      await beep();
+      status.textContent = `第 ${take}/${takes} 遍 —— 录音中，说完点「说完了」`;
+      status.classList.add("live");
+      blobs.push(await recordOne(stream));
+    }
+    stream.getTracks().forEach((t) => t.stop());
+    status.classList.remove("live");
+    status.textContent = "正在转写和比对，大约十几秒 …";
+
+    const body = new FormData();
+    body.append("segment", segment);
+    body.append("unit", unit);
+    blobs.forEach((blob, i) => body.append("files", blob, `take${i + 1}.webm`));
+    const response = await fetch("/api/takes", { method: "POST", body });
+    startButton.disabled = false;
+    const box = document.getElementById("rec-result");
+    box.hidden = false;
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      status.textContent = "";
+      box.innerHTML = `<p class="bad">${detail.detail || "比对失败"}</p>`;
+      return;
+    }
+    const data = await response.json();
+    status.textContent = "";
+    box.innerHTML =
+      `<div class="metrics"><span>可懂度 <b>${data.accuracy}%</b></span>` +
+      `<span>发声 <b>${data.speech}x</b></span>` +
+      `<span>停顿 <b>${data.pause === null ? "—" : data.pause + "x"}</b></span>` +
+      `<span>${data.count} 遍</span></div>` +
+      data.skipped.map((s) =>
+        `<p class="bad">跳过 ${s.name}：时间戳偏离 ${s.drift} 秒，该遍不可信</p>`).join("") +
+      (data.problems.length
+        ? "<p>机器没听对的词：" + data.problems.map((p) =>
+            p.kind === "missing" ? `漏 ${p.ref}`
+            : p.kind === "wrong" ? `${p.ref}→听成 ${p.usr}` : `多 ${p.usr}`
+          ).join("、") + "</p>"
+        : "<p class='ok'>发音层面没问题——每个词机器都听出来了。</p>") +
+      (data.issues.length
+        ? "<p><b>下一遍改这些：</b></p>" + data.issues.map((i) =>
+            `<div class="issue"><b>${i.title}</b>（${i.hits}/${i.total} 次）` +
+            `<span>${i.detail}</span><span>${i.action}</span></div>`).join("")
+        : "<p class='ok'>没有反复出现的问题。</p>") +
+      (data.good.length ? `<p class="guessed">做对了，保持：${data.good.join(" / ")}</p>` : "") +
+      `<img src="${data.chart}" alt="反馈图">`;
+  });
+}
