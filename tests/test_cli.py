@@ -499,3 +499,40 @@ def test_listen_does_not_reveal_the_words_drill_will_ask_for(monkeypatch, capsys
     assert "should" in out and "there" in out      # 非挖空词照常揭晓
     assert "____" in out                          # 挖空词继续藏着
     assert "shadow drill" in out
+
+
+def test_listen_prints_the_next_command(monkeypatch, capsys):
+    segment_id = _seed_with_blanks()
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: "3")
+    cli.main(["listen", "--segment", str(segment_id), "--unit", "1"])
+    out = capsys.readouterr().out
+    assert "下一步" in out
+    assert f"shadow drill --segment {segment_id} --unit 1" in out
+
+
+def test_drill_prints_the_next_command(monkeypatch, capsys):
+    segment_id = _seed_with_blanks()
+    answers = iter(["have", "been"])
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    cli.main(["drill", "--segment", str(segment_id), "--unit", "1"])
+    out = capsys.readouterr().out
+    assert f"shadow record --listen 4 --segment {segment_id} --unit 1" in out
+
+
+def test_compare_suggests_repeating_while_problems_remain(monkeypatch, tmp_path, capsys):
+    connection, segment_id = _seed_segment()
+    connection.close()
+    user = write_tone(tmp_path / "me.wav", seconds=3.0)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=i * 0.5, end=i * 0.5 + 0.4)
+        for i, t in enumerate(["should", "have", "been", "there"])
+    ))
+    cli.main(["compare", "--segment", str(segment_id), "--unit", "1",
+              "--user", str(user), "-o", str(tmp_path / "a.png")])
+    out = capsys.readouterr().out
+    # 只有一遍，样本不足，应当建议再来一轮而不是换句
+    assert "同一句再来一轮" in out

@@ -182,7 +182,7 @@ def _reference_for(connection, args):
 
 
 def _compare(connection, *, ref_path, ref_words, paths, out_path,
-             segment_id=None, unit_index=None) -> int:
+             segment_id=None, unit_index=None, args=None) -> int:
     ref_prosody = analyse(ref_path)
     metrics: list[TakeMetrics] = []
     details = []
@@ -243,7 +243,31 @@ def _compare(connection, *, ref_path, ref_words, paths, out_path,
                   unit_text=" ".join(w.text for w in ref_words))
 
     _print_summary(summary, paths, tokens, out_path)
+    if args is not None:
+        _suggest_after_compare(connection, args, summary)
     return 0
+
+
+def _suggest_after_compare(connection, args, summary) -> None:
+    """还有反复出现的问题就重练同一句，干净了才往下一句走。"""
+    if summary.issues or summary.count < 3:
+        _next_step(args, "record --listen 4", "同一句再来一轮")
+        return
+    if args.segment is None or args.unit is None:
+        print("\n这一句没有反复出现的问题了，可以换下一句。")
+        return
+    try:
+        _, _, units = _segment_units(connection, args.segment,
+                                     min_sec=args.min_sec, max_sec=args.max_sec)
+    except Exception:
+        return
+    if args.unit >= len(units):
+        print(f"\n这是最后一个单元了。换片段：uv run shadow list -s")
+        return
+    following = args.unit + 1
+    print(f"\n这一句干净了。下一句（{following}/{len(units)}）："
+          f"{' '.join(w.text for w in units[following - 1])}")
+    print(f"  uv run shadow listen --segment {args.segment} --unit {following}")
 
 
 def _save_run(connection, segment_id, unit_index, details, metrics,
@@ -287,7 +311,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
         return _compare(
             connection, ref_path=ref_path, ref_words=ref_words, paths=paths,
             out_path=Path(args.out or "feedback.png"),
-            segment_id=args.segment, unit_index=args.unit,
+            segment_id=args.segment, unit_index=args.unit, args=args,
         )
     except Exception as exc:
         print(f"比对失败：{exc}", file=sys.stderr)
@@ -384,14 +408,16 @@ def cmd_drill(args: argparse.Namespace) -> int:
                   f"   —— 原声只有 {blank.duration * 1000:.0f} 毫秒，被吞掉了")
     print(f"\n原文：{' '.join(w.text for w in ref_words)}")
 
-    if args.segment is None:
-        print(f"\n（用 --segment 才能存进进度）")
-        return 0
-    run_id = db.start_run(connection, segment_id=args.segment, unit_index=args.unit,
-                          unit_text=" ".join(w.text for w in ref_words))
-    db.set_gapfill(connection, run_id, correct, total)
-    db.finish_run(connection, run_id)
-    print(f"\n记下了。shadow progress 可以看填空正确率的走势。")
+    if args.segment is not None:
+        run_id = db.start_run(connection, segment_id=args.segment,
+                              unit_index=args.unit,
+                              unit_text=" ".join(w.text for w in ref_words))
+        db.set_gapfill(connection, run_id, correct, total)
+        db.finish_run(connection, run_id)
+        print("\n记下了。")
+    else:
+        print("\n（用 --segment 才能存进进度）")
+    _next_step(args, "record --listen 4", "跟读录三遍，每遍前会自动放 4 次原声")
     return 0
 
 
@@ -432,10 +458,11 @@ def cmd_listen(args: argparse.Namespace) -> int:
     print("\n原文：")
     print(f"  {render(ref_words)}\n")
     if blanks:
-        print(f"（{len(blanks)} 个被弱读的词还藏着——用 shadow drill 把它们听出来）\n")
+        print(f"（{len(blanks)} 个被弱读的词还藏着）")
 
     if rating is None:
         print("没记分数。")
+        _next_step(args, "drill", "精听填空，把藏着的功能词听出来")
         return 0
     if args.segment is None:
         print(f"记下了：{rating} 分（用 --segment 才能存进进度）")
@@ -444,7 +471,8 @@ def cmd_listen(args: argparse.Namespace) -> int:
                           unit_text=" ".join(w.text for w in ref_words))
     db.set_blind_rating(connection, run_id, rating)
     db.finish_run(connection, run_id)
-    print(f"记下了：{rating} 分。shadow progress 可以看这个分数的走势。")
+    print(f"记下了：{rating} 分。")
+    _next_step(args, "drill", "精听填空，把藏着的功能词听出来")
     return 0
 
 
@@ -554,11 +582,32 @@ def cmd_record(args: argparse.Namespace) -> int:
         return _compare(
             connection, ref_path=ref_path, ref_words=ref_words, paths=paths,
             out_path=Path(args.out or "feedback.png"),
-            segment_id=args.segment, unit_index=args.unit,
+            segment_id=args.segment, unit_index=args.unit, args=args,
         )
     except Exception as exc:
         print(f"比对失败：{exc}", file=sys.stderr)
         return 1
+
+
+def _target_args(args) -> str:
+    """把当前的 --segment/--ref/--unit 还原成命令行片段。"""
+    if getattr(args, "segment", None) is not None:
+        target = f"--segment {args.segment}"
+        if getattr(args, "unit", None) is not None:
+            target += f" --unit {args.unit}"
+    else:
+        target = f"--ref {args.ref}"
+    for name in ("min_sec", "max_sec"):
+        value = getattr(args, name, None)
+        if value is not None:
+            target += f" --{name.replace('_', '-')} {value:g}"
+    return target
+
+
+def _next_step(args, command: str, hint: str) -> None:
+    """把下一条命令直接打出来，省得每次去查。"""
+    print(f"\n下一步：{hint}")
+    print(f"  uv run shadow {command} {_target_args(args)}")
 
 
 def _local_time(stamp: str) -> str:
