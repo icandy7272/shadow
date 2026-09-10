@@ -59,6 +59,21 @@
       <label class="repeat">每遍前听 <input type="number" id="prelisten" value="4" min="0" max="20"> 次</label>
       <button class="primary" id="start-record">开始</button>
     </div>
+    {% if history %}
+    <div class="history">
+      <div class="history-head">
+        <b>上次（{{ history.when }}，这句练过 {{ history.times }} 次）</b>
+        <label class="reveal"><input type="checkbox" id="history-off"> 先不看</label>
+      </div>
+      {% if history.issues %}
+      <ul id="history-list">
+        {% for issue in history.issues %}<li>{{ issue }}</li>{% endfor %}
+      </ul>
+      {% else %}
+      <p id="history-list" class="ok">上次没有反复出现的问题。</p>
+      {% endif %}
+    </div>
+    {% endif %}
     <p class="status" id="rec-status"></p>
     <div class="bar" id="rec-progress" hidden><i></i></div>
     <button id="stop-take" hidden>说完了</button>

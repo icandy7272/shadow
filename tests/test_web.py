@@ -47,6 +47,26 @@ def test_index_lists_units(client, tmp_path):
     assert f"/practice/{segment_id}/2" in body
 
 
+def test_static_urls_carry_a_version_that_follows_the_files(client, tmp_path):
+    """改了 js 而浏览器还跑缓存里的旧版，页面看着正常、行为却是上一版的。"""
+    import os
+    import re
+
+    _seed(tmp_path)
+    from shadow.web.app import HERE
+
+    stamp = re.findall(r"app\.js\?v=(\d+)", client.get("/").text)
+    assert stamp and stamp[0] != "0"
+
+    target = HERE / "static" / "app.js"
+    os.utime(target, (int(stamp[0]) + 100, int(stamp[0]) + 100))
+    try:
+        again = re.findall(r"app\.js\?v=(\d+)", client.get("/").text)
+        assert again[0] != stamp[0]
+    finally:
+        os.utime(target, (int(stamp[0]), int(stamp[0])))
+
+
 def test_index_is_helpful_when_empty(client):
     assert "还没有导入素材" in client.get("/").text
 
@@ -70,6 +90,39 @@ def test_practice_page_links_to_the_neighbouring_units(client, tmp_path):
     assert f'href="/practice/{segment_id}/1"' in body
     # 只有两句，最后一句不该有下一句
     assert f'href="/practice/{segment_id}/3"' not in body
+
+
+def _finished_run(segment_id, unit, titles):
+    connection = db.connect()
+    run_id = db.start_run(connection, segment_id=segment_id, unit_index=unit,
+                          unit_text="It was a start.")
+    for _ in range(2):
+        db.add_attempt(
+            connection, run_id=run_id, audio_path="x.wav", asr_text="It was a start.",
+            metrics={"accuracy": 1.0, "speech_ratio": 1.1, "pause_ratio": None,
+                     "issues": [{"kind": "stretched", "ref_index": 0, "score": 1.0,
+                                 "title": t} for t in titles]},
+        )
+    db.finish_run(connection, run_id)
+    connection.close()
+
+
+def test_last_time_is_shown_inside_the_shadowing_step(client, tmp_path):
+    """记录里带着句子原文的片段，提前露出来盲听和填空就废了。"""
+    segment_id = _seed(tmp_path)
+    _finished_run(segment_id, 2, ["“was” 该降没降"])
+
+    body = client.get(f"/practice/{segment_id}/2").text
+
+    assert "“was” 该降没降" in body
+    assert body.index('id="step-record"') < body.index('class="history"')
+    # 指标不进来：开口前看见分数会让人去够数字
+    assert "可懂度" not in body
+
+
+def test_a_fresh_sentence_has_no_last_time_block(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    assert 'class="history"' not in client.get(f"/practice/{segment_id}/2").text
 
 
 def test_unknown_unit_is_a_404(client, tmp_path):

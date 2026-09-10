@@ -62,6 +62,15 @@ def _spread(values: Sequence[float]) -> Spread:
     return Spread(median=statistics.median(values), low=min(values), high=max(values))
 
 
+def recurrence_threshold(total: int, *, min_share: float = 0.5) -> int:
+    """犯几次才算「反复出现」。
+
+    两遍时「半数以上」等于「出现过一次」，没有任何过滤作用。只有一遍时无从判断
+    一致性，只能全报；两遍及以上至少要犯两次才算数。
+    """
+    return 1 if total == 1 else max(2, math.ceil(total * min_share))
+
+
 def summarise(takes: Sequence[TakeMetrics], *, min_share: float = 0.5) -> TakeSummary:
     if not takes:
         raise ValueError("至少需要一次录音。")
@@ -81,9 +90,7 @@ def summarise(takes: Sequence[TakeMetrics], *, min_share: float = 0.5) -> TakeSu
             seen.add(key)
             grouped.setdefault(key, []).append(item)
 
-    # 两遍时「半数以上」等于「出现过一次」，没有任何过滤作用。
-    # 只有一遍时无从判断一致性，只能全报；两遍及以上至少要犯两次才算数。
-    threshold = 1 if total == 1 else max(2, math.ceil(total * min_share))
+    threshold = recurrence_threshold(total, min_share=min_share)
     issues = [
         ConsistentIssue(
             hits=len(items),

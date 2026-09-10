@@ -121,6 +121,22 @@ if (root) {
   });
 }
 
+// ---------- 上次要改的：可以关掉 ----------
+const historyBox = document.querySelector(".history");
+if (historyBox) {
+  const toggle = document.getElementById("history-off");
+  const KEY = "shadow:history-off";
+  let off = false;
+  try { off = localStorage.getItem(KEY) === "1"; } catch (err) { off = false; }
+  toggle.checked = off;
+  historyBox.classList.toggle("off", off);
+  toggle.addEventListener("change", () => {
+    historyBox.classList.toggle("off", toggle.checked);
+    // 隐私模式下写不了，忽略即可——关掉只是个方便，不是要紧状态
+    try { localStorage.setItem(KEY, toggle.checked ? "1" : "0"); } catch (err) { /* 无所谓 */ }
+  });
+}
+
 // 服务端一行一个 JSON：带 done/total/label 的是进度，带 result 或 error 的是终局。
 async function readEvents(response, onProgress) {
   const reader = response.body.getReader();

@@ -21,7 +21,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .. import config, db, media
+from .. import config, db, history, media
 from ..analysis.diff import accuracy as _accuracy
 from ..drill.gapfill import blanks_of
 from ..drill.units import is_usable, split_into_units
@@ -31,6 +31,19 @@ from .view import feedback_view
 log = logging.getLogger(__name__)
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=str(HERE / "templates"))
+
+def _asset_version() -> str:
+    """静态文件的最新修改时间。
+
+    改了 js/css 而浏览器还跑着缓存里的旧版，是最难察觉的一类问题——
+    页面看着正常，行为却是上一版的。挂在 URL 上，改了就自动失效。
+    """
+    stamps = [item.stat().st_mtime for item in (HERE / "static").iterdir()
+              if item.is_file()]
+    return str(int(max(stamps))) if stamps else "0"
+
+
+templates.env.globals["assets"] = _asset_version
 
 app = FastAPI(title="Shadow")
 app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
@@ -141,6 +154,8 @@ def practice(request: Request, segment_id: int, unit: int):
             "blanks": blanks_of(words),
             "seconds": round(words[-1].end - words[0].start, 1),
             "min_take_sec": config.MIN_ATTEMPT_SEC,
+            # 只传给第三步。里面带着句子原文的片段，提前露出来盲听就废了。
+            "history": history.last_practice(connection, segment_id, unit),
         },
     )
 

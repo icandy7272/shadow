@@ -190,3 +190,14 @@ button:disabled { opacity: .5; cursor: default; }
 .slot-labels span.active { font-weight: 600; color: var(--accent); }
 .slot-bands .band.hear-ref { background: var(--accent); opacity: .22; }
 .slot-bands .band.hear-usr { background: var(--warn); opacity: .22; }
+
+/* 上次要改的。只在第三步里出现——里面带着句子原文的片段 */
+.history { border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 6px; padding: 10px 14px; margin: 4px 0 16px; }
+.history-head { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; font-size: 13px; }
+.history-head b { font-weight: 600; color: var(--muted); }
+.history ul { margin: 8px 0 0; padding-left: 20px; }
+.history li { margin: 3px 0; }
+.history p { margin: 8px 0 0; }
+.history.off #history-list { display: none; }
