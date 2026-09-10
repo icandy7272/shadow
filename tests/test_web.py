@@ -323,6 +323,46 @@ def test_take_audio_is_served_and_stays_inside_its_folder(client, tmp_path):
     assert client.get("/take/..%2F..%2Fshadow.db").status_code == 404
 
 
+def _silent_wav_bytes(seconds=2.0):
+    import io
+
+    import numpy as np
+    import soundfile as sf
+
+    buffer = io.BytesIO()
+    sf.write(buffer, np.zeros(int(seconds * 16000), dtype="float32"), 16000,
+             format="WAV")
+    return buffer.getvalue()
+
+
+def test_one_bad_take_does_not_throw_away_the_good_ones(client, tmp_path,
+                                                        monkeypatch):
+    """录坏一遍就整批作废，等于逼人从头再录三遍。坏的那遍剔掉就行。"""
+    from shadow import review
+    from shadow.models import Word
+
+    segment_id = _seed(tmp_path)
+    monkeypatch.setattr(review, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d)
+        for t, a, d in (("It", 0.0, 0.3), ("was", 0.4, 0.1),
+                        ("a", 0.5, 0.1), ("start.", 0.7, 0.4))
+    ))
+
+    response = client.post(
+        "/api/takes",
+        data={"segment": segment_id, "unit": 2},
+        files=[("files", ("a.wav", _wav_bytes(), "audio/wav")),
+               ("files", ("mute.wav", _silent_wav_bytes(), "audio/wav")),
+               ("files", ("c.wav", _wav_bytes(), "audio/wav"))],
+    )
+
+    assert response.status_code == 200, response.text
+    data = _stream(response)[-1]["result"]
+    assert data["count"] == 2
+    assert [r["index"] for r in data["rejected"]] == [2]
+    assert "静音" in data["rejected"][0]["reason"]
+
+
 def test_takes_rejects_a_silent_recording(client, tmp_path):
     import io
 
@@ -344,6 +384,8 @@ def test_takes_rejects_a_silent_recording(client, tmp_path):
 def test_practice_page_has_the_recording_controls(client, tmp_path):
     segment_id = _seed(tmp_path)
     body = client.get(f"/practice/{segment_id}/2").text
+    # 最短时长由服务端下发，页面不另写一份，免得两边卡的线不一样
+    assert f'data-min-take="{config.MIN_ATTEMPT_SEC}"' in body
     assert 'id="start-record"' in body
     assert 'id="stop-take"' in body
     assert 'id="prelisten"' in body

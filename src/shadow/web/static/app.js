@@ -184,12 +184,21 @@ if (root) {
   const recordOne = (stream) => new Promise((resolve) => {
     const chunks = [];
     const recorder = new MediaRecorder(stream);
+    let began = 0;
     recorder.addEventListener("dataavailable", (e) => chunks.push(e.data));
-    recorder.addEventListener("stop", () => resolve(new Blob(chunks)));
+    recorder.addEventListener("stop", () => resolve({
+      blob: new Blob(chunks),
+      seconds: (performance.now() - began) / 1000,
+    }));
     stopButton.hidden = false;
     stopButton.onclick = () => { stopButton.hidden = true; recorder.stop(); };
     recorder.start();
+    began = performance.now();
   });
+
+  // 服务端按音频时长卡 config.MIN_ATTEMPT_SEC。这里量的是墙上时间，比实际音频略长，
+  // 留一点余量，免得刚过线的又被服务端拒掉。
+  const minTake = Number(root.dataset.minTake || 1) + 0.3;
 
   startButton?.addEventListener("click", async () => {
     const takes = Math.max(1, Number(document.getElementById("takes").value) || 1);
@@ -205,7 +214,8 @@ if (root) {
     }
 
     const blobs = [];
-    for (let take = 1; take <= takes; take += 1) {
+    let short = 0;
+    for (let take = 1; take <= takes; ) {
       status.classList.remove("live");
       for (let i = 1; i <= pre; i += 1) {
         status.textContent = `第 ${take}/${takes} 遍 —— 先听 ${i}/${pre}`;
@@ -216,10 +226,31 @@ if (root) {
       await beep();
       status.textContent = `第 ${take}/${takes} 遍 —— 录音中，说完点「说完了」`;
       status.classList.add("live");
-      blobs.push(await recordOne(stream));
+      const clip = await recordOne(stream);
+
+      // 太短的就地重录这一遍。等录完三遍再由服务端拒收，等于逼人从头再来一轮。
+      if (clip.seconds < minTake) {
+        short += 1;
+        status.classList.remove("live");
+        if (short >= 3) {
+          status.textContent = "连着三遍都太短。是不是「说完了」点早了？先歇一下再来。";
+          break;
+        }
+        status.textContent = `第 ${take} 遍只录到 ${clip.seconds.toFixed(1)} 秒，太短了`
+          + " —— 嘀声之后再开口，说完再点「说完了」。这一遍重来。";
+        await sleep(2000);
+        continue;
+      }
+      short = 0;
+      blobs.push(clip.blob);
+      take += 1;
     }
     stream.getTracks().forEach((t) => t.stop());
     status.classList.remove("live");
+    if (!blobs.length) {
+      startButton.disabled = false;
+      return;
+    }
     status.textContent = "正在转写和比对，大约十几秒 …";
 
     const body = new FormData();
@@ -258,6 +289,8 @@ if (root) {
       `<span>发声 <b>${data.speech}x</b></span>` +
       `<span>停顿 <b>${data.pause === null ? "—" : data.pause + "x"}</b></span>` +
       `<span>${data.count} 遍</span></div>` +
+      data.rejected.map((r) =>
+        `<p class="bad">第 ${r.index} 遍没收进来：${r.reason}</p>`).join("") +
       data.skipped.map((s) =>
         `<p class="bad">跳过 ${s.name}：时间戳偏离 ${s.drift} 秒，该遍不可信</p>`).join("") +
       (data.problems.length

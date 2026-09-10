@@ -139,6 +139,7 @@ def practice(request: Request, segment_id: int, unit: int):
             "words": words,
             "blanks": blanks_of(words),
             "seconds": round(words[-1].end - words[0].start, 1),
+            "min_take_sec": config.MIN_ATTEMPT_SEC,
         },
     )
 
@@ -234,20 +235,27 @@ async def submit_takes(
 
     stamp = datetime.now().strftime("%m%d-%H%M%S")
     paths = []
+    rejected = []
     for index, upload in enumerate(files, 1):
         dest = config.attempt_audio_dir() / f"{segment}-u{unit}-{stamp}-{index}.wav"
         try:
             media.convert_upload(await upload.read(), dest)
             media.validate_attempt(dest)
         except Exception as exc:
-            # 录音本身不能用属于请求错误，在开始流式输出之前就回绝掉
-            raise HTTPException(400, f"第 {index} 遍不可用：{exc}") from exc
+            # 坏一遍不该让整批作废——那等于逼人从头再录三遍。剔掉继续。
+            rejected.append({"index": index, "reason": str(exc)})
+            dest.unlink(missing_ok=True)
+            continue
         paths.append(dest)
+
+    if not paths:
+        reasons = "；".join(f"第 {r['index']} 遍{r['reason']}" for r in rejected)
+        raise HTTPException(400, f"没有一遍能用：{reasons}")
 
     return StreamingResponse(
         _review_stream(segment=segment, unit=unit, ref_path=ref_path,
                        ref_words=ref_words, paths=paths, run_id=run_id,
-                       stamp=stamp),
+                       stamp=stamp, rejected=rejected),
         media_type="application/x-ndjson",
     )
 
@@ -262,7 +270,8 @@ def _step_label(step, count: int) -> str:
             else f"转写第 {step.index}/{count} 遍")
 
 
-def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp):
+def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp,
+                   rejected=()):
     """每一步开工前发一行进度，最后一行是 result 或 error。
 
     生成器跑在 Starlette 的线程池里，sqlite 连接不能跨线程用，写库时现开一个。
@@ -293,14 +302,15 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp):
             connection.close()
 
         yield _event({"result": _review_payload(
-            result, run_id, audio={"ref": f"/audio/{segment}/{unit}",
-                                   "usr": f"/take/{result.best.path.name}"})})
+            result, run_id, rejected=rejected,
+            audio={"ref": f"/audio/{segment}/{unit}",
+                   "usr": f"/take/{result.best.path.name}"})})
     except Exception as exc:
         log.exception("片段 %s 单元 %s 的比对失败", segment, unit)
         yield _event({"error": f"比对失败：{exc}"})
 
 
-def _review_payload(result, run_id: int, *, audio: dict) -> dict:
+def _review_payload(result, run_id: int, *, audio: dict, rejected=()) -> dict:
     summary = result.summary
     best = result.best
     problems = [
@@ -313,6 +323,7 @@ def _review_payload(result, run_id: int, *, audio: dict) -> dict:
         "view": feedback_view(result, MAX_ADVICE, audio=audio),
         "count": summary.count,
         "skipped": [{"name": n, "drift": round(d, 1)} for n, d in result.skipped],
+        "rejected": list(rejected),
         "accuracy": round(summary.accuracy.median * 100),
         "speech": round(summary.speech_ratio.median, 2),
         "pause": None if summary.pause_ratio is None

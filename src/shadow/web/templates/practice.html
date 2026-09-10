@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block subtitle %}<span class="crumb">片段 {{ segment }} · 单元 {{ unit }}/{{ total_units }}</span>{% endblock %}
 {% block content %}
-<div id="practice" data-segment="{{ segment }}" data-unit="{{ unit }}">
+<div id="practice" data-segment="{{ segment }}" data-unit="{{ unit }}"
+     data-min-take="{{ min_take_sec }}">
 
   <section class="step" id="step-listen">
     <h2><span class="n">1</span> 盲听</h2>
