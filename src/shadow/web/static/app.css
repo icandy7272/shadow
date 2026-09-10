@@ -84,6 +84,14 @@ button:disabled { opacity: .5; cursor: default; }
 .status.live { color: var(--warn); font-weight: 500; }
 #stop-take { border-color: var(--warn); color: var(--warn); font-size: 16px;
   padding: 10px 22px; }
+.bar { height: 6px; border-radius: 3px; background: var(--line);
+  overflow: hidden; margin: 2px 0 10px; }
+.bar i { display: block; height: 100%; width: 0; border-radius: 3px;
+  background: var(--accent); transition: width .35s ease; }
+/* 单步要跑好几秒，让填充呼吸一下，免得看着像卡死 */
+.bar.working i { animation: breathe 1.4s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .5; } }
+
 .result img { width: 100%; border: 1px solid var(--line); border-radius: 8px;
   margin-top: 14px; }
 .result .metrics { display: flex; gap: 18px; flex-wrap: wrap; margin: 6px 0 12px;

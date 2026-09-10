@@ -121,11 +121,37 @@ if (root) {
   });
 }
 
+// 服务端一行一个 JSON：带 done/total/label 的是进度，带 result 或 error 的是终局。
+async function readEvents(response, onProgress) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let last = null;
+  const take = (line) => {
+    if (!line.trim()) return;
+    const event = JSON.parse(line);
+    if (event.result || event.error) last = event;
+    else onProgress(event);
+  };
+  for (;;) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    buffer += decoder.decode(chunk.value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();          // 末尾可能是半行，留到下一轮
+    lines.forEach(take);
+  }
+  take(buffer);
+  return last;
+}
+
 // ---------- 第三步：浏览器录音 ----------
 if (root) {
   const segment = root.dataset.segment;
   const unit = root.dataset.unit;
   const status = document.getElementById("rec-status");
+  const bar = document.getElementById("rec-progress");
+  const fill = bar.querySelector("i");
   const stopButton = document.getElementById("stop-take");
   const startButton = document.getElementById("start-record");
   const src = `/audio/${segment}/${unit}`;
@@ -210,8 +236,23 @@ if (root) {
       box.innerHTML = `<p class="bad">${detail.detail || "比对失败"}</p>`;
       return;
     }
-    const data = await response.json();
+
+    bar.hidden = false;
+    bar.classList.add("working");
+    fill.style.width = "0%";
+    const last = await readEvents(response, (p) => {
+      fill.style.width = `${Math.round((p.done / p.total) * 100)}%`;
+      status.textContent = `${p.label}（${p.done + 1}/${p.total}）`;
+    });
+    bar.classList.remove("working");
+    bar.hidden = true;
     status.textContent = "";
+    if (!last || last.error) {
+      box.innerHTML =
+        `<p class="bad">${(last && last.error) || "比对中断了，重录一遍试试。"}</p>`;
+      return;
+    }
+    const data = last.result;
     box.innerHTML =
       `<div class="metrics"><span>可懂度 <b>${data.accuracy}%</b></span>` +
       `<span>发声 <b>${data.speech}x</b></span>` +

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Generator, Sequence
 
 from .analysis.diff import accuracy as diff_accuracy
 from .analysis.diff import diff_words, matched_pairs, unreliable_indices
@@ -20,6 +20,16 @@ from .report.blocks import Flag, PauseNote, render_feedback
 from .report.takes import TakeMetrics, TakeSummary, summarise
 
 ALIGNMENT_TOLERANCE_SEC = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class Step:
+    """一步开工的通知。done 是这步开始前已完成的步数，画进度条用。"""
+
+    stage: str          # reference | take
+    done: int
+    total: int
+    index: int = 0      # 第几遍，stage == "take" 时才有意义
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,9 +56,13 @@ class Review:
         return self.takes[self.summary.representative]
 
 
-def evaluate(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
-             *, transcribe=None) -> Review | None:
-    """None 表示所有录音的时间戳都对不上，没法比较。
+def run(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
+        *, transcribe=None) -> Generator[Step, None, "Review | None"]:
+    """跑完整条链路，每一步开工前先 yield 一个 Step，最后 return 结果。
+
+    做成生成器而不是回调：回调没法把进度往上抛给正在流式输出的调用方，
+    生成器可以，调用方要不要理会进度随它。return 值 None 表示所有录音的
+    时间戳都对不上，没法比较。
 
     转写器显式传入：调用方（命令行/网页）各自持有自己的引用，
     测试打桩才盖得住这条链路。
@@ -56,6 +70,9 @@ def evaluate(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
     # 默认值必须在运行时解析：写成默认参数的话，绑定发生在函数定义时，
     # 事后 patch 模块属性就盖不住了。
     transcribe = transcribe or transcribe_words
+    total = len(paths) + 1
+
+    yield Step(stage="reference", done=0, total=total)
     ref_prosody = analyse(ref_path)
     # 库内文本来自长上下文转写，可能把缩读还原成完整形式，与音频对不上。
     # 这些词不能用来判用户对错。
@@ -67,7 +84,8 @@ def evaluate(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
     takes: list[Take] = []
     metrics: list[TakeMetrics] = []
     skipped: list[tuple[str, float]] = []
-    for path in paths:
+    for index, path in enumerate(paths, 1):
+        yield Step(stage="take", done=index, total=total, index=index)
         words = transcribe(path)
         prosody = analyse(path)
         drift = alignment_drift(words, prosody)
@@ -90,6 +108,17 @@ def evaluate(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
         return None
     return Review(summarise(metrics), tuple(takes), tuple(skipped), shaky,
                   tuple(ref_words), ref_prosody)
+
+
+def evaluate(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
+             *, transcribe=None) -> Review | None:
+    """不关心进度的调用方用这个：把 run 跑到底，只要结果。"""
+    steps = run(ref_path, ref_words, paths, transcribe=transcribe)
+    while True:
+        try:
+            next(steps)
+        except StopIteration as stop:
+            return stop.value
 
 
 def flags_for(review: Review, limit: int):

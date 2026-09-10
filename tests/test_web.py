@@ -172,6 +172,13 @@ def _wav_bytes(seconds=2.0):
     return buffer.getvalue()
 
 
+def _stream(response):
+    """NDJSON：前面每行一步进度，最后一行是 result 或 error。"""
+    import json
+
+    return [json.loads(line) for line in response.text.splitlines() if line.strip()]
+
+
 def test_takes_endpoint_runs_the_whole_review(client, tmp_path, monkeypatch):
     from shadow import review
     from shadow.models import Word
@@ -191,7 +198,7 @@ def test_takes_endpoint_runs_the_whole_review(client, tmp_path, monkeypatch):
                ("files", ("b.wav", _wav_bytes(), "audio/wav"))],
     )
     assert response.status_code == 200, response.text
-    data = response.json()
+    data = _stream(response)[-1]["result"]
     assert data["count"] == 2
     assert data["accuracy"] == 100
     assert data["chart"].startswith("/feedback/")
@@ -201,6 +208,64 @@ def test_takes_endpoint_runs_the_whole_review(client, tmp_path, monkeypatch):
     row = db.list_runs(connection, segment_id=segment_id)[0]
     assert len(db.run_metrics(connection, row["id"])) == 2
     connection.close()
+
+
+def test_takes_endpoint_streams_progress_before_the_result(client, tmp_path,
+                                                           monkeypatch):
+    from shadow import review
+    from shadow.models import Word
+
+    segment_id = _seed(tmp_path)
+    monkeypatch.setattr(review, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d)
+        for t, a, d in (("It", 0.0, 0.3), ("was", 0.4, 0.1),
+                        ("a", 0.5, 0.1), ("start.", 0.7, 0.4))
+    ))
+
+    response = client.post(
+        "/api/takes",
+        data={"segment": segment_id, "unit": 2},
+        files=[("files", ("a.wav", _wav_bytes(), "audio/wav")),
+               ("files", ("b.wav", _wav_bytes(), "audio/wav"))],
+    )
+    lines = _stream(response)
+    progress = lines[:-1]
+
+    # 原声一步、两遍录音两步、出图一步
+    assert [p["done"] for p in progress] == [0, 1, 2, 3]
+    assert {p["total"] for p in progress} == {4}
+    assert progress[0]["label"] == "转写原声"
+    assert progress[1]["label"] == "转写第 1/2 遍"
+    assert progress[-1]["label"] == "出图"
+    assert "result" in lines[-1]
+
+
+def test_takes_endpoint_reports_unusable_recordings_in_the_stream(client, tmp_path,
+                                                                  monkeypatch):
+    from shadow import review
+    from shadow.models import Word
+
+    segment_id = _seed(tmp_path)
+    # 时间戳整体晚 5 秒，对不上实际发声，每一遍都会被剔除
+    monkeypatch.setattr(review, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d)
+        for t, a, d in (("It", 5.0, 0.3), ("was", 5.4, 0.1),
+                        ("a", 5.5, 0.1), ("start.", 5.7, 0.4))
+    ))
+
+    response = client.post(
+        "/api/takes",
+        data={"segment": segment_id, "unit": 2},
+        files=[("files", ("a.wav", _wav_bytes(), "audio/wav"))],
+    )
+
+    assert response.status_code == 200
+    assert "时间戳" in _stream(response)[-1]["error"]
+
+
+def test_practice_page_has_a_progress_bar(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    assert 'id="rec-progress"' in client.get(f"/practice/{segment_id}/2").text
 
 
 def test_takes_rejects_a_silent_recording(client, tmp_path):

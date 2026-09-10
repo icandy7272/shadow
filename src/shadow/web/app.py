@@ -7,13 +7,16 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from pathlib import Path
 
 from datetime import datetime
 from typing import Annotated
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import (FileResponse, HTMLResponse, RedirectResponse,
+                               StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -23,6 +26,7 @@ from ..drill.gapfill import blanks_of
 from ..drill.units import is_usable, split_into_units
 from .. import review as review_mod
 
+log = logging.getLogger(__name__)
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=str(HERE / "templates"))
 
@@ -203,9 +207,13 @@ async def submit_takes(
     files: Annotated[list[UploadFile], File()],
     run_id: Annotated[int | None, Form()] = None,
 ):
+    """转写加比对要跑十几秒，结果分行流式返回，前端拿它画进度条。"""
     connection = _db()
-    _, ref_words = _unit_words(connection, segment, unit)
-    ref_path = _unit_audio(connection, segment, unit)
+    try:
+        _, ref_words = _unit_words(connection, segment, unit)
+        ref_path = _unit_audio(connection, segment, unit)
+    finally:
+        connection.close()
 
     stamp = datetime.now().strftime("%m%d-%H%M%S")
     paths = []
@@ -215,24 +223,71 @@ async def submit_takes(
             media.convert_upload(await upload.read(), dest)
             media.validate_attempt(dest)
         except Exception as exc:
+            # 录音本身不能用属于请求错误，在开始流式输出之前就回绝掉
             raise HTTPException(400, f"第 {index} 遍不可用：{exc}") from exc
         paths.append(dest)
 
-    result = review_mod.evaluate(ref_path, ref_words, paths)
-    if result is None:
-        raise HTTPException(
-            422, "所有录音的转写时间戳都对不上，没法比较。换个安静点的环境重录。"
-        )
+    return StreamingResponse(
+        _review_stream(segment=segment, unit=unit, ref_path=ref_path,
+                       ref_words=ref_words, paths=paths, run_id=run_id,
+                       stamp=stamp),
+        media_type="application/x-ndjson",
+    )
 
-    charts = config.data_dir() / "feedback"
-    charts.mkdir(parents=True, exist_ok=True)
-    name = f"{segment}-u{unit}-{stamp}.png"
-    review_mod.chart(result, charts / name, MAX_ADVICE)
 
-    run_id = _run_for(connection, segment, unit, run_id, ref_words)
-    _store_takes(connection, run_id, result)
-    db.finish_run(connection, run_id)
+def _event(payload: dict) -> str:
+    """NDJSON 的一行。"""
+    return json.dumps(payload, ensure_ascii=False) + "\n"
 
+
+def _step_label(step, count: int) -> str:
+    return ("转写原声" if step.stage == "reference"
+            else f"转写第 {step.index}/{count} 遍")
+
+
+def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp):
+    """每一步开工前发一行进度，最后一行是 result 或 error。
+
+    生成器跑在 Starlette 的线程池里，sqlite 连接不能跨线程用，写库时现开一个。
+    """
+    total = len(paths) + 2          # 原声一步，每遍一步，出图一步
+    try:
+        steps = review_mod.run(ref_path, ref_words, paths)
+        while True:
+            try:
+                step = next(steps)
+            except StopIteration as stop:
+                result = stop.value
+                break
+            yield _event({"done": step.done, "total": total,
+                          "label": _step_label(step, len(paths))})
+
+        if result is None:
+            yield _event({"error": "所有录音的转写时间戳都对不上，没法比较。"
+                                   "换个安静点的环境重录。"})
+            return
+
+        yield _event({"done": total - 1, "total": total, "label": "出图"})
+        charts = config.data_dir() / "feedback"
+        charts.mkdir(parents=True, exist_ok=True)
+        name = f"{segment}-u{unit}-{stamp}.png"
+        review_mod.chart(result, charts / name, MAX_ADVICE)
+
+        connection = _db()
+        try:
+            run_id = _run_for(connection, segment, unit, run_id, ref_words)
+            _store_takes(connection, run_id, result)
+            db.finish_run(connection, run_id)
+        finally:
+            connection.close()
+
+        yield _event({"result": _review_payload(result, run_id, name)})
+    except Exception as exc:
+        log.exception("片段 %s 单元 %s 的比对失败", segment, unit)
+        yield _event({"error": f"比对失败：{exc}"})
+
+
+def _review_payload(result, run_id: int, chart_name: str) -> dict:
     summary = result.summary
     best = result.best
     problems = [
@@ -242,7 +297,7 @@ async def submit_takes(
     ]
     return {
         "run_id": run_id,
-        "chart": f"/feedback/{name}",
+        "chart": f"/feedback/{chart_name}",
         "count": summary.count,
         "skipped": [{"name": n, "drift": round(d, 1)} for n, d in result.skipped],
         "accuracy": round(summary.accuracy.median * 100),
