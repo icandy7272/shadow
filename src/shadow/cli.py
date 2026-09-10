@@ -14,6 +14,7 @@ from . import config, db, media
 from .analysis.diff import accuracy as diff_accuracy
 from .analysis.diff import diff_words, matched_pairs
 from .analysis.prosody import analyse, word_contour
+from .drill.gapfill import blanks_of, render, score
 from .drill.units import split_into_units
 from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
@@ -318,6 +319,82 @@ def _ask_blind_rating() -> int | None:
         print("  只接受 1 到 5。")
 
 
+def _play_times(ref_path, times: int, label: str = "听") -> None:
+    if times <= 0:
+        return
+    try:
+        for index in range(1, times + 1):
+            print(f"  {label} {index}/{times}", end="\r", flush=True)
+            media.play(ref_path, times=1, gap=0.0)
+            if index < times:
+                time.sleep(0.5)
+        print("               ", end="\r")
+    except KeyboardInterrupt:
+        print("\n  停了。")
+    except Exception as exc:
+        print(f"\n  播放失败：{exc}", file=sys.stderr)
+
+
+def cmd_drill(args: argparse.Namespace) -> int:
+    """精听填空：挖掉被弱读的功能词，让用户听着填。
+
+    这是四步闭环里唯一测「输入侧」的一步——其余指标全是产出侧的。
+    挖空挖的正是用户听不出来的那批词（实测 80-120 毫秒的 to / a / I / for）。
+    """
+    connection = _open_db()
+    try:
+        ref_path, ref_words = _reference_for(connection, args)
+    except Exception as exc:
+        print(f"读取原声失败：{exc}", file=sys.stderr)
+        return 1
+
+    blanks = blanks_of(ref_words)
+    if not blanks:
+        print("这一句没有挖空位（没有被弱读的功能词）。换一句试试。")
+        return 0
+
+    print(f"精听填空 · {len(ref_words)} 个词，{len(blanks)} 个空")
+    print("先听几遍，再逐个填。听不清就输入 ? 重听。\n")
+    _play_times(ref_path, args.times)
+    print(f"{render(ref_words)}\n")
+
+    answers: list[str | None] = []
+    for blank in blanks:
+        prompt = f"  {blank.number}. …{blank.left} [____] {blank.right}…  "
+        while True:
+            try:
+                guess = input(prompt).strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\n已取消。", file=sys.stderr)
+                return 1
+            if guess == "?":
+                _play_times(ref_path, 1, label="重听")
+                continue
+            answers.append(guess or None)
+            break
+
+    correct, total = score(blanks, answers)
+    print(f"\n{correct}/{total} 对\n")
+    for blank, guess in zip(blanks, answers):
+        if blank.matches(guess or ""):
+            print(f"  ✓ {blank.answer}")
+        else:
+            wrote = f"你填了 “{guess}”" if guess else "跳过了"
+            print(f"  ✗ {blank.answer:<10} {wrote}"
+                  f"   —— 原声只有 {blank.duration * 1000:.0f} 毫秒，被吞掉了")
+    print(f"\n原文：{' '.join(w.text for w in ref_words)}")
+
+    if args.segment is None:
+        print(f"\n（用 --segment 才能存进进度）")
+        return 0
+    run_id = db.start_run(connection, segment_id=args.segment, unit_index=args.unit,
+                          unit_text=" ".join(w.text for w in ref_words))
+    db.set_gapfill(connection, run_id, correct, total)
+    db.finish_run(connection, run_id)
+    print(f"\n记下了。shadow progress 可以看填空正确率的走势。")
+    return 0
+
+
 def cmd_listen(args: argparse.Namespace) -> int:
     """盲听：不给文字，听完自评，然后才揭晓原文。
 
@@ -499,6 +576,13 @@ def cmd_progress(args: argparse.Namespace) -> int:
     for row in runs:
         takes = db.run_metrics(connection, row["id"])
         if not takes:
+            if row["gapfill_total"]:
+                rate = row["gapfill_correct"] / row["gapfill_total"] * 100
+                text = (row["unit_text"] or "")[:44]
+                print(f"{_local_time(row['started_at']):<14}{'填空':>5}"
+                      f"{row['gapfill_correct']}/{row['gapfill_total']:<5}"
+                      f"{rate:>5.0f}%{'':>7}   {text}")
+                continue
             if row["blind_rating"] is not None:
                 text = (row["unit_text"] or "")[:44]
                 print(f"{_local_time(row['started_at']):<14}{'盲听':>5}"
@@ -645,6 +729,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_record.add_argument("--max-sec", type=float,
                           help="练习单元的最长秒数，超过会在最大停顿处再断（默认 6）")
     p_record.set_defaults(func=cmd_record)
+
+    p_drill = sub.add_parser("drill", help="精听填空：挖掉被弱读的功能词")
+    drill_group = p_drill.add_mutually_exclusive_group(required=True)
+    drill_group.add_argument("--ref", help="原声 wav 路径")
+    drill_group.add_argument("--segment", type=int, help="已导入的片段 id")
+    p_drill.add_argument("-u", "--unit", type=int, help="片段内第 n 个练习单元")
+    p_drill.add_argument("-t", "--times", type=int, default=3, help="先放几遍（默认 3）")
+    p_drill.add_argument("--min-sec", type=float)
+    p_drill.add_argument("--max-sec", type=float)
+    p_drill.set_defaults(func=cmd_drill)
 
     p_listen = sub.add_parser("listen", help="盲听：不给文字，听完自评")
     listen_group = p_listen.add_mutually_exclusive_group(required=True)

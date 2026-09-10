@@ -413,3 +413,76 @@ def test_record_signals_before_each_take(monkeypatch, tmp_path, capsys):
                      "--takes", "2", "-o", str(tmp_path / "r.png")]) == 0
     assert len(beeps) == 2
     assert "嘀一声" in capsys.readouterr().out
+
+
+def _seed_with_blanks():
+    """建一个带挖空位的片段：have / been 是被弱读的功能词。"""
+    connection = db.connect()
+    db.init_db(connection)
+    source_wav = config.source_audio_dir() / "9.wav"
+    write_tone(source_wav, seconds=6.0)
+    source_id = db.create_source(connection, url="https://x/y", title="T",
+                                 duration_sec=6.0)
+    db.finish_source(connection, source_id, audio_path=str(source_wav))
+    spec = [("should", 0.40), ("have", 0.10), ("been", 0.10), ("there", 0.40)]
+    words, t = [], 2.0
+    for text, duration in spec:
+        words.append(Word(text=text, start=t, end=t + duration,
+                          is_blank=text in {"have", "been"}))
+        t += duration
+    db.insert_segments(connection, source_id,
+                       (Segment(idx=0, start=2.0, end=t, words=tuple(words)),))
+    segment_id = db.list_segments(connection, source_id)[0]["id"]
+    connection.close()
+    return segment_id
+
+
+def test_drill_scores_and_records(monkeypatch, capsys):
+    segment_id = _seed_with_blanks()
+    answers = iter(["have", "wrong"])
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    assert cli.main(["drill", "--segment", str(segment_id), "--unit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "1/2 对" in out
+    assert "毫秒，被吞掉了" in out          # 告诉用户为什么没听出来
+
+    connection = db.connect()
+    row = db.list_runs(connection, segment_id=segment_id)[0]
+    assert (row["gapfill_correct"], row["gapfill_total"]) == (1, 2)
+    connection.close()
+
+
+def test_drill_lets_you_replay(monkeypatch, capsys):
+    segment_id = _seed_with_blanks()
+    plays: list[int] = []
+    answers = iter(["?", "have", "been"])
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: plays.append(1) or 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    assert cli.main(["drill", "--segment", str(segment_id), "--unit", "1",
+                     "--times", "2"]) == 0
+    assert len(plays) == 3       # 开头 2 遍 + 重听 1 遍
+    assert "2/2 对" in capsys.readouterr().out
+
+
+def test_drill_says_so_when_there_is_nothing_to_fill(monkeypatch, capsys):
+    connection, segment_id = _seed_segment()      # 没有挖空位
+    connection.close()
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    assert cli.main(["drill", "--segment", str(segment_id), "--unit", "1"]) == 0
+    assert "没有挖空位" in capsys.readouterr().out
+
+
+def test_progress_shows_gapfill_rate(monkeypatch, capsys):
+    segment_id = _seed_with_blanks()
+    answers = iter(["have", "been"])
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    cli.main(["drill", "--segment", str(segment_id), "--unit", "1"])
+    capsys.readouterr()
+    assert cli.main(["progress"]) == 0
+    out = capsys.readouterr().out
+    assert "填空" in out and "2/2" in out

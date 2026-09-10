@@ -23,7 +23,8 @@ uv sync
 
 ```bash
 uv run shadow units 2                                  # 看有哪几个练习单元
-uv run shadow listen --segment 2 --unit 2              # 盲听 + 自评（第一步，别跳）
+uv run shadow listen --segment 2 --unit 2              # 1 盲听 + 自评（别跳）
+uv run shadow drill  --segment 2 --unit 2              # 2 精听填空
 uv run shadow record --segment 2 --unit 2 --listen 5   # 录 3 遍并立即出反馈
 uv run shadow progress                                 # 看跨天的趋势
 ```
@@ -31,6 +32,10 @@ uv run shadow progress                                 # 看跨天的趋势
 **`listen` 必须放在最前面，而且不能看文字。** 它放两遍原声、问你听懂了多少（1-5），
 **打完分才揭晓原文**。这一步反直觉但不能省：这套训练要治的就是「英语以视觉形式存储」，
 字幕常开等于持续给病灶续命。而这个自评分数是**唯一在测「你听懂了多少」的指标**——发声、停顿、音高全是产出侧的。
+
+`drill` 挖掉被弱读的功能词让你听着填。**填空正确率是唯一客观测量听力的指标**——
+发声、停顿、音高全是产出侧的，只有它在测「你到底听不听得出来」。填错时会告诉你
+那个词在原声里只有多少毫秒，解释你为什么没听出来。
 
 `play` 默认也不显示原文（要看时显式要求）。
 

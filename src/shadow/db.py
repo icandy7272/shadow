@@ -225,6 +225,16 @@ def set_blind_rating(conn: sqlite3.Connection, run_id: int, rating: int) -> None
     conn.commit()
 
 
+def set_gapfill(
+    conn: sqlite3.Connection, run_id: int, correct: int, total: int
+) -> None:
+    conn.execute(
+        "UPDATE practice_runs SET gapfill_correct = ?, gapfill_total = ? WHERE id = ?",
+        (correct, total, run_id),
+    )
+    conn.commit()
+
+
 def finish_run(conn: sqlite3.Connection, run_id: int) -> None:
     conn.execute(
         "UPDATE practice_runs SET finished_at = ? WHERE id = ?", (_now(), run_id)
