@@ -598,3 +598,55 @@ def test_drill_marks_a_clean_pass(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(answers))
     cli.main(["drill", "--segment", str(segment_id), "--unit", "1"])
     assert "一遍过" in capsys.readouterr().out
+
+
+def _practice_stubs(monkeypatch, answers):
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.media, "beep", lambda: None)
+    monkeypatch.setattr(cli.media, "list_input_devices", lambda: ())
+    monkeypatch.setattr(cli.media, "record",
+                        lambda dest, **k: write_tone(dest, seconds=3.0))
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d, is_blank=t in {"have", "been"})
+        for t, a, d in (("should", 0.0, 0.4), ("have", 0.4, 0.1),
+                        ("been", 0.5, 0.1), ("there", 0.6, 0.4))
+    ))
+    stream = iter(answers)
+    monkeypatch.setattr("builtins.input", lambda _: next(stream))
+
+
+def test_practice_records_all_three_steps_in_one_row(monkeypatch, tmp_path, capsys):
+    segment_id = _seed_with_blanks()
+    # 盲听评分 → 两个空 → 三次回车开始录音
+    _practice_stubs(monkeypatch, ["4", "have", "been", "", "", ""])
+    assert cli.main(["practice", "--segment", str(segment_id), "--unit", "1",
+                     "--takes", "3", "-o", str(tmp_path / "p.png")]) == 0
+    out = capsys.readouterr().out
+    assert "1/3 盲听" in out and "2/3 精听填空" in out and "3/3 跟读" in out
+
+    connection = db.connect()
+    runs = db.list_runs(connection, segment_id=segment_id, unit_index=1)
+    assert len(runs) == 1                       # 三步合成一条记录
+    row = runs[0]
+    assert row["blind_rating"] == 4
+    assert (row["gapfill_correct"], row["gapfill_total"]) == (2, 2)
+    assert len(db.run_metrics(connection, row["id"])) == 3
+    connection.close()
+    assert (tmp_path / "p.png").exists()
+
+
+def test_practice_stops_cleanly_if_recording_is_cancelled(monkeypatch, tmp_path):
+    segment_id = _seed_with_blanks()
+
+    def cancel(_):
+        raise KeyboardInterrupt
+
+    _practice_stubs(monkeypatch, [])
+    monkeypatch.setattr("builtins.input", cancel)
+    assert cli.main(["practice", "--segment", str(segment_id), "--unit", "1",
+                     "-o", str(tmp_path / "p.png")]) == 1
+    connection = db.connect()
+    runs = db.list_runs(connection, segment_id=segment_id)
+    assert len(runs) == 1                       # 记录已收尾，不会留半开状态
+    connection.close()

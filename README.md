@@ -22,12 +22,14 @@ uv sync
 ### 每天的循环
 
 ```bash
-uv run shadow units 2                                  # 看有哪几个练习单元
-uv run shadow listen --segment 2 --unit 2              # 1 盲听 + 自评（别跳）
-uv run shadow drill  --segment 2 --unit 2              # 2 精听填空
-uv run shadow record --segment 2 --unit 2 --listen 5   # 录 3 遍并立即出反馈
-uv run shadow progress                                 # 看跨天的趋势
+uv run shadow units 2                        # 看有哪几个练习单元
+uv run shadow practice --segment 2 --unit 2  # 盲听 → 填空 → 跟读，一条命令走完
+uv run shadow progress                       # 看跨天的趋势
 ```
+
+`practice` 是日常用的那条：它把四步串起来，并把盲听自评、填空成绩、跟读反馈
+记进**同一条**练习记录。三步也可以单独跑（`listen` / `drill` / `record`），
+每步结束会打印下一条命令。
 
 **`listen` 必须放在最前面，而且不能看文字。** 它放两遍原声、问你听懂了多少（1-5），
 **打完分才揭晓原文**。这一步反直觉但不能省：这套训练要治的就是「英语以视觉形式存储」，
