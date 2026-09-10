@@ -11,6 +11,9 @@ const PITCH_MIN = 90;     // 整句都是平的时候也别塌成一条线
 const MIN_SLOT_PX = 52;   // 一格至少这么宽，否则词标会挤成一团
 const SLOT_GAP_PX = 8;
 const FALLBACK_WIDTH = 760;
+const WORD_PAD = 0.06;    // 单词试听前后各留一点，免得削掉爆破音
+const WORD_GAP_MS = 240;  // 两条之间留个空，耳朵才分得开
+const WORD_ROUNDS = 2;    // 原声→你的，来回两遍
 const PRE_ROLL = 0.15;    // 两条都提前一点起播：正好切在词头会削掉爆破音的起音，
                           // 两边削掉的还不一样多，听着就像没对齐
 
@@ -178,7 +181,8 @@ function pitchFigure(slots) {
   const node = el("figure", "fig");
   const caption = el("figcaption", null,
     "图 2 · 音高：一词一格（横轴不是时间），线的高低 = 音高，"
-    + "线的走向 = 这个词从头到尾怎么走的。");
+    + "线的走向 = 这个词从头到尾怎么走的。点任意一个词：先放原声，再放你的，"
+    + "来回两遍。");
   caption.append(el("i", "legend-ref", "原声（虚线）"));
   caption.append(el("i", "legend-usr", "你（实心）"));
   node.append(caption);
@@ -284,8 +288,30 @@ function pitchFigure(slots) {
       node.classList.toggle("active", i === index));
   }
 
+  // 点到的是哪一格。词标、折线、底色都在同一列上，认坐标最省事。
+  function slotAt(clientX) {
+    const rect = body.getBoundingClientRect();
+    const x = clientX - rect.left;
+    return placed.xs.findIndex(
+      (left, i) => x >= left && x <= left + placed.widths[i]);
+  }
+
+  function tint(index, side) {
+    bands.childNodes.forEach((node, i) => {
+      node.classList.toggle("hear-ref", i === index && side === "ref");
+      node.classList.toggle("hear-usr", i === index && side === "usr");
+    });
+  }
+
   return {
     node,
+    onPick(handler) {
+      body.style.cursor = "pointer";
+      body.addEventListener("click", (event) => {
+        const index = slotAt(event.clientX);
+        if (index >= 0) handler(index, (side) => tint(index, side));
+      });
+    },
     move(frame) {
       const at = locate(frame);
       if (at === null) return;
@@ -300,7 +326,7 @@ function pitchFigure(slots) {
         scroll.scrollLeft = Math.max(0, x - scroll.clientWidth / 2);
       }
     },
-    hide() { head.hidden = true; highlight(-1); },
+    hide() { head.hidden = true; highlight(-1); tint(-1, null); },
   };
 }
 
@@ -393,7 +419,51 @@ function playback(rhythm, audio, onFrame, onStopped) {
     }, 16);
   }
 
-  return { ref, usr, play, stop, playing: () => timer !== null };
+  const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+  function clip(media, from, to, mine) {
+    return new Promise((done) => {
+      media.currentTime = Math.max(0, from);
+      media.play();
+      const watch = setInterval(() => {
+        if (mine !== session || media.currentTime >= to || media.ended) {
+          clearInterval(watch);
+          media.pause();
+          done();
+        }
+      }, 10);
+      timer = watch;
+    });
+  }
+
+  // 单词层级的对比：同一个词，先放原声再放你的，来回两遍。
+  // 一个词只有两三百毫秒，两条叠在一起听不出什么，得挨着放。
+  async function compare(slot, onSide) {
+    halt();
+    const mine = session;
+    graph();
+    if (context.state === "suspended") await context.resume();
+    await Promise.all([ready(ref), ready(usr)]);
+    if (mine !== session) return;
+
+    const parts = [[ref, slot.refAt, "ref"], [usr, slot.usrAt, "usr"]]
+      .filter(([, at]) => at);
+    for (let round = 0; round < WORD_ROUNDS; round += 1) {
+      for (const [media, at, side] of parts) {
+        if (mine !== session) return;
+        const panner = panners.get(media);
+        if (panner) panner.pan.value = 0;      // 单独听，不分左右耳
+        onSide(side);
+        await clip(media, at[0] - WORD_PAD, at[1] + WORD_PAD, mine);
+        if (mine !== session) return;
+        onSide(null);
+        await sleep(WORD_GAP_MS);
+      }
+    }
+    if (mine === session) stop();
+  }
+
+  return { ref, usr, play, stop, compare, playing: () => timer !== null };
 }
 
 function playbar(rhythm, audio, figures) {
@@ -427,7 +497,7 @@ function playbar(rhythm, audio, figures) {
 
   bar.append(both, one, mine,
              el("span", "playbar-hint", "戴耳机：原声在左，你的在右"));
-  return bar;
+  return { node: bar, player };
 }
 
 // 给 app.js 用：返回一个包含两张图的元素
@@ -436,7 +506,12 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
   const rhythm = rhythmFigure(view.rhythm);
   const pitch = pitchFigure(view.pitch);
   if (view.audio) {
-    box.append(playbar(view.rhythm, view.audio, [rhythm, pitch]));
+    const bar = playbar(view.rhythm, view.audio, [rhythm, pitch]);
+    box.append(bar.node);
+    pitch.onPick((index, onSide) => {
+      bar.player.stop();               // 正在整句播放的话先停下
+      bar.player.compare(view.pitch[index], onSide);
+    });
   }
   box.append(rhythm.node, pitch.node);
   return box;

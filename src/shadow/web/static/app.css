@@ -188,3 +188,5 @@ button:disabled { opacity: .5; cursor: default; }
 .quads .usr.flagged { stroke: var(--warn); stroke-width: 5.5; }
 .slot-bands .band.active { background: var(--accent); opacity: .13; }
 .slot-labels span.active { font-weight: 600; color: var(--accent); }
+.slot-bands .band.hear-ref { background: var(--accent); opacity: .22; }
+.slot-bands .band.hear-usr { background: var(--warn); opacity: .22; }
