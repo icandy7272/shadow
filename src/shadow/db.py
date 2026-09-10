@@ -78,6 +78,7 @@ MIGRATIONS = (
     ("practice_runs", "unit_index", "INTEGER"),
     ("practice_runs", "unit_text", "TEXT"),
     ("practice_runs", "gapfill_heard", "INTEGER"),
+    ("practice_runs", "gapfill_replays", "INTEGER"),
     ("attempts", "metrics_json", "TEXT"),
 )
 
@@ -228,13 +229,17 @@ def set_blind_rating(conn: sqlite3.Connection, run_id: int, rating: int) -> None
 
 def set_gapfill(
     conn: sqlite3.Connection, run_id: int, correct: int, total: int,
-    heard: int | None = None,
+    heard: int | None = None, replays: int | None = None,
 ) -> None:
-    """heard = 答对且自称是听出来的数量，与靠语法推断的分开记。"""
+    """heard = 答对且自称听出来的；replays = 重听次数。
+
+    重听次数是必要的：「给无限次重听能挖出来」和「一遍就听懂」差得很远，
+    不记下来，两者会被混成同一个分数。
+    """
     conn.execute(
         "UPDATE practice_runs SET gapfill_correct = ?, gapfill_total = ?,"
-        " gapfill_heard = ? WHERE id = ?",
-        (correct, total, heard, run_id),
+        " gapfill_heard = ?, gapfill_replays = ? WHERE id = ?",
+        (correct, total, heard, replays, run_id),
     )
     conn.commit()
 

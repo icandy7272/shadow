@@ -561,3 +561,40 @@ def test_compare_suggests_repeating_while_problems_remain(monkeypatch, tmp_path,
     out = capsys.readouterr().out
     # 只有一遍，样本不足，应当建议再来一轮而不是换句
     assert "同一句再来一轮" in out
+
+
+def test_drill_counts_replays(monkeypatch, capsys):
+    """「无限次重听能挖出来」和「一遍就听懂」是两回事，必须分开记。"""
+    segment_id = _seed_with_blanks()
+    answers = iter(["??", "??", "have", "been"])
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d, is_blank=t in {"have", "been"})
+        for t, a, d in (("should", 0.0, 0.4), ("have", 0.4, 0.1),
+                        ("been", 0.5, 0.1), ("there", 0.6, 0.4))
+    ))
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    assert cli.main(["drill", "--segment", str(segment_id), "--unit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "重听 2 次" in out
+    assert "重听 2 次才抓到" in out
+
+    connection = db.connect()
+    assert db.list_runs(connection, segment_id=segment_id)[0]["gapfill_replays"] == 2
+    connection.close()
+
+
+def test_drill_marks_a_clean_pass(monkeypatch, capsys):
+    segment_id = _seed_with_blanks()
+    answers = iter(["have", "been"])
+    monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d, is_blank=t in {"have", "been"})
+        for t, a, d in (("should", 0.0, 0.4), ("have", 0.4, 0.1),
+                        ("been", 0.5, 0.1), ("there", 0.6, 0.4))
+    ))
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    cli.main(["drill", "--segment", str(segment_id), "--unit", "1"])
+    assert "一遍过" in capsys.readouterr().out

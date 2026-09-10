@@ -395,7 +395,9 @@ def cmd_drill(args: argparse.Namespace) -> int:
     print(f"{render(ref_words)}\n")
 
     answers = []
+    replays: list[int] = []
     for blank in blanks:
+        used = 0
         prompt = f"  {blank.number}. …{blank.left} [____] {blank.right}…  "
         while True:
             try:
@@ -404,17 +406,23 @@ def cmd_drill(args: argparse.Namespace) -> int:
                 print("\n已取消。", file=sys.stderr)
                 return 1
             if guess == "??":
+                used += 1
                 _play_times(ref_path, 1, label="重听")
                 continue
             answers.append(parse_answer(guess))
+            replays.append(used)
             break
 
     correct, total, heard = tally(blanks, answers)
-    print(f"\n{correct}/{total} 对，其中 {heard} 个是听出来的\n")
-    for blank, response in zip(blanks, answers):
+    total_replays = sum(replays)
+    extra = f"，重听 {total_replays} 次" if total_replays else "，一遍过"
+    print(f"\n{correct}/{total} 对，其中 {heard} 个是听出来的{extra}\n")
+    for blank, response, used in zip(blanks, answers, replays):
         if response.guess and blank.matches(response.guess):
             mark = "✓" if response.heard else "○"
             note = "" if response.heard else "   （靠上下文推的，不算听力）"
+            if response.heard and used:
+                note = f"   （重听 {used} 次才抓到）"
             print(f"  {mark} {blank.answer}{note}")
         else:
             wrote = f"你填了 “{response.guess}”" if response.guess else "跳过了"
@@ -426,7 +434,7 @@ def cmd_drill(args: argparse.Namespace) -> int:
         run_id = db.start_run(connection, segment_id=args.segment,
                               unit_index=args.unit,
                               unit_text=" ".join(w.text for w in ref_words))
-        db.set_gapfill(connection, run_id, correct, total, heard)
+        db.set_gapfill(connection, run_id, correct, total, heard, total_replays)
         db.finish_run(connection, run_id)
         print("\n记下了。")
     else:
@@ -650,9 +658,11 @@ def cmd_progress(args: argparse.Namespace) -> int:
                 text = (row["unit_text"] or "")[:40]
                 listened = ("—" if heard is None
                             else f"听出 {heard}/{row['gapfill_total']}")
+                rep = row["gapfill_replays"]
+                shown = "" if rep is None else (f"重听{rep}" if rep else "一遍过")
                 print(f"{_local_time(row['started_at']):<14}{'填空':>5}"
                       f"{row['gapfill_correct']}/{row['gapfill_total']:<4}"
-                      f"{listened:>10}{'':>4}   {text}")
+                      f"{listened:>10}{shown:>8}   {text}")
                 continue
             if row["blind_rating"] is not None:
                 text = (row["unit_text"] or "")[:44]
