@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from ..analysis.diff import KIND_EQUAL, DiffToken
-from ..analysis.prosody import Prosody, terminal_fall, word_contour
+from ..analysis.prosody import Prosody, terminal_fall, word_pitch
 from ..analysis.rhythm import MIN_PAUSE_SEC, Rhythm
 from ..models import Word
 
@@ -41,6 +41,21 @@ def _stretch(ref: Word, usr: Word, speech_ratio: float) -> float:
     if ref.duration <= 0 or speech_ratio <= 0:
         return 1.0
     return (usr.duration / ref.duration) / speech_ratio
+
+
+def _pitch_off(ref, ref_index: int, ref_head: float, usr_head: float) -> "Advice":
+    """词头音高偏了。升降说不清的词，起音高低仍然是能比的。"""
+    gap = usr_head - ref_head
+    higher = gap > 0
+    return Advice(
+        kind="pitch_off",
+        flag="音高偏高" if higher else "音高偏低",
+        ref_index=ref_index,
+        score=abs(gap) / PITCH_GAP_ST,
+        title=f"“{ref.text}” 音高{'偏高' if higher else '偏低'}",
+        detail=f"和你自己的平均音高比，差了 {abs(gap):.0f} 个半音。",
+        action=f"“{ref.text}” 起音{'压低' if higher else '抬高'}一点。",
+    )
 
 
 def build_advice(
@@ -112,12 +127,6 @@ def build_advice(
                 action=f"“{ref.text}” 要短促地带过去，别在上面停留。",
             ))
 
-        rc = word_contour(ref_prosody, ref.start, ref.end)
-        uc = word_contour(usr_prosody, usr.start, usr.end)
-        if rc is None or uc is None:
-            continue
-        ref_move, usr_move = rc[1] - rc[0], uc[1] - uc[0]
-
         if token.ref_index == len(ref_words) - 1:
             # 句尾单独用跨词的降幅衡量，词内起止会与听感相反
             ref_fall = terminal_fall(ref_prosody, ref_words)
@@ -135,6 +144,18 @@ def build_advice(
                             f"你只沉了 {abs(usr_fall):.0f} 个。"),
                     action=f"读到 “{ref.text}” 时整个把声音丢下去，像句号砸下来。",
                 ))
+            continue
+
+        rp = word_pitch(ref_prosody, ref.start, ref.end)
+        up = word_pitch(usr_prosody, usr.start, usr.end)
+        if rp is None or up is None:
+            continue
+        ref_move, usr_move = rp.move, up.move
+        if ref_move is None or usr_move is None:
+            # 形状不单调（先扬后抑之类），用一个升降数说不清，判了多半与听感
+            # 相反。升降不判，但词头音高照旧可以比。
+            if abs(up.head - rp.head) > PITCH_GAP_ST:
+                found.append(_pitch_off(ref, token.ref_index, rp.head, up.head))
             continue
 
         if ref_move < -STRONG_SLOPE_ST and usr_move > ref_move + SLOPE_GAP_ST:
@@ -161,17 +182,8 @@ def build_advice(
                            else f"你反而降了 {abs(usr_move):.0f} 个。")),
                 action=f"读 “{ref.text}” 时把声音往上挑一下。",
             ))
-        elif abs(uc[0] - rc[0]) > PITCH_GAP_ST:
-            higher = uc[0] > rc[0]
-            found.append(Advice(
-                kind="pitch_off",
-                flag="音高偏高" if higher else "音高偏低",
-                ref_index=token.ref_index,
-                score=abs(uc[0] - rc[0]) / PITCH_GAP_ST,
-                title=f"“{ref.text}” 音高{'偏高' if higher else '偏低'}",
-                detail=f"和你自己的平均音高比，差了 {abs(uc[0] - rc[0]):.0f} 个半音。",
-                action=f"“{ref.text}” 起音{'压低' if higher else '抬高'}一点。",
-            ))
+        elif abs(up.head - rp.head) > PITCH_GAP_ST:
+            found.append(_pitch_off(ref, token.ref_index, rp.head, up.head))
 
     # 同一个词的音高/时长问题只留最严重的一条，避免一个词刷满整个列表。
     # 但「该停没停」是另一个动作（嘴要停住），不和词本身的问题合并。

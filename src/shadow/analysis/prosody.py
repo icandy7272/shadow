@@ -37,23 +37,6 @@ def _rms_db(
     return 20.0 * np.log10(rms + 1e-10)
 
 
-def word_contour(prosody: "Prosody", start: float, end: float) -> tuple[float, float] | None:
-    """词内的起始与结束音高（各取前后三分之一的均值，比取单帧稳）。
-
-    返回 (起, 止)；两者之差就是这个词内部的升降走向——句尾降调正是靠它看出来的。
-    浊音帧不足时返回 None。
-    """
-    values = prosody.semitones[(prosody.times >= start) & (prosody.times < end)]
-    values = values[np.isfinite(values)]
-    if values.size == 0:
-        return None
-    if values.size < 3:
-        mean = float(np.mean(values))
-        return mean, mean
-    third = max(1, values.size // 3)
-    return float(np.mean(values[:third])), float(np.mean(values[-third:]))
-
-
 def word_trace(prosody: "Prosody", start: float, end: float, *,
                points: int = config.WORD_TRACE_POINTS) -> tuple[float | None, ...]:
     """词内音高的实际走向：等分成 points 段，每段取中位数，无浊音的段为 None。
@@ -71,6 +54,51 @@ def word_trace(prosody: "Prosody", start: float, end: float, *,
         window = window[np.isfinite(window)]
         out.append(float(np.median(window)) if window.size else None)
     return tuple(out)
+
+
+def _longest_voiced_run(trace) -> list[float]:
+    """词内最长的一段连续浊音。
+
+    词边界是估出来的，末尾常蹭到下一个词的开头——那一小段会把判定整个带偏，
+    只认最长的连续段就自然甩掉它。
+    """
+    best: list[float] = []
+    run: list[float] = []
+    for value in trace:
+        if value is None:
+            best = run if len(run) > len(best) else best
+            run = []
+            continue
+        run.append(value)
+    return run if len(run) > len(best) else best
+
+
+@dataclass(frozen=True, slots=True)
+class WordPitch:
+    """一个词的音高摘要。head/tail 是词头、词尾的音高（半音）。"""
+
+    head: float
+    tail: float
+    move: float | None      # 净升降。形状不单调时为 None，见下
+
+
+def word_pitch(prosody: "Prosody", start: float, end: float) -> "WordPitch | None":
+    """词头音高、词尾音高，以及词内净升降。浊音太少时整个返回 None。
+
+    move 在形状不单调时为 None：「先扬后抑」用一个数描述必然失真，
+    真出过把降调判成升调的事。宁可不判，也别给出与听感相反的结论。
+    句尾另有 terminal_fall，不靠这个。
+    """
+    run = _longest_voiced_run(word_trace(prosody, start, end))
+    if len(run) < config.WORD_MOVE_MIN_POINTS:
+        return None
+    third = max(1, len(run) // 3)
+    head = float(np.median(run[:third]))
+    tail = float(np.median(run[-third:]))
+    # 中间冒出比两端都高（或都低）一截，说明是拱形或谷形，两点之差说明不了它
+    arch = (max(run) - max(head, tail) > config.WORD_MOVE_ARCH_ST
+            or min(head, tail) - min(run) > config.WORD_MOVE_ARCH_ST)
+    return WordPitch(head=head, tail=tail, move=None if arch else tail - head)
 
 
 def bounds_from_voiced(

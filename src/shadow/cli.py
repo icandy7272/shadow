@@ -13,7 +13,7 @@ from pathlib import Path
 from . import config, db, media, review
 from .analysis.diff import accuracy as diff_accuracy
 from .analysis.diff import diff_words, matched_pairs, unreliable_indices
-from .analysis.prosody import analyse, word_contour
+from .analysis.prosody import analyse
 from .drill.gapfill import blanks_of, parse_answer, render, tally
 from .drill.units import is_usable, split_into_units
 from .ingest.pipeline import import_source

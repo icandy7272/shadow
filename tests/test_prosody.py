@@ -167,12 +167,12 @@ def _words(spec):
 
 def test_terminal_fall_catches_a_drop_across_the_word_boundary():
     """was 收在 −2.7、born 从 −4.9 起：下坠跨在词边界上，词内指标会报成「升」。"""
-    from shadow.analysis.prosody import terminal_fall, word_contour
+    from shadow.analysis.prosody import terminal_fall, word_pitch
 
     prosody = _speech([(1.0, 1.4, -0.7, -2.7), (1.5, 2.0, -4.9, -1.7)])
     words = _words([("was", 1.0, 1.4), ("born", 1.5, 2.0)])
-    within = word_contour(prosody, 1.5, 2.0)
-    assert within[1] - within[0] > 0            # 词内看起来是升的
+    within = word_pitch(prosody, 1.5, 2.0)
+    assert within.move > 0                       # 词内看起来是升的
     assert terminal_fall(prosody, words) < -3.0  # 跨词看是明显下坠
 
 
@@ -197,7 +197,7 @@ def test_word_trace_keeps_a_rise_then_fall_that_two_points_would_flatten(tmp_pat
     import numpy as np
     import soundfile as sf
 
-    from shadow.analysis.prosody import analyse, word_contour, word_trace
+    from shadow.analysis.prosody import analyse, word_trace
 
     sr = 16000
     t_ = np.arange(sr) / sr                       # 1 秒
@@ -215,9 +215,8 @@ def test_word_trace_keeps_a_rise_then_fall_that_two_points_would_flatten(tmp_pat
     assert 0 < peak < len(trace) - 1                 # 峰在中间
     assert trace[peak] - trace[-1] > 3               # 峰之后确实沉下去了
 
-    # 两点摘要看不出这个峰，这正是它不够用的地方
-    start, stop = word_contour(prosody, 0.05, 0.95)
-    assert max(start, stop) < trace[peak]
+    # 只看首尾（旧做法）看不出这个峰，这正是两点摘要不够用的地方
+    assert max(trace[0], trace[-1]) < trace[peak]
 
 
 def test_word_trace_marks_unvoiced_slots_as_none(tmp_path):
@@ -236,3 +235,61 @@ def test_word_trace_marks_unvoiced_slots_as_none(tmp_path):
     assert len(values) == 10
     assert values[0] is not None
     assert values[-1] is None
+
+
+def _write_sweep(path, pieces, sr=16000):
+    """pieces: [(起始 Hz, 结束 Hz, 秒)]；0 Hz 表示静音。"""
+    import numpy as np
+    import soundfile as sf
+
+    out = []
+    for lo, hi, seconds in pieces:
+        n = int(seconds * sr)
+        if lo == 0:
+            out.append(np.zeros(n))
+            continue
+        freq = np.linspace(lo, hi, n)
+        out.append(0.4 * np.sin(2 * np.pi * np.cumsum(freq) / sr))
+    sf.write(path, np.concatenate(out).astype("float32"), sr)
+    return path
+
+
+def test_word_pitch_reports_a_plain_fall(tmp_path):
+    from shadow.analysis.prosody import analyse, word_pitch
+
+    prosody = analyse(_write_sweep(tmp_path / "fall.wav", [(220, 110, 1.0)]))
+    move = word_pitch(prosody, 0.05, 0.95).move
+
+    assert move is not None
+    assert -14 < move < -6          # 一个八度是 12 个半音，两头各截掉一点
+
+
+def test_word_pitch_refuses_to_judge_an_arch(tmp_path):
+    """先扬后抑用一个数说不清。宁可不判，也别给出与听感相反的结论。"""
+    from shadow.analysis.prosody import analyse, word_pitch
+
+    prosody = analyse(_write_sweep(tmp_path / "arch.wav",
+                                   [(110, 220, 0.5), (220, 100, 0.5)]))
+    assert word_pitch(prosody, 0.05, 0.95).move is None
+
+
+def test_word_pitch_ignores_a_detached_blip_at_the_word_edge(tmp_path):
+    """词边界是估出来的，末尾常蹭到下一个词的头。只认最长的那段连续浊音。"""
+    from shadow.analysis.prosody import analyse, word_pitch
+
+    prosody = analyse(_write_sweep(
+        tmp_path / "blip.wav",
+        [(220, 110, 0.8), (0, 0, 0.15), (300, 300, 0.1)],
+    ))
+    move = word_pitch(prosody, 0.05, 1.05).move
+
+    assert move is not None
+    assert move < -5                # 蹭进来的高音没有把降调翻成升调
+
+
+def test_word_pitch_is_none_when_there_is_barely_any_voicing(tmp_path):
+    from shadow.analysis.prosody import analyse, word_pitch
+
+    prosody = analyse(_write_sweep(tmp_path / "quiet.wav",
+                                   [(200, 200, 0.05), (0, 0, 0.9)]))
+    assert word_pitch(prosody, 0.2, 0.9) is None
