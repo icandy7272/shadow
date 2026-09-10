@@ -12,7 +12,7 @@ from pathlib import Path
 
 from . import config, db, media
 from .analysis.diff import accuracy as diff_accuracy
-from .analysis.diff import diff_words, matched_pairs
+from .analysis.diff import diff_words, matched_pairs, unreliable_indices
 from .analysis.prosody import analyse, word_contour
 from .drill.gapfill import blanks_of, render, score
 from .drill.units import split_into_units
@@ -184,6 +184,12 @@ def _reference_for(connection, args):
 def _compare(connection, *, ref_path, ref_words, paths, out_path,
              segment_id=None, unit_index=None, args=None) -> int:
     ref_prosody = analyse(ref_path)
+    # 交叉验证：库内文本来自长上下文转写，可能把缩读还原成完整形式，
+    # 与音频对不上。这些词不能用来判用户对错。
+    shaky = unreliable_indices(
+        [w.text for w in ref_words],
+        [w.text for w in transcribe_words(ref_path)],
+    )
     metrics: list[TakeMetrics] = []
     details = []
     skipped: list[tuple[str, float]] = []
@@ -242,7 +248,7 @@ def _compare(connection, *, ref_path, ref_words, paths, out_path,
         _save_run(connection, segment_id, unit_index, details, metrics,
                   unit_text=" ".join(w.text for w in ref_words))
 
-    _print_summary(summary, paths, tokens, out_path)
+    _print_summary(summary, paths, tokens, out_path, shaky=shaky)
     if args is not None:
         _suggest_after_compare(connection, args, summary)
     return 0
@@ -372,7 +378,11 @@ def cmd_drill(args: argparse.Namespace) -> int:
         print(f"读取原声失败：{exc}", file=sys.stderr)
         return 1
 
-    blanks = blanks_of(ref_words)
+    shaky = unreliable_indices(
+        [w.text for w in ref_words],
+        [w.text for w in transcribe_words(ref_path)],
+    )
+    blanks = tuple(b for b in blanks_of(ref_words) if b.word_index not in shaky)
     if not blanks:
         print("这一句没有挖空位（没有被弱读的功能词）。换一句试试。")
         return 0
@@ -681,14 +691,15 @@ def _band(spread, unit: str = "x") -> str:
     return f"{spread.median:.2f}{unit}（{spread.low:.2f}–{spread.high:.2f}）"
 
 
-def _print_summary(summary: TakeSummary, paths, tokens, out_path) -> None:
+def _print_summary(summary: TakeSummary, paths, tokens, out_path, shaky=frozenset()) -> None:
     if summary.count > 1:
         print(f"\n{summary.count} 次录音，取中位数（括号内是范围）")
     accuracy = summary.accuracy
     print(f"\n可懂度 {accuracy.median * 100:.0f}%"
           + ("" if accuracy.width < 0.005
              else f"（{accuracy.low * 100:.0f}–{accuracy.high * 100:.0f}%）"))
-    problems = [t for t in tokens if t.kind != "equal"]
+    problems = [t for t in tokens if t.kind != "equal" and t.ref_index not in shaky]
+    hidden = [t for t in tokens if t.kind != "equal" and t.ref_index in shaky]
     if not problems:
         print("  发音层面没问题——每个词机器都听出来了。")
     else:
@@ -699,6 +710,9 @@ def _print_summary(summary: TakeSummary, paths, tokens, out_path) -> None:
                 print(f"  错  {token.ref_text}  ->  听成 {token.usr_text}")
             else:
                 print(f"  多  {token.usr_text}")
+
+    for token in hidden:
+        print(f"  ?  {token.ref_text} —— 原声这里库内文本与音频对不上，不作数")
 
     pause = "—" if summary.pause_ratio is None else _band(summary.pause_ratio)
     print(f"\n发声 {_band(summary.speech_ratio)}    停顿 {pause}")

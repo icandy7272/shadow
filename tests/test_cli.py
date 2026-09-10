@@ -442,6 +442,11 @@ def test_drill_scores_and_records(monkeypatch, capsys):
     answers = iter(["have", "wrong"])
     monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
     monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d, is_blank=t in {"have", "been"})
+        for t, a, d in (("should", 0.0, 0.4), ("have", 0.4, 0.1),
+                        ("been", 0.5, 0.1), ("there", 0.6, 0.4))
+    ))
     monkeypatch.setattr("builtins.input", lambda _: next(answers))
     assert cli.main(["drill", "--segment", str(segment_id), "--unit", "1"]) == 0
     out = capsys.readouterr().out
@@ -460,6 +465,11 @@ def test_drill_lets_you_replay(monkeypatch, capsys):
     answers = iter(["?", "have", "been"])
     monkeypatch.setattr(cli.media, "play", lambda *a, **k: plays.append(1) or 1)
     monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d, is_blank=t in {"have", "been"})
+        for t, a, d in (("should", 0.0, 0.4), ("have", 0.4, 0.1),
+                        ("been", 0.5, 0.1), ("there", 0.6, 0.4))
+    ))
     monkeypatch.setattr("builtins.input", lambda _: next(answers))
     assert cli.main(["drill", "--segment", str(segment_id), "--unit", "1",
                      "--times", "2"]) == 0
@@ -480,6 +490,11 @@ def test_progress_shows_gapfill_rate(monkeypatch, capsys):
     answers = iter(["have", "been"])
     monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
     monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d, is_blank=t in {"have", "been"})
+        for t, a, d in (("should", 0.0, 0.4), ("have", 0.4, 0.1),
+                        ("been", 0.5, 0.1), ("there", 0.6, 0.4))
+    ))
     monkeypatch.setattr("builtins.input", lambda _: next(answers))
     cli.main(["drill", "--segment", str(segment_id), "--unit", "1"])
     capsys.readouterr()
@@ -493,6 +508,11 @@ def test_listen_does_not_reveal_the_words_drill_will_ask_for(monkeypatch, capsys
     segment_id = _seed_with_blanks()
     monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
     monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d, is_blank=t in {"have", "been"})
+        for t, a, d in (("should", 0.0, 0.4), ("have", 0.4, 0.1),
+                        ("been", 0.5, 0.1), ("there", 0.6, 0.4))
+    ))
     monkeypatch.setattr("builtins.input", lambda _: "3")
     assert cli.main(["listen", "--segment", str(segment_id), "--unit", "1"]) == 0
     out = capsys.readouterr().out
@@ -517,6 +537,11 @@ def test_drill_prints_the_next_command(monkeypatch, capsys):
     answers = iter(["have", "been"])
     monkeypatch.setattr(cli.media, "play", lambda *a, **k: 1)
     monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    monkeypatch.setattr(cli, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d, is_blank=t in {"have", "been"})
+        for t, a, d in (("should", 0.0, 0.4), ("have", 0.4, 0.1),
+                        ("been", 0.5, 0.1), ("there", 0.6, 0.4))
+    ))
     monkeypatch.setattr("builtins.input", lambda _: next(answers))
     cli.main(["drill", "--segment", str(segment_id), "--unit", "1"])
     out = capsys.readouterr().out

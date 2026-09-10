@@ -90,3 +90,21 @@ def accuracy(tokens: Sequence[DiffToken]) -> float:
         return 0.0
     correct = sum(1 for token in tokens if token.kind == KIND_EQUAL)
     return correct / reference_total
+
+
+def unreliable_indices(
+    ref_texts: Sequence[str], iso_texts: Sequence[str]
+) -> frozenset[int]:
+    """库内文本与「单独转写同一段音频」不一致的词下标。
+
+    导入整段素材时 Whisper 有长上下文，会把缩读还原成完整形式——实测
+    Jobs 说的是 "why'd"，库里却存成了 "why did"。拿这个当基准，会把
+    照着音频模仿的人判成发音错误，填空题的标准答案也会是音频里没有的词。
+
+    这些词不可信，不该用来判用户对错。
+    """
+    return frozenset(
+        token.ref_index
+        for token in diff_words(ref_texts, iso_texts)
+        if token.kind != KIND_EQUAL and token.ref_index is not None
+    )

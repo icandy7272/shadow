@@ -1,6 +1,11 @@
 import pytest
 
-from shadow.analysis.diff import accuracy, diff_words, matched_pairs
+from shadow.analysis.diff import (
+    accuracy,
+    diff_words,
+    matched_pairs,
+    unreliable_indices,
+)
 
 REF = ["Should", "have", "been", "there", "earlier"]
 
@@ -65,3 +70,16 @@ def test_distinct_numbers_are_not_reported_equal():
     tokens = diff_words(["born", "in", "2023"], ["born", "in", "2024"])
     assert kinds(tokens) == ["equal", "equal", "wrong"]
     assert accuracy(tokens) == pytest.approx(2 / 3)
+
+
+def test_unreliable_indices_flags_words_the_audio_does_not_support():
+    """长上下文转写会把缩读还原：音频是 why'd，库里却存成 why did。"""
+    stored = ["So", "why", "did", "I", "drop", "out?"]
+    isolated = ["So", "why'd", "I", "drop", "out?"]
+    shaky = unreliable_indices(stored, isolated)
+    assert 1 in shaky or 2 in shaky      # why / did 这一带不可信
+    assert 0 not in shaky and 4 not in shaky
+
+
+def test_nothing_is_unreliable_when_both_agree():
+    assert unreliable_indices(REF, list(REF)) == frozenset()
