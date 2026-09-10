@@ -54,6 +54,24 @@ def word_contour(prosody: "Prosody", start: float, end: float) -> tuple[float, f
     return float(np.mean(values[:third])), float(np.mean(values[-third:]))
 
 
+def bounds_from_voiced(
+    voiced: np.ndarray, *, floor: float, ceiling: float
+) -> tuple[float, float]:
+    """由粗测得到的浊音基频定出收窄后的搜索范围。纯函数，便于单测。
+
+    用中位数而非四分位数：八度错误一旦超过四分之一的帧，Q3 本身就被拉走了。
+    中位数只要错误帧不过半就稳，而人在一句话里的音域极少超过 ±1 个八度。
+    """
+    if voiced.size < config.PITCH_ADAPT_MIN_VOICED:
+        return floor, ceiling
+    median = float(np.median(voiced))
+    if median <= 0:
+        return floor, ceiling
+    low = max(floor, median / config.PITCH_ADAPT_SPAN)
+    high = min(ceiling, median * config.PITCH_ADAPT_SPAN)
+    return low, max(high, low * 2.0)
+
+
 def adaptive_pitch_bounds(
     sound: parselmouth.Sound,
     *,
@@ -64,20 +82,11 @@ def adaptive_pitch_bounds(
     """按说话人自身的基频分布收窄搜索范围。
 
     固定上限对低男声太宽，追踪器会把谐波当成基频。先用宽范围跑一遍，
-    取浊音帧的四分位数，再收到 0.75*Q1 ~ 1.5*Q3（Praat 的标准做法）。
-    浊音帧太少时保持原边界，不瞎猜。
+    再据其中位数收窄重跑。浊音帧太少时保持原边界，不瞎猜。
     """
     rough = sound.to_pitch(time_step=step, pitch_floor=floor, pitch_ceiling=ceiling)
     values = np.asarray(rough.selected_array["frequency"], dtype=float)
-    voiced = values[values > 0.0]
-    if voiced.size < config.PITCH_ADAPT_MIN_VOICED:
-        return floor, ceiling
-
-    q25, q75 = np.percentile(voiced, [25, 75])
-    low = max(floor, config.PITCH_ADAPT_LOW * float(q25))
-    high = min(ceiling, config.PITCH_ADAPT_HIGH * float(q75))
-    high = max(high, low * 2.0)  # 搜索范围不能退化
-    return low, min(high, ceiling)
+    return bounds_from_voiced(values[values > 0.0], floor=floor, ceiling=ceiling)
 
 
 def analyse(

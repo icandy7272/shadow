@@ -47,9 +47,11 @@ PITCH_CEILING_HZ = 500.0
 # 固定的 75-500 Hz 对低男声太宽，会把谐波误判成基频（实测 94 Hz 的声音
 # 有 12% 的帧跳到 494 Hz，把纵轴撑到 30 半音，真实语调全被压扁）。
 # Praat 标准两遍法：先宽跑一遍取四分位数，再用 0.75*Q1 ~ 1.5*Q3 重跑。
-PITCH_ADAPT_MIN_VOICED = 20
-PITCH_ADAPT_LOW = 0.75
-PITCH_ADAPT_HIGH = 1.5
+# 用中位数而非四分位数定边界：八度错误超过 25% 的帧时四分位数本身就被污染
+# （实测某次录音 Q75 = 470 Hz，中位数仍是 116 Hz，与同批另外两次一致）。
+# 中位数只要错误帧不过半就稳。人在一句话内的音域也极少超过 ±1 个八度。
+PITCH_ADAPT_MIN_VOICED = 5
+PITCH_ADAPT_SPAN = 2.0
 
 # --- 录音校验 ---
 MIN_ATTEMPT_SEC = 1.0

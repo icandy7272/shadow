@@ -5,7 +5,11 @@ import soundfile as sf
 import parselmouth
 
 from shadow import config
-from shadow.analysis.prosody import adaptive_pitch_bounds, analyse
+from shadow.analysis.prosody import (
+    adaptive_pitch_bounds,
+    analyse,
+    bounds_from_voiced,
+)
 
 SR = 16000
 
@@ -107,3 +111,35 @@ def test_low_voice_produces_no_octave_outliers(tmp_path):
     finite = result.semitones[np.isfinite(result.semitones)]
     assert finite.size > 0
     assert np.abs(finite).max() < 3.0
+
+
+def test_bounds_are_median_based_not_quartile_based():
+    # 取 200 Hz，除以跨度后仍高于 75 Hz 的地板，才测得出规则本身
+    voiced = np.full(60, 200.0)
+    low, high = bounds_from_voiced(voiced, floor=75.0, ceiling=500.0)
+    assert low == pytest.approx(200.0 / config.PITCH_ADAPT_SPAN, abs=1.0)
+    assert high == pytest.approx(200.0 * config.PITCH_ADAPT_SPAN, abs=1.0)
+
+
+def test_bounds_never_go_below_the_floor():
+    low, _ = bounds_from_voiced(np.full(60, 100.0), floor=75.0, ceiling=500.0)
+    assert low == 75.0
+
+
+def test_bounds_survive_heavy_octave_contamination():
+    """实测某次录音三成帧被谐波骗到 470 Hz，四分位数因此失效，中位数不受影响。"""
+    clean = np.full(40, 110.0)
+    contaminated = np.concatenate([clean, np.full(18, 470.0)])
+    low, high = bounds_from_voiced(contaminated, floor=75.0, ceiling=500.0)
+    assert high < 300.0          # 没有被 470 Hz 拉走
+    assert low < 110.0 < high
+
+
+def test_bounds_work_with_only_a_handful_of_frames():
+    # 0.7 秒的短句只有十来个浊音帧，门槛必须低于此
+    low, high = bounds_from_voiced(np.full(6, 100.0), floor=75.0, ceiling=500.0)
+    assert high < 500.0
+
+
+def test_bounds_fall_back_when_almost_nothing_is_voiced():
+    assert bounds_from_voiced(np.full(2, 100.0), floor=75.0, ceiling=500.0) == (75.0, 500.0)
