@@ -16,6 +16,21 @@ from ..models import Word
 
 _SENTENCE_END = re.compile(r"[.!?]['\"]?$")
 
+# 正常说话 2-4 词/秒，实测本仓库 221 个单元中位 3.4、最高 5.8。
+# 超过 8 的一定是 Whisper 词级时间戳崩了——见过 13 个词挤在 0.56 秒里，
+# 这种单元音频半秒、文本十几个词，完全没法练。
+MAX_WORDS_PER_SEC = 8.0
+
+
+def words_per_second(unit: Sequence[Word]) -> float:
+    duration = unit[-1].end - unit[0].start if unit else 0.0
+    return len(unit) / duration if duration > 0 else float("inf")
+
+
+def is_usable(unit: Sequence[Word]) -> bool:
+    """时间戳崩掉的单元没法练，得先认出来。"""
+    return bool(unit) and words_per_second(unit) <= MAX_WORDS_PER_SEC
+
 
 def _sentence_groups(words: Sequence[Word]) -> list[list[Word]]:
     groups: list[list[Word]] = []
@@ -41,9 +56,12 @@ def _split_overlong(group: list[Word], max_sec: float) -> list[list[Word]]:
 
     low = config.UNIT_MIN_WORDS
     high = len(group) - config.UNIT_MIN_WORDS
+    middle = len(group) / 2
+    # 间隔相同时切在中间，别切在最靠前的位置。词级时间戳崩掉时所有间隔
+    # 都是 0（见过 13 个词挤在同一毫秒），只按间隔取最大会切出两词碎片。
     best_index = max(
         range(low, high + 1),
-        key=lambda i: group[i].start - group[i - 1].end,
+        key=lambda i: (group[i].start - group[i - 1].end, -abs(i - middle)),
     )
     head, tail = group[:best_index], group[best_index:]
     return _split_overlong(head, max_sec) + _split_overlong(tail, max_sec)

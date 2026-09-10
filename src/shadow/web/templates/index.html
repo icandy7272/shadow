@@ -1,18 +1,40 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>练习单元</h1>
+<div class="head">
+  <h1>练习单元</h1>
+  {% if next_unit %}
+    <a class="cta" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}">
+      开始下一句 →</a>
+  {% endif %}
+</div>
+
 {% if not catalogue %}
   <p class="empty">还没有导入素材。先在命令行跑
     <code>uv run shadow import &lt;url&gt;</code></p>
 {% else %}
+<p class="hint">
+  没练过的句子不显示原文——先看到文字，盲听就作废了。
+  <label class="reveal"><input type="checkbox" id="reveal"> 我知道，全部显示</label>
+</p>
 <table class="units">
-  <thead><tr><th>片段</th><th>句子</th><th>时长</th><th>空</th><th>练过</th></tr></thead>
+  <thead><tr><th>片段</th><th>句子</th><th>时长</th><th>词</th><th>空</th><th>练过</th></tr></thead>
   <tbody>
   {% for item in catalogue %}
-    <tr class="{{ 'done' if item.runs else '' }}">
+    <tr class="{{ 'done' if item.runs else 'fresh' }}">
       <td class="num">{{ item.segment }}·{{ item.unit }}</td>
-      <td><a href="/practice/{{ item.segment }}/{{ item.unit }}">{{ item.text }}</a></td>
+      <td>
+        {% if not item.usable %}
+          <span class="broken">时间戳异常，无法练习</span>
+        {% else %}
+        <a href="/practice/{{ item.segment }}/{{ item.unit }}">
+          {% if item.runs %}{{ item.text }}
+          {% else %}<span class="masked" data-text="{{ item.text }}">未练过 · {{ item.words }} 个词</span>
+          {% endif %}
+        </a>
+        {% endif %}
+      </td>
       <td class="num">{{ '%.1f'|format(item.seconds) }}s</td>
+      <td class="num">{{ item.words }}</td>
       <td class="num">{{ item.blanks or '' }}</td>
       <td class="num">{{ item.runs or '' }}</td>
     </tr>

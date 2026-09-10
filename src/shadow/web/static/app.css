@@ -62,3 +62,20 @@ code { background: var(--card); border: 1px solid var(--line); border-radius: 4p
   padding: 1px 5px; font-size: 13px; }
 .todo { color: var(--muted); font-size: 13px; }
 .empty { color: var(--muted); }
+
+.head { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 16px; margin-bottom: 8px; }
+.cta { background: var(--accent); color: #fff; text-decoration: none;
+  padding: 8px 16px; border-radius: 7px; font-size: 14px; white-space: nowrap; }
+.reveal { margin-left: 10px; color: var(--muted); font-size: 12px;
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+tr.fresh .masked { color: var(--muted); font-style: italic; }
+.repeat { color: var(--muted); font-size: 13px; display: inline-flex;
+  align-items: center; gap: 5px; }
+.repeat input.times { font: inherit; width: 52px; padding: 4px 6px;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--bg);
+  color: var(--fg); text-align: center; }
+button.stop { border-color: var(--warn); color: var(--warn); }
+button:disabled { opacity: .5; cursor: default; }
+
+.broken { color: var(--warn); font-size: 13px; opacity: .7; }

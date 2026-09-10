@@ -8,6 +8,8 @@
     <p class="hint">不看文字，就听。听完给自己打个分。</p>
     <div class="row">
       <button class="play" data-src="/audio/{{ segment }}/{{ unit }}">▶ 播放（{{ seconds }}s）</button>
+      <label class="repeat">连播 <input type="number" class="times" value="10" min="1" max="50"> 遍</label>
+      <button class="stop" hidden>■ 停</button>
       <span class="plays"></span>
     </div>
     <div class="rating">
@@ -26,6 +28,8 @@
       功能词太好猜了，不分开就测不出听力。</p>
     <div class="row">
       <button class="play" data-src="/audio/{{ segment }}/{{ unit }}">▶ 重听</button>
+      <label class="repeat">连播 <input type="number" class="times" value="3" min="1" max="50"> 遍</label>
+      <button class="stop" hidden>■ 停</button>
       <span class="plays"></span>
     </div>
     <p class="sentence">

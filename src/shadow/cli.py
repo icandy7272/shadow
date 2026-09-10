@@ -15,7 +15,7 @@ from .analysis.diff import accuracy as diff_accuracy
 from .analysis.diff import diff_words, matched_pairs, unreliable_indices
 from .analysis.prosody import analyse, word_contour
 from .drill.gapfill import blanks_of, parse_answer, render, tally
-from .drill.units import split_into_units
+from .drill.units import is_usable, split_into_units
 from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
 from .models import Word
@@ -144,7 +144,8 @@ def cmd_units(args: argparse.Namespace) -> int:
         duration = unit[-1].end - unit[0].start
         blanks = sum(word.is_blank for word in unit)
         text = " ".join(word.text for word in unit)
-        print(f"  {index:2d}. [{duration:4.1f}s {len(unit):2d}词 {blanks}空]  {text}")
+        flag = "" if is_usable(unit) else "  ⚠ 时间戳异常，无法练习"
+        print(f"  {index:2d}. [{duration:4.1f}s {len(unit):2d}词 {blanks}空]  {text}{flag}")
     return 0
 
 
@@ -576,6 +577,7 @@ def cmd_practice(args: argparse.Namespace) -> int:
         print("\n已取消。", file=sys.stderr)
         if run_id is not None:
             db.finish_run(connection, run_id)
+            db.discard_if_empty(connection, run_id)
         return 1
     if filled is not None and run_id is not None:
         db.set_gapfill(connection, run_id, *filled)
@@ -594,6 +596,7 @@ def cmd_practice(args: argparse.Namespace) -> int:
     if paths is None:
         if run_id is not None:
             db.finish_run(connection, run_id)
+            db.discard_if_empty(connection, run_id)
         return 1
 
     print()
@@ -608,6 +611,7 @@ def cmd_practice(args: argparse.Namespace) -> int:
         code = 1
     if run_id is not None:
         db.finish_run(connection, run_id)
+        db.discard_if_empty(connection, run_id)
     return code
 
 

@@ -104,3 +104,30 @@ def test_list_runs_filters_by_unit(conn):
         db.finish_run(conn, run_id)
     assert len(db.list_runs(conn, segment_id=segment_id)) == 2
     assert len(db.list_runs(conn, segment_id=segment_id, unit_index=2)) == 1
+
+
+def test_empty_run_is_discarded(conn):
+    source_id = db.create_source(conn, url="https://x/y", title="T", duration_sec=60.0)
+    db.insert_segments(conn, source_id, (
+        Segment(idx=0, start=0.0, end=1.0, words=(Word("hi", 0.0, 1.0),)),
+    ))
+    segment_id = db.list_segments(conn, source_id)[0]["id"]
+    run_id = db.start_run(conn, segment_id=segment_id, unit_index=1)
+    db.finish_run(conn, run_id)
+    assert db.discard_if_empty(conn, run_id) is True
+    assert db.list_runs(conn) == []
+
+
+def test_run_with_any_data_is_kept(conn):
+    source_id = db.create_source(conn, url="https://x/y", title="T", duration_sec=60.0)
+    db.insert_segments(conn, source_id, (
+        Segment(idx=0, start=0.0, end=1.0, words=(Word("hi", 0.0, 1.0),)),
+    ))
+    segment_id = db.list_segments(conn, source_id)[0]["id"]
+    for setter in (lambda r: db.set_blind_rating(conn, r, 3),
+                   lambda r: db.set_gapfill(conn, r, 1, 2)):
+        run_id = db.start_run(conn, segment_id=segment_id, unit_index=1)
+        setter(run_id)
+        db.finish_run(conn, run_id)
+        assert db.discard_if_empty(conn, run_id) is False
+    assert len(db.list_runs(conn)) == 2

@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import config, db, media
 from ..drill.gapfill import blanks_of
-from ..drill.units import split_into_units
+from ..drill.units import is_usable, split_into_units
 
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=str(HERE / "templates"))
@@ -77,16 +77,22 @@ def index(request: Request):
                     "seconds": words[-1].end - words[0].start,
                     "words": len(words),
                     "blanks": sum(w.is_blank for w in words),
+                    "usable": is_usable(words),
                 })
     done = {}
     for run in db.list_runs(connection):
-        if run["unit_text"]:
+        # 中途取消留下的空记录不算练过
+        if run["unit_text"] and (run["blind_rating"] is not None
+                                 or run["gapfill_total"] is not None
+                                 or db.run_metrics(connection, run["id"])):
             done.setdefault(run["unit_text"], []).append(run)
     for item in catalogue:
         item["runs"] = len(done.get(item["text"], ()))
+    # 没练过的第一句：有个直达入口就不用浏览列表，也就不会被剧透
+    next_unit = next((i for i in catalogue if not i["runs"] and i["usable"]), None)
     return templates.TemplateResponse(
         request, "index.html",
-        {"catalogue": catalogue, "sources": sources},
+        {"catalogue": catalogue, "sources": sources, "next_unit": next_unit},
     )
 
 
@@ -94,6 +100,10 @@ def index(request: Request):
 def practice(request: Request, segment_id: int, unit: int):
     connection = _db()
     segment, words = _unit_words(connection, segment_id, unit)
+    if not is_usable(words):
+        raise HTTPException(
+            409, "这个单元的词级时间戳异常（十几个词挤在半秒里），没法练。换一个吧。"
+        )
     _, units = _units(connection, segment_id)
     return templates.TemplateResponse(
         request, "practice.html",

@@ -268,6 +268,24 @@ def add_attempt(
     return int(cursor.lastrowid)
 
 
+def discard_if_empty(conn: sqlite3.Connection, run_id: int) -> bool:
+    """一条什么都没记下的练习记录（中途取消）不该算作练过。"""
+    row = conn.execute(
+        "SELECT blind_rating, gapfill_total FROM practice_runs WHERE id = ?",
+        (run_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    has_take = conn.execute(
+        "SELECT 1 FROM attempts WHERE run_id = ? LIMIT 1", (run_id,)
+    ).fetchone()
+    if row["blind_rating"] is None and row["gapfill_total"] is None and not has_take:
+        conn.execute("DELETE FROM practice_runs WHERE id = ?", (run_id,))
+        conn.commit()
+        return True
+    return False
+
+
 def list_runs(
     conn: sqlite3.Connection,
     *,

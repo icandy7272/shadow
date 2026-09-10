@@ -1,23 +1,71 @@
-// 播放计数 + 盲听评分 + 填空提交。刻意不用框架：每一步就是一段表单。
+// 刻意不用框架：每一步就是一段表单，唯一需要 JS 的是连播和录音。
+
+// ---------- 首页：揭晓未练过的原文（需要显式勾选）----------
+const reveal = document.getElementById("reveal");
+if (reveal) {
+  const apply = () => {
+    document.querySelectorAll(".masked").forEach((span) => {
+      span.textContent = reveal.checked ? span.dataset.text
+                                        : span.dataset.placeholder;
+    });
+  };
+  document.querySelectorAll(".masked").forEach((span) => {
+    span.dataset.placeholder = span.textContent.trim();
+  });
+  reveal.checked = localStorage.getItem("shadow.reveal") === "1";
+  reveal.addEventListener("change", () => {
+    localStorage.setItem("shadow.reveal", reveal.checked ? "1" : "0");
+    apply();
+  });
+  apply();
+}
+
+// ---------- 练习页 ----------
 const root = document.getElementById("practice");
 if (root) {
   const segment = root.dataset.segment;
   const unit = root.dataset.unit;
-
-  // --- 播放，并记下听了几遍 ---
   const counts = new WeakMap();
+
+  // 连播：一遍放完接着下一遍，中途可停
   document.querySelectorAll("button.play").forEach((button) => {
-    const label = button.parentElement.querySelector(".plays");
+    const row = button.parentElement;
+    const label = row.querySelector(".plays");
+    const stop = row.querySelector("button.stop");
+    const timesInput = row.querySelector("input.times");
     counts.set(button, 0);
-    button.addEventListener("click", () => {
-      const audio = new Audio(button.dataset.src);
+    let audio = null;
+    let left = 0;
+
+    const finish = () => {
+      if (audio) { audio.pause(); audio = null; }
+      left = 0;
+      button.disabled = false;
+      if (stop) stop.hidden = true;
+    };
+
+    const playOnce = () => {
+      audio = new Audio(button.dataset.src);
+      audio.addEventListener("ended", () => {
+        counts.set(button, counts.get(button) + 1);
+        if (label) label.textContent = `听了 ${counts.get(button)} 遍`;
+        left -= 1;
+        if (left > 0) setTimeout(playOnce, 500);
+        else finish();
+      });
       audio.play();
-      counts.set(button, counts.get(button) + 1);
-      if (label) label.textContent = `听了 ${counts.get(button)} 遍`;
+    };
+
+    button.addEventListener("click", () => {
+      left = Math.max(1, Number(timesInput ? timesInput.value : 1) || 1);
+      button.disabled = true;
+      if (stop) stop.hidden = false;
+      playOnce();
     });
+    if (stop) stop.addEventListener("click", finish);
   });
 
-  // --- 第一步：盲听打分 ---
+  // 第一步：盲听打分
   const listenStep = document.getElementById("step-listen");
   listenStep.querySelectorAll(".rating button").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -36,7 +84,7 @@ if (root) {
     });
   });
 
-  // --- 第二步：填空 ---
+  // 第二步：填空
   const drillStep = document.getElementById("step-drill");
   document.getElementById("submit-drill").addEventListener("click", async () => {
     const answers = [...drillStep.querySelectorAll(".slot")].map((slot) => ({
@@ -58,7 +106,7 @@ if (root) {
     box.hidden = false;
     box.innerHTML =
       `<p>${data.correct}/${data.total} 对，其中 <b>${data.heard}</b> 个是听出来的` +
-      (data.replays ? `，重听 ${data.replays} 次` : "，一遍过") + "</p>" +
+      (data.replays ? `，重听 ${data.replays} 遍` : "，一遍过") + "</p>" +
       data.items.map((item) => {
         if (item.correct && item.heard) return `<div class="ok">✓ ${item.answer}</div>`;
         if (item.correct) return `<div class="guessed">○ ${item.answer} （猜的，不算听力）</div>`;

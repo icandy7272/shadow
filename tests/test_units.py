@@ -85,3 +85,47 @@ def test_single_short_input_still_yields_one_unit():
     units = split(words)
     assert len(units) == 1
     assert texts_of(units[0]) == "hi."
+
+
+def test_implausible_word_density_is_flagged():
+    """实测某单元 13 个词挤在 0.56 秒里 —— Whisper 词级时间戳崩了。"""
+    from shadow.drill.units import is_usable, words_per_second
+
+    crammed = tuple(
+        Word(text=f"w{i}", start=110.32 + i * 0.001, end=110.32 + i * 0.001 + 0.02)
+        for i in range(13)
+    )
+    assert words_per_second(crammed) > 8
+    assert is_usable(crammed) is False
+
+
+def test_normal_speech_is_usable():
+    from shadow.drill.units import is_usable
+
+    normal, _ = sentence([f"w{i}" for i in range(12)], per_word=0.3)  # 约 3.3 词/秒
+    assert is_usable(tuple(normal)) is True
+
+
+def test_empty_unit_is_not_usable():
+    from shadow.drill.units import is_usable
+
+    assert is_usable(()) is False
+
+
+def test_overlong_sentence_with_no_pauses_splits_near_the_middle():
+    """时间戳崩掉时所有间隔都是 0，只取最大间隔会切出两词碎片。"""
+    words, _ = sentence([f"w{i}" for i in range(40)], per_word=0.3, gap_after=0.0)
+    units = split_into_units(tuple(words), min_sec=0.0, max_sec=6.0, min_words=2)
+    assert len(units) >= 2
+    assert all(len(u) >= 5 for u in units), [len(u) for u in units]
+
+
+def test_a_real_pause_still_wins_over_the_middle():
+    words, _ = sentence([f"w{i}" for i in range(40)], per_word=0.3, gap_after=0.0)
+    words = list(words)
+    shift = 1.5
+    for i in range(10, len(words)):        # 第 10 个词前插一个明显的停顿
+        words[i] = Word(text=words[i].text, start=words[i].start + shift,
+                        end=words[i].end + shift)
+    units = split_into_units(tuple(words), min_sec=0.0, max_sec=6.0, min_words=2)
+    assert units[0][-1].text == "w9"

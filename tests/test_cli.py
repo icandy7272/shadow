@@ -647,6 +647,6 @@ def test_practice_stops_cleanly_if_recording_is_cancelled(monkeypatch, tmp_path)
     assert cli.main(["practice", "--segment", str(segment_id), "--unit", "1",
                      "-o", str(tmp_path / "p.png")]) == 1
     connection = db.connect()
-    runs = db.list_runs(connection, segment_id=segment_id)
-    assert len(runs) == 1                       # 记录已收尾，不会留半开状态
+    # 什么都没记下的一轮不该算作练过，否则「练了 3 次」里混着取消
+    assert db.list_runs(connection, segment_id=segment_id) == []
     connection.close()

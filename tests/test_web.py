@@ -115,3 +115,45 @@ def test_gapfill_reports_the_swallowed_duration_on_a_miss(client, tmp_path):
     data = client.post("/api/gapfill", json=payload).json()
     assert data["items"][0]["correct"] is False
     assert data["items"][0]["ms"] == 100
+
+
+def test_index_hides_the_text_of_unpractised_units(client, tmp_path):
+    """列表页把原文都列出来，等于还没开始练就把整篇读了一遍。
+
+    原文仍在 data 属性里（勾选「全部显示」时要用），但不能被渲染出来——
+    目的是避免不小心读到，不是防偷看。
+    """
+    segment_id = _seed(tmp_path)
+    body = client.get("/").text
+    assert "未练过" in body
+    assert body.count("It was a start.") == 1          # 只此一处
+    assert 'data-text="It was a start."' in body       # 而且是在属性里
+
+
+def test_index_shows_the_text_once_practised(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    client.post("/api/rating", data={"segment": segment_id, "unit": 2, "rating": 3})
+    body = client.get("/").text
+    assert "It was a start." in body
+
+
+def test_index_links_straight_to_the_next_unpractised_unit(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    assert f'class="cta" href="/practice/{segment_id}/1"' in client.get("/").text
+    client.post("/api/rating", data={"segment": segment_id, "unit": 1, "rating": 3})
+    assert f'class="cta" href="/practice/{segment_id}/2"' in client.get("/").text
+
+
+def test_no_next_link_when_everything_is_practised(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    for unit in (1, 2):
+        client.post("/api/rating",
+                    data={"segment": segment_id, "unit": unit, "rating": 3})
+    assert "开始下一句" not in client.get("/").text
+
+
+def test_practice_page_offers_repeat_playback(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    body = client.get(f"/practice/{segment_id}/2").text
+    assert 'class="times" value="10"' in body      # 盲听默认连播 10 遍
+    assert body.count('button class="stop"') == 2  # 每个播放控件都能中途停
