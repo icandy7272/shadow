@@ -45,7 +45,7 @@ if (root) {
     };
 
     const playOnce = () => {
-      audio = new Audio(button.dataset.src);
+      audio = speed.apply(new Audio(button.dataset.src));
       audio.addEventListener("ended", () => {
         counts.set(button, counts.get(button) + 1);
         if (label) label.textContent = `听了 ${counts.get(button)} 遍`;
@@ -63,6 +63,7 @@ if (root) {
       playOnce();
     });
     if (stop) stop.addEventListener("click", finish);
+    row.append(speedControl());
   });
 
   // 第一步：盲听打分
@@ -192,6 +193,8 @@ if (root) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   const playOnce = () => new Promise((resolve) => {
+    // 这里刻意不套变速：这几遍是你马上要模仿的东西，放慢了就不是它了，
+    // 而比对仍拿原速的原声当基准，每个词都会显得拖长。
     const audio = new Audio(src);
     audio.addEventListener("ended", resolve, { once: true });
     audio.addEventListener("error", resolve, { once: true });

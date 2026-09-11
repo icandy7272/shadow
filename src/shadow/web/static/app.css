@@ -214,3 +214,9 @@ button:disabled { opacity: .5; cursor: default; }
 .sentence-plain { font-size: 17px; line-height: 1.8; margin: 10px 0 0; }
 .fig-body.pitch { user-select: none; }
 .slot-bands .band.picked { background: var(--accent); opacity: .16; }
+
+.speeds { display: inline-flex; align-items: center; gap: 4px; }
+.speeds-label { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.speeds button { padding: 4px 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.speeds button.chosen { background: var(--accent); color: #fff;
+  border-color: var(--accent); }

@@ -19,13 +19,6 @@ const PRE_ROLL = 0.15;    // 两条都提前一点起播：正好切在词头会
 
 const svgNS = "http://www.w3.org/2000/svg";
 
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
 function svg(tag, attrs) {
   const node = document.createElementNS(svgNS, tag);
   Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
@@ -368,7 +361,7 @@ function pitchFigure(slots) {
 function playback(rhythm, audio, onFrame, onStopped) {
   const ref = new Audio(audio.ref);
   const usr = new Audio(audio.usr);
-  [ref, usr].forEach((media) => { media.preload = "auto"; });
+  [ref, usr].forEach((media) => { media.preload = "auto"; speed.follow(media); });
   const offsets = new Map([[ref, audio.refOffset], [usr, audio.usrOffset]]);
   const panners = new Map();
   let context = null;
@@ -524,7 +517,7 @@ function playbar(rhythm, audio, figures) {
   one.addEventListener("click", () => start(one, [player.ref], false));
   mine.addEventListener("click", () => start(mine, [player.usr], false));
 
-  bar.append(both, one, mine,
+  bar.append(both, one, mine, speedControl(),
              el("span", "playbar-hint", "戴耳机：原声在左，你的在右"));
   return { node: bar, player };
 }

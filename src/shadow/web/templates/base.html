@@ -9,6 +9,7 @@
 <body>
 <header><a href="/" class="home">Shadow</a>{% block subtitle %}{% endblock %}</header>
 <main>{% block content %}{% endblock %}</main>
+<script src="/static/ui.js?v={{ assets() }}"></script>
 <script src="/static/figures.js?v={{ assets() }}"></script>
 <script src="/static/app.js?v={{ assets() }}"></script>
 </body>
