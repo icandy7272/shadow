@@ -128,9 +128,9 @@ def evaluate(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
             return stop.value
 
 
-def flags_for(review: Review, limit: int):
+def flags_for(review: Review, limit: int, take=None):
     """给图 2 标红的词，以及图 1 的停顿标记。"""
-    take = review.best
+    take = take or review.best
     by_text: dict[str, int] = {}
     for token in take.tokens:
         if token.kind == "equal" and token.usr_index is not None:

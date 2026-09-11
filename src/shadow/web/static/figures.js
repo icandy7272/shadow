@@ -661,24 +661,64 @@ function rangeOf(rhythm, audio, role, [low, high]) {
 }
 
 
-// 给 app.js 用：返回一个包含两张图的元素
-function renderFigures(view) {  // eslint-disable-line no-unused-vars
-  const box = el("div", "figures");
-  const rhythm = rhythmFigure(view.rhythm);
-  const pitch = pitchFigure(view.pitch);
-  if (view.audio) {
-    const bar = playbar(view.rhythm, view.audio, [rhythm, pitch]);
-    box.append(bar.node);
+// 一遍录音：播放条 + 两张图
+function renderTake(take) {
+  const node = el("div", "take-figures");
+  const rhythm = rhythmFigure(take.rhythm);
+  const pitch = pitchFigure(take.pitch);
+  let player = null;
+  if (take.audio) {
+    const bar = playbar(take.rhythm, take.audio, [rhythm, pitch]);
+    player = bar.player;
+    node.append(bar.node);
     pitch.onPick((range, onSide) => {
-      bar.player.stop();               // 正在整句播放的话先停下
-      bar.player.compare(spanOf(view.pitch, range), onSide);
+      player.stop();               // 正在整句播放的话先停下
+      player.compare(spanOf(take.pitch, range), onSide);
     });
     rhythm.onPick((role, range) => {
-      bar.player.stop();
-      const at = rangeOf(view.rhythm, view.audio, role, range);
-      bar.player.playOne(role, at, (on) => rhythm.tint(role, range, on));
+      player.stop();
+      const at = rangeOf(take.rhythm, take.audio, role, range);
+      player.playOne(role, at, (on) => rhythm.tint(role, range, on));
     });
   }
-  box.append(rhythm.node, pitch.node);
+  node.append(rhythm.node, pitch.node);
+  return { node, stop: () => player && player.stop() };
+}
+
+
+// 给 app.js 用：返回一个包含两张图的元素。
+// 指标是全部遍数的中位数，画的却只能是一遍——所以让人自己切着看。
+function renderFigures(view) {  // eslint-disable-line no-unused-vars
+  const box = el("div", "figures");
+  const tabs = el("div", "takes");
+  const body = el("div", "take-body");
+  let current = null;
+
+  const numbers = (take) =>
+    `可懂度 ${take.accuracy}% · 发声 ${take.speech.toFixed(2)}x · `
+    + `停顿 ${take.pause === null ? "—" : take.pause.toFixed(2) + "x"}`;
+
+  const buttons = view.takes.map((take, index) => {
+    const button = el("button", null, `第 ${index + 1} 遍`);
+    button.addEventListener("click", () => show(index));
+    return button;
+  });
+  const detail = el("span", "takes-detail");
+
+  function show(index) {
+    if (current) current.stop();
+    buttons.forEach((button, i) => button.classList.toggle("chosen", i === index));
+    detail.textContent = numbers(view.takes[index]);
+    body.textContent = "";
+    current = renderTake(view.takes[index]);
+    body.append(current.node);
+  }
+
+  if (view.takes.length > 1) {
+    tabs.append(el("span", "takes-label", "看哪一遍"), ...buttons, detail);
+    box.append(tabs);
+  }
+  box.append(body);
+  show(view.chosen);
   return box;
 }

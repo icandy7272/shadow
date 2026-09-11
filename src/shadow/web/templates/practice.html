@@ -85,7 +85,10 @@
     {% endif %}
     <p class="status" id="rec-status"></p>
     <div class="bar" id="rec-progress" hidden><i></i></div>
-    <button id="stop-take" hidden>说完了</button>
+    <div class="row live-row">
+      <button id="stop-take" hidden>说完了</button>
+      <button id="redo-take" hidden>这遍重来</button>
+    </div>
     <div class="result" id="rec-result" hidden></div>
   </section>
 
@@ -95,7 +98,7 @@
     {% else %}<span></span>{% endif %}
     {% if next_unit %}
     <a class="next" href="/practice/{{ segment }}/{{ next_unit }}"
-       >练下一句（{{ next_unit }}/{{ total_units }}）→</a>
+       >练下一句（本段第 {{ next_unit }}/{{ total_units }} 句）→</a>
     {% endif %}
   </nav>
 

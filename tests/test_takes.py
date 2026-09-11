@@ -100,3 +100,35 @@ def test_five_takes_need_a_real_majority():
     s = summarise([take(items=items), take(items=items), take(items=items),
                    take(), take()])
     assert len(s.issues) == 1      # 3/5 算
+
+
+def test_a_stumbled_take_is_not_the_one_we_draw():
+    """实测：三遍里卡壳那遍停顿是原声的 5.3 倍，却因为语速正好居中被选中。
+    画出来的图和逐词试听全来自这一遍，整张图就废了。"""
+    takes = [take(accuracy=1.00, speech=1.11, pause=1.92),
+             take(accuracy=0.93, speech=1.05, pause=5.34),   # 卡壳
+             take(accuracy=0.93, speech=1.00, pause=1.14)]
+
+    assert summarise(takes).representative != 1
+
+
+def test_a_take_that_lost_words_is_not_the_one_we_draw():
+    takes = [take(accuracy=1.0, speech=1.10, pause=1.0),
+             take(accuracy=0.5, speech=1.00, pause=1.0),     # 半句没说出来
+             take(accuracy=1.0, speech=0.90, pause=1.0)]
+
+    assert summarise(takes).representative != 1
+
+
+def test_with_nothing_wrong_it_still_picks_the_typical_one():
+    """都正常的时候，挑最有代表性的那遍，不挑最好的。"""
+    takes = [take(speech=0.80), take(speech=1.00), take(speech=1.30)]
+
+    assert summarise(takes).representative == 1
+
+
+def test_all_takes_stumbled_still_yields_one():
+    takes = [take(accuracy=0.6, speech=1.0, pause=6.0),
+             take(accuracy=0.6, speech=1.1, pause=6.5)]
+
+    assert summarise(takes).representative in (0, 1)

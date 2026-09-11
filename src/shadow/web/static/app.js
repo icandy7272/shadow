@@ -187,6 +187,7 @@ if (root) {
   const bar = document.getElementById("rec-progress");
   const fill = bar.querySelector("i");
   const stopButton = document.getElementById("stop-take");
+  const redoButton = document.getElementById("redo-take");
   const startButton = document.getElementById("start-record");
   const src = `/audio/${segment}/${unit}`;
 
@@ -221,13 +222,26 @@ if (root) {
     const chunks = [];
     const recorder = new MediaRecorder(stream);
     let began = 0;
+    let dropped = false;
     recorder.addEventListener("dataavailable", (e) => chunks.push(e.data));
     recorder.addEventListener("stop", () => resolve({
       blob: new Blob(chunks),
       seconds: (performance.now() - began) / 1000,
+      dropped,
     }));
+    const finish = () => {
+      stopButton.hidden = true;
+      if (redoButton) redoButton.hidden = true;
+      recorder.stop();
+    };
     stopButton.hidden = false;
-    stopButton.onclick = () => { stopButton.hidden = true; recorder.stop(); };
+    stopButton.onclick = finish;
+    if (redoButton) {
+      redoButton.hidden = false;
+      // 说错了、卡壳了，当场作废重来。不作废的话这一遍会进比对，
+      // 而一遍念砸的录音会把三遍的中位数一起带偏。
+      redoButton.onclick = () => { dropped = true; finish(); };
+    }
     recorder.start();
     began = performance.now();
   });
@@ -268,6 +282,13 @@ if (root) {
       status.textContent = `第 ${take}/${takes} 遍 —— 录音中，说完点「说完了」`;
       status.classList.add("live");
       const clip = await recordOne(stream);
+
+      if (clip.dropped) {
+        status.classList.remove("live");
+        status.textContent = `第 ${take} 遍作废，重来一次。`;
+        await sleep(900);
+        continue;
+      }
 
       // 太短的就地重录这一遍。等录完三遍再由服务端拒收，等于逼人从头再来一轮。
       if (clip.seconds < minTake) {

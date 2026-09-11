@@ -58,6 +58,33 @@ class TakeSummary:
     representative: int
 
 
+ACCURACY_SLACK = 0.15    # 比最好的一遍低这么多，就不是同一次尝试了
+PAUSE_OUTLIER = 2.0      # 停顿比同批中位数大这么多倍，多半是中间卡了一下
+
+
+def _representative(takes: Sequence[TakeMetrics], speech, typical: float) -> int:
+    """画图和逐词试听都取这一遍，所以先把念砸的排除掉，再挑最有代表性的。
+
+    原来只按「语速最接近中位数」挑。实测三遍里卡壳那遍停顿是原声的 5.3 倍，
+    语速却正好居中，于是被选中——整张图和逐词试听全来自那一遍。
+    指标本身仍是全部遍数的中位数，不受这里影响。
+    """
+    best = max(take.accuracy for take in takes)
+    clean = [index for index, take in enumerate(takes)
+             if take.accuracy >= best - ACCURACY_SLACK]
+
+    pauses = [takes[index].pause_ratio for index in clean
+              if takes[index].pause_ratio is not None]
+    if len(pauses) > 2:
+        limit = statistics.median(pauses) * PAUSE_OUTLIER
+        steady = [index for index in clean
+                  if takes[index].pause_ratio is None
+                  or takes[index].pause_ratio <= limit]
+        clean = steady or clean
+
+    return min(clean, key=lambda index: abs(speech[index] - typical))
+
+
 def _spread(values: Sequence[float]) -> Spread:
     return Spread(median=statistics.median(values), low=min(values), high=max(values))
 
@@ -104,10 +131,7 @@ def summarise(takes: Sequence[TakeMetrics], *, min_share: float = 0.5) -> TakeSu
     # 一致性优先于严重度：3/3 次出现的问题比 2/3 次更值得改
     issues.sort(key=lambda issue: (-issue.hits, -issue.score))
 
-    representative = min(
-        range(total),
-        key=lambda index: abs(speech[index] - speech_spread.median),
-    )
+    representative = _representative(takes, speech, speech_spread.median)
 
     return TakeSummary(
         count=total,

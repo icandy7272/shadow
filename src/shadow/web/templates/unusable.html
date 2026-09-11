@@ -11,7 +11,7 @@
     {% else %}<span></span>{% endif %}
     {% if next_unit %}
     <a class="next" href="/practice/{{ segment }}/{{ next_unit }}"
-       >跳过，练下一句（{{ next_unit }}/{{ total_units }}）→</a>
+       >跳过，练下一句（本段第 {{ next_unit }}/{{ total_units }} 句）→</a>
     {% else %}<a class="next" href="/">回到列表 →</a>{% endif %}
   </nav>
 </section>

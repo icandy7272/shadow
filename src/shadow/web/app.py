@@ -342,14 +342,16 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp,
 
         yield _event({"result": _review_payload(
             result, run_id, rejected=rejected,
-            audio={"ref": f"/audio/{segment}/{unit}",
-                   "usr": f"/take/{result.best.path.name}"})})
+            audio={"ref": f"/audio/{segment}/{unit}"},
+            takes={str(take.path): f"/take/{take.path.name}"
+                   for take in result.takes})})
     except Exception as exc:
         log.exception("片段 %s 单元 %s 的比对失败", segment, unit)
         yield _event({"error": f"比对失败：{exc}"})
 
 
-def _review_payload(result, run_id: int, *, audio: dict, rejected=()) -> dict:
+def _review_payload(result, run_id: int, *, audio: dict, takes: dict,
+                    rejected=()) -> dict:
     summary = result.summary
     best = result.best
     problems = [
@@ -359,7 +361,7 @@ def _review_payload(result, run_id: int, *, audio: dict, rejected=()) -> dict:
     ]
     return {
         "run_id": run_id,
-        "view": feedback_view(result, MAX_ADVICE, audio=audio),
+        "view": feedback_view(result, MAX_ADVICE, audio=audio, takes=takes),
         "count": summary.count,
         "skipped": [{"index": i, "drift": round(d, 1)}
                     for i, _n, d in result.skipped],

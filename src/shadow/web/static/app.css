@@ -260,3 +260,18 @@ button:disabled { opacity: .5; cursor: default; }
 .lane.ref .blk.hear { background: rgba(31, 119, 180, .55); }
 .lane.usr .blk.hear { background: rgba(214, 39, 40, .45); }
 .lane .callouts span.hear { font-weight: 600; }
+
+.live-row { gap: 10px; }
+#redo-take { border-color: var(--line); color: var(--muted); font-size: 15px;
+  padding: 10px 18px; }
+#redo-take:hover { border-color: var(--warn); color: var(--warn); }
+
+/* 看哪一遍。指标是全部遍数的中位数，图只能画一遍 */
+.takes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin: 18px 0 4px; }
+.takes-label { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.takes button { padding: 4px 10px; font-size: 13px; }
+.takes button.chosen { background: var(--accent); color: #fff;
+  border-color: var(--accent); }
+.takes-detail { color: var(--muted); font-size: 12px; margin-left: 8px;
+  font-variant-numeric: tabular-nums; }

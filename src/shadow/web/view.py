@@ -20,12 +20,11 @@ def _block(block) -> dict:
             "width": round(block.width, 4), "matched": block.matched}
 
 
-def feedback_view(review, limit: int, *, audio: dict) -> dict:
-    """图 1 的节奏几何 + 图 2 的音高格子，单位与命令行那张图完全一致。"""
+def _take_view(review, take, limit: int, audio: dict) -> dict:
+    """一遍录音的两张图。每一遍都算，让人自己挑着看。"""
     from .. import review as review_mod
 
-    take = review.best
-    flags, notes = review_mod.flags_for(review, limit)
+    flags, notes = review_mod.flags_for(review, limit, take)
     pairs = matched_pairs(take.tokens)
     rhythm = geometry.rhythm_view(
         ref_words=review.ref_words, usr_words=take.words,
@@ -37,16 +36,15 @@ def feedback_view(review, limit: int, *, audio: dict) -> dict:
         usr_prosody=take.prosody, flags=flags,
     )
     return {
-        "text": " ".join(w.text for w in review.ref_words),
+        "accuracy": round(_accuracy(take.tokens) * 100),
+        "speech": round(take.rhythm.speech_ratio, 2),
+        "pause": (None if take.rhythm.pause_ratio is None
+                  else round(take.rhythm.pause_ratio, 2)),
         # 两条音轨各自第一个词从第几秒开始。同时播放时各自跳到这里，
         # 起点对齐了，图上同一个 x 才是同一刻。
         "audio": {**audio,
                   "refOffset": round(review.ref_words[0].start, 3),
                   "usrOffset": round(take.words[0].start, 3)},
-        "accuracy": round(_accuracy(take.tokens) * 100),
-        "speech": round(take.rhythm.speech_ratio, 2),
-        "pause": (None if take.rhythm.pause_ratio is None
-                  else round(take.rhythm.pause_ratio, 2)),
         "rhythm": {
             "seconds": round(rhythm.seconds, 4),
             "ref": [_block(b) for b in rhythm.ref],
@@ -64,10 +62,25 @@ def feedback_view(review, limit: int, *, audio: dict) -> dict:
              "refTrace": [_round(v) for v in s.ref_trace],
              "usrTrace": [_round(v) for v in s.usr_trace],
              "flag": s.flag,
-             # 播放时把当前时刻映射到是哪一格
              "refAt": [round(s.ref_start, 3), round(s.ref_end, 3)],
              "usrAt": (None if s.usr_start is None
                        else [round(s.usr_start, 3), round(s.usr_end, 3)])}
             for s in slots
+        ],
+    }
+
+
+def feedback_view(review, limit: int, *, audio: dict, takes: dict) -> dict:
+    """每一遍都出图，默认打开挑出来的那一遍。
+
+    指标本身是全部遍数的中位数，画的却只能是一遍——所以让人能自己切。
+    """
+    return {
+        "text": " ".join(w.text for w in review.ref_words),
+        "chosen": review.summary.representative,
+        "takes": [
+            _take_view(review, take, limit,
+                       {**audio, "usr": takes[str(take.path)]})
+            for take in review.takes
         ],
     }

@@ -334,23 +334,24 @@ def test_takes_endpoint_runs_the_whole_review(client, tmp_path, monkeypatch):
     data = _stream(response)[-1]["result"]
     assert data["count"] == 2
     assert data["accuracy"] == 100
+    # 每一遍都出图，让人自己挑着看
+    assert len(data["view"]["takes"]) == 2
+    assert 0 <= data["view"]["chosen"] < 2
+    one = data["view"]["takes"][0]
     # 反馈是几何数据，不是图片——图片里的字太小
-    assert [b["text"] for b in data["view"]["rhythm"]["ref"]] == [
-        "It", "was", "a", "start"]
-    assert [s["text"] for s in data["view"]["pitch"]] == ["It", "was", "a", "start"]
-    assert len(data["view"]["pitch"][0]["refTrace"]) > 2
+    assert [b["text"] for b in one["rhythm"]["ref"]] == ["It", "was", "a", "start"]
+    assert [s["text"] for s in one["pitch"]] == ["It", "was", "a", "start"]
+    assert len(one["pitch"][0]["refTrace"]) > 2
     # 播放时要把当前时刻映射到是哪一格，所以每格带上各自音频里的秒数
-    first = data["view"]["pitch"][0]
+    first = one["pitch"][0]
     assert first["refAt"][0] < first["refAt"][1]
     assert first["usrAt"][0] < first["usrAt"][1]
-    # 同时播放要知道两条音轨在哪，以及各自第一个词从第几秒开始——
-    # 起点对齐了，图上同一个 x 才是同一刻
-    audio = data["view"]["audio"]
-    assert audio["ref"] == f"/audio/{segment_id}/2"
-    assert audio["usr"].startswith("/take/")
-    assert client.get(audio["usr"]).status_code == 200
-    assert audio["refOffset"] == pytest.approx(0.1, abs=0.01)
-    assert audio["usrOffset"] >= 0.0
+    # 每一遍指向自己那条录音
+    assert one["audio"]["ref"] == f"/audio/{segment_id}/2"
+    usr = {take["audio"]["usr"] for take in data["view"]["takes"]}
+    assert len(usr) == 2
+    assert all(client.get(url).status_code == 200 for url in usr)
+    assert one["audio"]["refOffset"] == pytest.approx(0.1, abs=0.01)
 
     connection = db.connect()
     row = db.list_runs(connection, segment_id=segment_id)[0]
@@ -531,6 +532,8 @@ def test_practice_page_has_the_recording_controls(client, tmp_path):
     assert 'id="start-record"' in body
     assert 'id="stop-take"' in body
     assert 'id="prelisten"' in body
+    # 说错了、卡壳了要能当场作废：一遍念砸的录音会把三遍的中位数带偏
+    assert 'id="redo-take"' in body
 
 
 def _seed_without_blanks(tmp_path):
