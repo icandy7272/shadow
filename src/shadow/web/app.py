@@ -241,6 +241,7 @@ async def submit_takes(
     unit: Annotated[int, Form()],
     files: Annotated[list[UploadFile], File()],
     run_id: Annotated[int | None, Form()] = None,
+    saw_text: Annotated[int, Form()] = 0,
 ):
     """转写加比对要跑十几秒，结果分行流式返回，前端拿它画进度条。"""
     connection = _db()
@@ -271,7 +272,7 @@ async def submit_takes(
     return StreamingResponse(
         _review_stream(segment=segment, unit=unit, ref_path=ref_path,
                        ref_words=ref_words, paths=paths, run_id=run_id,
-                       stamp=stamp, rejected=rejected),
+                       stamp=stamp, rejected=rejected, saw_text=bool(saw_text)),
         media_type="application/x-ndjson",
     )
 
@@ -287,7 +288,7 @@ def _step_label(step, count: int) -> str:
 
 
 def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp,
-                   rejected=()):
+                   rejected=(), saw_text=False):
     """每一步开工前发一行进度，最后一行是 result 或 error。
 
     生成器跑在 Starlette 的线程池里，sqlite 连接不能跨线程用，写库时现开一个。
@@ -313,6 +314,7 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp,
         try:
             run_id = _run_for(connection, segment, unit, run_id, ref_words)
             _store_takes(connection, run_id, result)
+            db.mark_saw_text(connection, run_id, saw_text)
             db.finish_run(connection, run_id)
         finally:
             connection.close()

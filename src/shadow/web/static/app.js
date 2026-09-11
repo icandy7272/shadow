@@ -118,6 +118,23 @@ if (root) {
                `原声只有 ${item.ms} 毫秒</div>`;
       }).join("");
     document.getElementById("step-record").classList.remove("locked");
+    // 原文已经揭晓，把这一步收起来：跟读时屏幕上不该有字
+    drillStep.classList.add("done");
+  });
+}
+
+// ---------- 看一眼原文 ----------
+// 默认不显示。你是通过读学的英语，屏幕上有字就会去读它而不是模仿声音——
+// 那正是这套练习要拆掉的习惯。但长句子超出工作记忆，记不住就录成一团糊，
+// 所以留这个口子，并记下这一遍有没有用过。
+let sawText = false;
+const peekButton = document.getElementById("peek");
+if (peekButton) {
+  const peekText = document.getElementById("peek-text");
+  peekButton.addEventListener("click", () => {
+    peekText.hidden = !peekText.hidden;
+    peekButton.textContent = peekText.hidden ? "看一眼原文" : "收起原文";
+    if (!peekText.hidden) sawText = true;
   });
 }
 
@@ -272,6 +289,7 @@ if (root) {
     const body = new FormData();
     body.append("segment", segment);
     body.append("unit", unit);
+    body.append("saw_text", sawText ? "1" : "0");
     blobs.forEach((blob, i) => body.append("files", blob, `take${i + 1}.webm`));
     const response = await fetch("/api/takes", { method: "POST", body });
     startButton.disabled = false;

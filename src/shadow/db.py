@@ -80,6 +80,7 @@ MIGRATIONS = (
     ("practice_runs", "gapfill_heard", "INTEGER"),
     ("practice_runs", "gapfill_replays", "INTEGER"),
     ("attempts", "metrics_json", "TEXT"),
+    ("practice_runs", "saw_text", "INTEGER"),
 )
 
 
@@ -303,6 +304,13 @@ def list_runs(
     return list(
         conn.execute(f"SELECT * FROM practice_runs WHERE {where} ORDER BY id", params)
     )
+
+
+def mark_saw_text(conn: sqlite3.Connection, run_id: int, seen: bool) -> None:
+    """这一轮跟读前有没有看过原文。看不看对音高节奏影响多大，只能靠数据回答。"""
+    conn.execute("UPDATE practice_runs SET saw_text = ? WHERE id = ?",
+                 (1 if seen else 0, run_id))
+    conn.commit()
 
 
 def run_metrics(conn: sqlite3.Connection, run_id: int) -> list[dict[str, Any]]:

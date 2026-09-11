@@ -420,6 +420,44 @@ def test_one_bad_take_does_not_throw_away_the_good_ones(client, tmp_path,
     assert "静音" in data["rejected"][0]["reason"]
 
 
+def test_the_text_is_behind_a_button_in_the_shadowing_step(client, tmp_path):
+    """跟读时屏幕上有字，人就会去读它而不是模仿声音。想看得自己点。"""
+    segment_id = _seed(tmp_path)
+    body = client.get(f"/practice/{segment_id}/2").text
+
+    assert 'id="peek"' in body
+    tag = body[body.index('id="peek-text"'):]
+    assert "hidden" in tag[:tag.index(">")]
+    assert body.index('id="step-record"') < body.index('id="peek"')
+
+
+def test_whether_the_text_was_seen_is_recorded(client, tmp_path, monkeypatch):
+    """看不看原文对音高节奏影响多大，只能靠数据回答。"""
+    from shadow import review
+    from shadow.models import Word
+
+    segment_id = _seed(tmp_path)
+    monkeypatch.setattr(review, "transcribe_words", lambda path: tuple(
+        Word(text=t, start=a, end=a + d)
+        for t, a, d in (("It", 0.0, 0.3), ("was", 0.4, 0.1),
+                        ("a", 0.5, 0.1), ("start.", 0.7, 0.4))
+    ))
+
+    response = client.post(
+        "/api/takes",
+        data={"segment": segment_id, "unit": 2, "saw_text": 1},
+        files=[("files", ("a.wav", _wav_bytes(), "audio/wav"))],
+    )
+    run_id = _stream(response)[-1]["result"]["run_id"]
+
+    connection = db.connect()
+    row = connection.execute(
+        "SELECT saw_text FROM practice_runs WHERE id = ?", (run_id,)
+    ).fetchone()
+    connection.close()
+    assert row["saw_text"] == 1
+
+
 def test_takes_rejects_a_silent_recording(client, tmp_path):
     import io
 
