@@ -212,3 +212,5 @@ button:disabled { opacity: .5; cursor: default; }
 .peek { margin: 2px 0 14px; }
 .peek .hint { margin-left: 10px; }
 .sentence-plain { font-size: 17px; line-height: 1.8; margin: 10px 0 0; }
+.fig-body.pitch { user-select: none; }
+.slot-bands .band.picked { background: var(--accent); opacity: .16; }

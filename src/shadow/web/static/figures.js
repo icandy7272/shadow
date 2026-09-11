@@ -181,8 +181,8 @@ function pitchFigure(slots) {
   const node = el("figure", "fig");
   const caption = el("figcaption", null,
     "图 2 · 音高：一词一格（横轴不是时间），线的高低 = 音高，"
-    + "线的走向 = 这个词从头到尾怎么走的。点任意一个词：先放原声，再放你的，"
-    + "来回两遍。");
+    + "线的走向 = 这个词从头到尾怎么走的。点一个词：先放原声再放你的，来回两遍；"
+    + "按住往旁边拖，可以把连读的几个词连起来听。");
   caption.append(el("i", "legend-ref", "原声（虚线）"));
   caption.append(el("i", "legend-usr", "你（实心）"));
   node.append(caption);
@@ -296,20 +296,49 @@ function pitchFigure(slots) {
       (left, i) => x >= left && x <= left + placed.widths[i]);
   }
 
-  function tint(index, side) {
+  function within(i, range) {
+    return range !== null && i >= range[0] && i <= range[1];
+  }
+
+  function tint(range, side) {
     bands.childNodes.forEach((node, i) => {
-      node.classList.toggle("hear-ref", i === index && side === "ref");
-      node.classList.toggle("hear-usr", i === index && side === "usr");
+      node.classList.toggle("hear-ref", within(i, range) && side === "ref");
+      node.classList.toggle("hear-usr", within(i, range) && side === "usr");
     });
+  }
+
+  function select(range) {
+    bands.childNodes.forEach((node, i) =>
+      node.classList.toggle("picked", within(i, range)));
   }
 
   return {
     node,
     onPick(handler) {
+      // 拖着选一段。连读时单个词只有几十毫秒，拆开听不出什么，得连着放。
+      let from = -1;
       body.style.cursor = "pointer";
-      body.addEventListener("click", (event) => {
-        const index = slotAt(event.clientX);
-        if (index >= 0) handler(index, (side) => tint(index, side));
+
+      body.addEventListener("mousedown", (event) => {
+        from = slotAt(event.clientX);
+        if (from >= 0) {
+          select([from, from]);
+          event.preventDefault();      // 别让拖动变成选中词标文字
+        }
+      });
+      body.addEventListener("mousemove", (event) => {
+        if (from < 0) return;
+        const to = slotAt(event.clientX);
+        if (to >= 0) select([Math.min(from, to), Math.max(from, to)]);
+      });
+      window.addEventListener("mouseup", (event) => {
+        if (from < 0) return;
+        const to = slotAt(event.clientX);
+        const range = to < 0 ? [from, from]
+                             : [Math.min(from, to), Math.max(from, to)];
+        from = -1;
+        select(null);
+        handler(range, (side) => tint(side === null ? null : range, side));
       });
     },
     move(frame) {
@@ -326,7 +355,7 @@ function pitchFigure(slots) {
         scroll.scrollLeft = Math.max(0, x - scroll.clientWidth / 2);
       }
     },
-    hide() { head.hidden = true; highlight(-1); tint(-1, null); },
+    hide() { head.hidden = true; highlight(-1); tint(null, null); select(null); },
   };
 }
 
@@ -500,6 +529,18 @@ function playbar(rhythm, audio, figures) {
   return { node: bar, player };
 }
 
+// 选中的这几个词，在两条音频里各自的起止秒数。
+// 中间有没对上的词也无所谓：从头放到尾，听的就是这一段。
+function spanOf(slots, [low, high]) {
+  const part = slots.slice(low, high + 1);
+  const mine = part.filter((slot) => slot.usrAt);
+  return {
+    refAt: [part[0].refAt[0], part[part.length - 1].refAt[1]],
+    usrAt: mine.length ? [mine[0].usrAt[0], mine[mine.length - 1].usrAt[1]] : null,
+  };
+}
+
+
 // 给 app.js 用：返回一个包含两张图的元素
 function renderFigures(view) {  // eslint-disable-line no-unused-vars
   const box = el("div", "figures");
@@ -508,9 +549,9 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
   if (view.audio) {
     const bar = playbar(view.rhythm, view.audio, [rhythm, pitch]);
     box.append(bar.node);
-    pitch.onPick((index, onSide) => {
+    pitch.onPick((range, onSide) => {
       bar.player.stop();               // 正在整句播放的话先停下
-      bar.player.compare(view.pitch[index], onSide);
+      bar.player.compare(spanOf(view.pitch, range), onSide);
     });
   }
   box.append(rhythm.node, pitch.node);
