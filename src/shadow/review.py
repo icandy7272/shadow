@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Generator, Sequence
 
 from .analysis.diff import accuracy as diff_accuracy
+from .analysis.align import align_words
 from .analysis.diff import diff_words, matched_pairs, unreliable_indices
 from .analysis.prosody import analyse
 from .analysis.rhythm import alignment_drift, analyse_rhythm, snap_first_word
@@ -94,7 +95,9 @@ def run(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
         if drift is not None and drift > ALIGNMENT_TOLERANCE_SEC:
             skipped.append((index, path.name, drift))
             continue
-        # 对齐检查过了才挪，先挪的话那道防线就永远查不出错位
+        # 转写给的词边界是猜的，逐词判定全靠它，能对齐就重算一遍。
+        # 要在 alignment_drift 判过之后再动，先动的话那道防线就永远查不出错位。
+        words = align_words(path, words) or words
         words = snap_first_word(words, prosody)
         tokens = diff_words([w.text for w in ref_words], [w.text for w in words])
         rhythm = analyse_rhythm(ref_words, words, matched_pairs(tokens))

@@ -80,3 +80,25 @@ def test_run_snaps_both_sides_to_their_real_onset(tmp_path):
     assert result.ref_words[0].start == pytest.approx(0.4, abs=0.06)
     assert result.best.words[0].start == pytest.approx(0.4, abs=0.06)
     assert result.ref_words[1] == words[1]
+
+
+def test_takes_get_their_word_boundaries_realigned(tmp_path, monkeypatch):
+    """逐词判定（拖长了、该升没升）全靠词边界，而转写给的边界是猜的。"""
+    from shadow.analysis import align
+
+    seen = []
+
+    def fake_align(path, words):
+        seen.append(path.name)
+        return tuple(Word(text=w.text, start=w.start + 0.1, end=w.end + 0.1)
+                     for w in words)
+
+    monkeypatch.setattr(align, "align_words", fake_align)
+    monkeypatch.setattr(review, "align_words", fake_align)
+
+    ref = _wav(tmp_path / "ref.wav")
+    take = _wav(tmp_path / "take.wav")
+    result = review.evaluate(ref, WORDS, [take], transcribe=_fake)
+
+    assert result is not None
+    assert seen == ["take.wav"]          # 原声的时间戳在导入时已经对过了

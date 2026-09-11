@@ -10,6 +10,7 @@ dependencies = [
     "soundfile>=0.12",
     "matplotlib>=3.8",
     "cmudict>=1.0",
+    "torchaudio>=2.5",
     "fastapi>=0.115",
     "uvicorn>=0.32",
     "jinja2>=3.1",

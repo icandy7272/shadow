@@ -192,6 +192,15 @@ def list_segments(conn: sqlite3.Connection, source_id: int) -> list[sqlite3.Row]
     )
 
 
+def update_segment_words(
+    conn: sqlite3.Connection, segment_id: int, words: Sequence
+) -> None:
+    """改写一个片段的词时间戳（强制对齐之后）。文本不动，只动时间。"""
+    conn.execute("UPDATE segments SET words_json = ? WHERE id = ?",
+                 (words_to_json(words), segment_id))
+    conn.commit()
+
+
 def get_segment(conn: sqlite3.Connection, segment_id: int) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM segments WHERE id = ?", (segment_id,)).fetchone()
     if row is None:

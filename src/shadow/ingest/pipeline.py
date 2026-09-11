@@ -30,6 +30,21 @@ def _apply_blanks(segments: tuple[Segment, ...]) -> tuple[Segment, ...]:
     )
 
 
+def _realign(wav_path, words):
+    """转写给的词时间戳是猜的，用强制对齐重算一遍。
+
+    实测偏差很大：首词起点中位偏早 0.375 秒，见过把末词排到声音之外
+    半秒、把整句的词间停顿全报成 0。对不上就保留原样，不影响导入。
+    """
+    from ..analysis.align import align_words
+
+    try:
+        aligned = align_words(wav_path, words)
+    except Exception:
+        return words
+    return aligned or words
+
+
 def import_source(url: str, *, conn: sqlite3.Connection) -> int:
     clean_url = validate_url(url)
     title, duration = probe(clean_url)
@@ -54,6 +69,7 @@ def import_source(url: str, *, conn: sqlite3.Connection) -> int:
         words = transcribe_words(wav_path)
 
         db.set_source_status(conn, source_id, db.STATUS_SEGMENTING)
+        words = _realign(wav_path, words)
         segments = _apply_blanks(split_into_segments(words))
         db.insert_segments(conn, source_id, segments)
 

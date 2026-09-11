@@ -128,6 +128,58 @@ def _segment_reference(connection, segment_id: int, dest: Path, *,
     return dest, rebased, " ".join(word.text for word in rebased)
 
 
+def cmd_realign(args: argparse.Namespace) -> int:
+    """用强制对齐改写库里的词时间戳。
+
+    Whisper 的时间戳是猜的：首词起点中位偏早 0.375 秒，还见过把末词排到
+    声音之外、把整句停顿报成 0。原文本来就在手上，没有理由去猜。
+    """
+    from .analysis.align import align_words, available
+
+    if not available():
+        print("没装 torchaudio，跑不了强制对齐。", file=sys.stderr)
+        return 1
+
+    connection = _open_db()
+    fixed = skipped = 0
+    for source in db.list_sources(connection):
+        path = Path(source["audio_path"] or "")
+        if not path.exists():
+            continue
+        for row in db.list_segments(connection, source["id"]):
+            if args.segment is not None and row["id"] != args.segment:
+                continue
+            segment = db.get_segment(connection, row["id"])
+            dest = config.segment_audio_dir() / f"_realign-{row['id']}.wav"
+            try:
+                media.cut_segment(path, dest, start=segment["start_sec"],
+                                  end=segment["end_sec"])
+            except Exception as exc:
+                print(f"  片段 {row['id']} 裁剪失败：{exc}", file=sys.stderr)
+                skipped += 1
+                continue
+            origin = segment["start_sec"]
+            rebased = tuple(replace(w, start=w.start - origin, end=w.end - origin)
+                            for w in segment["words"])
+            aligned = align_words(dest, rebased)
+            dest.unlink(missing_ok=True)
+            if aligned is None:
+                print(f"  片段 {row['id']} 对不上，保留原时间戳")
+                skipped += 1
+                continue
+            db.update_segment_words(connection, row["id"], tuple(
+                replace(w, start=w.start + origin, end=w.end + origin)
+                for w in aligned))
+            fixed += 1
+            print(f"  片段 {row['id']} 已对齐（{len(aligned)} 词）")
+
+    # 单元音频是按旧时间戳裁的，得重裁
+    for stale in config.segment_audio_dir().glob("*-u*.wav"):
+        stale.unlink(missing_ok=True)
+    print(f"\n对齐 {fixed} 个片段，跳过 {skipped} 个。单元音频缓存已清，下次访问重裁。")
+    return 0
+
+
 def cmd_audit(args: argparse.Namespace) -> int:
     """扫全库，把切坏的单元挑出来。
 
@@ -1228,6 +1280,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_audit = sub.add_parser("audit", help="扫全库，挑出切坏的练习单元")
     p_audit.set_defaults(func=cmd_audit)
+
+    p_realign = sub.add_parser("realign", help="用强制对齐改写词时间戳")
+    p_realign.add_argument("-s", "--segment", type=int, help="只对齐这一个片段")
+    p_realign.set_defaults(func=cmd_realign)
 
     p_export = sub.add_parser("export", help="导出音频用于跟读")
     p_export.add_argument("segment", type=int)
