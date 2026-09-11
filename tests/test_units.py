@@ -129,3 +129,76 @@ def test_a_real_pause_still_wins_over_the_middle():
                         end=words[i].end + shift)
     units = split_into_units(tuple(words), min_sec=0.0, max_sec=6.0, min_words=2)
     assert units[0][-1].text == "w9"
+
+
+def _sentence(text, per_word=0.29):
+    """一句话，词间无停顿——只能靠语言线索决定在哪切。"""
+    from shadow.models import Word
+
+    return tuple(
+        Word(text=token, start=index * per_word, end=index * per_word + per_word * 0.9)
+        for index, token in enumerate(text.split())
+    )
+
+
+def test_an_overlong_sentence_splits_before_the_conjunction():
+    """切在 graduated / from college 中间，两半都不成话。
+    该切在 and 前面——那才是这句的接缝。"""
+    words = _sentence(
+        "My biological mother found out later that my mother had never graduated "
+        "from college and that my father had never graduated from high school."
+    )
+
+    units = split_into_units(words, max_sec=6.0)
+
+    assert len(units) == 2
+    assert units[0][-1].text == "college"
+    assert units[1][0].text == "and"
+
+
+def test_a_comma_beats_a_conjunction():
+    words = _sentence(
+        "So my parents who were on a waiting list got a call in the middle of the "
+        "night, and they were asked whether they wanted this unexpected baby boy."
+    )
+
+    units = split_into_units(words, max_sec=6.0)
+
+    assert units[0][-1].text == "night,"
+
+
+def test_it_still_splits_when_there_is_no_linguistic_seam():
+    words = _sentence("one two three four five six seven eight nine ten " * 3)
+
+    units = split_into_units(words, max_sec=6.0)
+
+    assert len(units) > 1
+    assert all(unit[-1].end - unit[0].start <= 6.0 for unit in units)
+
+
+def test_the_split_stays_near_the_middle():
+    """逗号在第二个词后面，也不能切出一个两词的碎片。"""
+    words = _sentence(
+        "well, everything was all set for me to be adopted at birth by a lawyer "
+        "and his wife who lived on the other side of the country entirely."
+    )
+
+    units = split_into_units(words, max_sec=6.0)
+
+    for unit in units:
+        assert len(unit) >= 5
+
+
+def test_ends_mid_phrase_spots_a_dangling_function_word():
+    from shadow.drill.units import ends_mid_phrase
+
+    assert ends_mid_phrase(_sentence("was replaced by the"))
+    assert ends_mid_phrase(_sentence("it turned out to be a"))
+
+
+def test_a_sentence_that_simply_ends_in_a_preposition_is_fine():
+    """「…to buy food with.」是完整的一句，别当成切坏。"""
+    from shadow.drill.units import ends_mid_phrase
+
+    assert not ends_mid_phrase(_sentence("for the deposits to buy food with."))
+    assert not ends_mid_phrase(_sentence("as the years roll on."))

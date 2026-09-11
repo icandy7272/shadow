@@ -15,7 +15,7 @@ from .analysis.diff import accuracy as diff_accuracy
 from .analysis.diff import diff_words, matched_pairs, unreliable_indices
 from .analysis.prosody import analyse
 from .drill.gapfill import blanks_of, parse_answer, render, tally
-from .drill.units import is_usable, split_into_units
+from .drill.units import ends_mid_phrase, is_usable, split_into_units
 from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
 from .models import Word
@@ -126,6 +126,30 @@ def _segment_reference(connection, segment_id: int, dest: Path, *,
         for word in words
     )
     return dest, rebased, " ".join(word.text for word in rebased)
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    """扫全库，把切坏的单元挑出来。
+
+    切分规则改一次，就得这么扫一次——只靠合成数据的单测，发现不了真素材
+    里的切坏。「在最大停顿处断开」这条规则在库里坏了五处，全是这么找出来的。
+    """
+    connection = _open_db()
+    bad = broken = total = 0
+    for source in db.list_sources(connection):
+        for row in db.list_segments(connection, source["id"]):
+            segment = db.get_segment(connection, row["id"])
+            for index, unit in enumerate(split_into_units(segment["words"]), 1):
+                total += 1
+                text = " ".join(word.text for word in unit)
+                if not is_usable(unit):
+                    broken += 1
+                    print(f"  ⚠ {row['id']}/{index} 时间戳异常：{text[:60]}")
+                elif ends_mid_phrase(unit):
+                    bad += 1
+                    print(f"  ✂ {row['id']}/{index} 断在词组中间：…{text[-50:]}")
+    print(f"\n共 {total} 个单元：切坏 {bad}，时间戳异常 {broken}")
+    return 0
 
 
 def cmd_units(args: argparse.Namespace) -> int:
@@ -1201,6 +1225,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_units.add_argument("--max-sec", type=float,
                           help="练习单元的最长秒数，超过会在最大停顿处再断（默认 6）")
     p_units.set_defaults(func=cmd_units)
+
+    p_audit = sub.add_parser("audit", help="扫全库，挑出切坏的练习单元")
+    p_audit.set_defaults(func=cmd_audit)
 
     p_export = sub.add_parser("export", help="导出音频用于跟读")
     p_export.add_argument("segment", type=int)
