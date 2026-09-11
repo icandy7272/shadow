@@ -252,3 +252,11 @@ button:disabled { opacity: .5; cursor: default; }
 .badge { font-style: normal; font-size: 12px; font-weight: 400; color: var(--muted);
   border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; }
 .step:not(.locked) .badge { display: none; }
+
+/* 图 1 也能点：点哪行放哪行 */
+.lane { user-select: none; }
+.lane .blk.picked, .lane .callouts span.picked { outline: 1px solid var(--fg);
+  outline-offset: 1px; border-radius: 3px; }
+.lane.ref .blk.hear { background: rgba(31, 119, 180, .55); }
+.lane.usr .blk.hear { background: rgba(214, 39, 40, .45); }
+.lane .callouts span.hear { font-weight: 600; }

@@ -5,7 +5,8 @@
 
 const GAP = 34;
 const CALLOUT_ROW = 17;   // 词标错行的行距
-const CALLOUT_DROP = 21;  // 第一行词标到词块的引线长度           // 节奏图两行之间留给落后连线的高度
+const CALLOUT_DROP = 21;  // 第一行词标到词块的引线长度
+const NEAR_BLOCK_SEC = 0.25;  // 点在块外多远还算点中它           // 节奏图两行之间留给落后连线的高度
 const PER_SEMITONE = 7;   // 一个半音多少 px，固定不变，句与句之间才可比
 const TRACE_PAD = 10;     // 折线上下留白，笔画不贴边
 const PITCH_PAD = 8;
@@ -26,6 +27,11 @@ function svg(tag, attrs) {
   Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
   return node;
 }
+
+function within(index, range) {
+  return range !== null && index >= range[0] && index <= range[1];
+}
+
 
 function playhead() {
   const head = el("div", "playhead");
@@ -84,7 +90,58 @@ function lane(role, name, blocks, spans, seconds) {
     });
   };
   if (window.ResizeObserver) new ResizeObserver(place).observe(track);
-  return row;
+
+  // 哪个词块落在这个横坐标上。块可以窄到 20px，点不准是常事，
+  // 所以就近吸附；离所有块都远才算没点中。
+  const blockAt = (clientX) => {
+    const rect = track.getBoundingClientRect();
+    if (!rect.width) return -1;
+    const at = ((clientX - rect.left) / rect.width) * seconds;
+    const inside = blocks.findIndex(
+      (block) => at >= block.start && at <= block.start + block.width);
+    if (inside >= 0) return inside;
+    let best = -1;
+    let gap = NEAR_BLOCK_SEC;
+    blocks.forEach((block, index) => {
+      const centre = block.start + block.width / 2;
+      if (Math.abs(at - centre) < gap) { gap = Math.abs(at - centre); best = index; }
+    });
+    return best;
+  };
+
+  const mark = (range, className) => {
+    track.querySelectorAll(".blk").forEach((node, index) =>
+      node.classList.toggle(className, within(index, range)));
+    callouts.childNodes.forEach((node, index) =>
+      node.classList.toggle(className, within(index, range)));
+  };
+
+  return {
+    node: row,
+    tint: (range, on) => mark(on ? range : null, "hear"),
+    pick(handler) {
+      let from = -1;
+      row.style.cursor = "pointer";
+      row.addEventListener("mousedown", (event) => {
+        from = blockAt(event.clientX);
+        if (from >= 0) { mark([from, from], "picked"); event.preventDefault(); }
+      });
+      row.addEventListener("mousemove", (event) => {
+        if (from < 0) return;
+        const to = blockAt(event.clientX);
+        if (to >= 0) mark([Math.min(from, to), Math.max(from, to)], "picked");
+      });
+      window.addEventListener("mouseup", (event) => {
+        if (from < 0) return;
+        const to = blockAt(event.clientX);
+        const range = to < 0 ? [from, from]
+                             : [Math.min(from, to), Math.max(from, to)];
+        from = -1;
+        mark(null, "picked");
+        handler(role, range);
+      });
+    },
+  };
 }
 
 
@@ -92,14 +149,20 @@ function rhythmFigure(rhythm) {
   const seconds = rhythm.seconds || 1;
   const node = el("figure", "fig");
   node.append(el("figcaption", null,
-    "图 1 · 节奏：横轴是真实秒数，块宽 = 时长，空隙 = 真实停顿。" +
-    "红线标出你在这个词上已经落后多少（横轴单位：秒）"));
+    "图 1 · 节奏：横轴是真实秒数，块宽 = 时长，空隙 = 真实停顿，" +
+    "红线标出你在这个词上已经落后多少。虚线框的词是机器在另一行里没找到的。" +
+    "点词只放那一行——点原声放原声，点你的放你的；按住拖可以连着几个词。"));
 
   const body = el("div", "fig-body");
   const head = playhead();
   body.append(head);
-  body.append(lane("ref", "原声", rhythm.ref,
-                   rhythm.spans.filter((s) => s.row === "ref"), seconds));
+  const lanes = {
+    ref: lane("ref", "原声", rhythm.ref,
+              rhythm.spans.filter((s) => s.row === "ref"), seconds),
+    usr: lane("usr", "你", rhythm.usr,
+              rhythm.spans.filter((s) => s.row === "usr"), seconds),
+  };
+  body.append(lanes.ref.node);
 
   const gap = el("div", "gap");
   const lines = svg("svg", { class: "lag-layer", viewBox: `0 0 1000 ${GAP}`,
@@ -121,8 +184,7 @@ function rhythmFigure(rhythm) {
   });
   body.append(gap);
 
-  body.append(lane("usr", "你", rhythm.usr,
-                   rhythm.spans.filter((s) => s.row === "usr"), seconds));
+  body.append(lanes.usr.node);
   node.append(body);
 
   const ticks = el("div", "ticks");
@@ -135,12 +197,22 @@ function rhythmFigure(rhythm) {
 
   return {
     node,
+    onPick(handler) {
+      Object.values(lanes).forEach((one) => one.pick(handler));
+    },
+    tint(role, range, on) {
+      Object.entries(lanes).forEach(([name, one]) =>
+        one.tint(range, on && name === role));
+    },
     move(frame) {
       head.hidden = false;
       const ratio = Math.max(0, Math.min(1, frame.elapsed / seconds));
       head.firstChild.style.left = `${ratio * 100}%`;
     },
-    hide() { head.hidden = true; },
+    hide() {
+      head.hidden = true;
+      Object.values(lanes).forEach((one) => one.tint(null, false));
+    },
   };
 }
 
@@ -312,10 +384,6 @@ function pitchFigure(slots) {
     const x = clientX - rect.left;
     return placed.xs.findIndex(
       (left, i) => x >= left && x <= left + placed.widths[i]);
-  }
-
-  function within(i, range) {
-    return range !== null && i >= range[0] && i <= range[1];
   }
 
   function tint(range, side) {
@@ -510,7 +578,31 @@ function playback(rhythm, audio, onFrame, onStopped) {
     if (mine === session) stop();
   }
 
-  return { ref, usr, play, stop, compare, playing: () => timer !== null };
+  // 只放一条：图 1 的两行各属于一个音源，点哪行就放哪行
+  async function playOne(side, at, onSide) {
+    halt();
+    const mine = session;
+    graph();
+    if (context.state === "suspended") await context.resume();
+    const media = side === "ref" ? ref : usr;
+    await ready(media);
+    if (mine !== session) return;
+    const panner = panners.get(media);
+    if (panner) panner.pan.value = 0;
+
+    for (let round = 0; round < WORD_ROUNDS; round += 1) {
+      if (mine !== session) return;
+      onSide(true);
+      await clip(media, at[0] - WORD_PAD, at[1] + WORD_PAD, mine);
+      if (mine !== session) return;
+      onSide(false);
+      await sleep(WORD_GAP_MS);
+    }
+    if (mine === session) stop();
+  }
+
+  return { ref, usr, play, stop, compare, playOne,
+           playing: () => timer !== null };
 }
 
 function playbar(rhythm, audio, figures) {
@@ -559,6 +651,16 @@ function spanOf(slots, [low, high]) {
 }
 
 
+// 图 1 里选中的这几个词，在那一行对应的音频里是第几秒到第几秒。
+// 块的 start 是相对本行首词的，加上首词的绝对位置就是音频里的时刻。
+function rangeOf(rhythm, audio, role, [low, high]) {
+  const blocks = role === "ref" ? rhythm.ref : rhythm.usr;
+  const offset = role === "ref" ? audio.refOffset : audio.usrOffset;
+  const last = blocks[high];
+  return [offset + blocks[low].start, offset + last.start + last.width];
+}
+
+
 // 给 app.js 用：返回一个包含两张图的元素
 function renderFigures(view) {  // eslint-disable-line no-unused-vars
   const box = el("div", "figures");
@@ -570,6 +672,11 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
     pitch.onPick((range, onSide) => {
       bar.player.stop();               // 正在整句播放的话先停下
       bar.player.compare(spanOf(view.pitch, range), onSide);
+    });
+    rhythm.onPick((role, range) => {
+      bar.player.stop();
+      const at = rangeOf(view.rhythm, view.audio, role, range);
+      bar.player.playOne(role, at, (on) => rhythm.tint(role, range, on));
     });
   }
   box.append(rhythm.node, pitch.node);
