@@ -202,6 +202,17 @@ def test_the_index_lists_a_running_sentence_number(client, tmp_path):
     assert ">1</td>" in body
 
 
+def test_a_run_records_which_sentence_was_practised(client, tmp_path):
+    """切分规则一变，序号就失去意义——必须存下练的是哪句话。"""
+    segment_id = _seed(tmp_path)
+    client.post("/api/rating", data={"segment": segment_id, "unit": 2, "rating": 4})
+
+    connection = db.connect()
+    row = db.list_runs(connection, segment_id=segment_id)[0]
+    connection.close()
+    assert row["unit_text"] == "It was a start."
+
+
 def test_unknown_unit_is_a_404(client, tmp_path):
     segment_id = _seed(tmp_path)
     assert client.get(f"/practice/{segment_id}/99").status_code == 404
