@@ -382,12 +382,33 @@ def _local_time(stamp: str) -> str:
         return stamp[:16]
 
 
+def _lan_address() -> str | None:
+    """本机在局域网里的地址。手机要用就得知道它，省得自己去翻设置。"""
+    import socket
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("192.168.1.1", 80))      # 不发包，只为拿本机出口地址
+        return probe.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        probe.close()
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
     _open_db()      # 确保库和目录就绪
-    print(f"打开 http://{args.host}:{args.port}")
-    uvicorn.run("shadow.web.app:app", host=args.host, port=args.port,
+    host = "0.0.0.0" if args.lan else args.host      # noqa: S104
+    print(f"打开 http://{'127.0.0.1' if args.lan else host}:{args.port}")
+    if args.lan:
+        address = _lan_address()
+        if address:
+            print(f"手机同一个 Wi-Fi 下打开 http://{address}:{args.port}")
+        print("注意：手机上录不了音——浏览器只在 HTTPS 或 localhost 下给"
+              "麦克风权限。盲听和填空照常。")
+    uvicorn.run("shadow.web.app:app", host=host, port=args.port,
                 reload=args.reload, log_level="warning")
     return 0
 
@@ -490,6 +511,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_serve = sub.add_parser("serve", help="启动网页版")
     p_serve.add_argument("--host", default="127.0.0.1")
+    p_serve.add_argument("--lan", action="store_true",
+                         help="局域网内可访问，手机同 Wi-Fi 就能打开")
     p_serve.add_argument("--port", type=int, default=8000)
     # 默认开自动重载：本地单人工具，服务一开就是一整天，
     # 改了代码而页面还跑着旧进程，给出的反馈会是错的，而且看不出来。

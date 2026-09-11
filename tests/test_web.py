@@ -213,6 +213,15 @@ def test_a_run_records_which_sentence_was_practised(client, tmp_path):
     assert row["unit_text"] == "It was a start."
 
 
+def test_the_page_says_so_when_recording_is_impossible(client, tmp_path):
+    """局域网 HTTP 下浏览器根本不给麦克风权限，点了只会静默失败。"""
+    segment_id = _seed(tmp_path)
+    body = client.get(f"/practice/{segment_id}/2").text
+
+    assert 'id="no-mic"' in body
+    assert "跟读请用电脑" in body
+
+
 def test_unknown_unit_is_a_404(client, tmp_path):
     segment_id = _seed(tmp_path)
     assert client.get(f"/practice/{segment_id}/99").status_code == 404

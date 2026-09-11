@@ -191,6 +191,17 @@ if (root) {
   const startButton = document.getElementById("start-record");
   const src = `/audio/${segment}/${unit}`;
 
+  // 局域网 HTTP 下浏览器根本不给麦克风权限，点了也只会静默失败。
+  // 与其让人一遍遍试，不如直接说清楚。
+  if (!window.isSecureContext) {
+    const note = document.getElementById("no-mic");
+    if (note) note.hidden = false;
+    if (startButton) {
+      startButton.disabled = true;
+      startButton.title = "需要 HTTPS 或 localhost";
+    }
+  }
+
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   const playOnce = () => new Promise((resolve) => {

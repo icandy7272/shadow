@@ -57,6 +57,8 @@
       {%- endif %}</h2>
     <p class="hint">每遍录音前会自动放几次原声——听和说之间不能有间隔。
       听完嘀一声就开始说，说完点「说完了」。</p>
+    <p class="hint insecure" id="no-mic" hidden>这台设备上录不了音——浏览器只在
+      HTTPS 或 localhost 下才给麦克风权限。前两步照常，跟读请用电脑。</p>
     <div class="row">
       <label class="repeat">录 <input type="number" id="takes" value="3" min="1" max="6"> 遍</label>
       <label class="repeat">每遍前听 <input type="number" id="prelisten" value="4" min="0" max="20"> 次</label>

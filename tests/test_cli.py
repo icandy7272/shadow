@@ -145,3 +145,35 @@ def test_same_sentence_ignores_spacing_and_case():
     """切分规则一变，同一句可能换了序号——只能靠文本认回来。"""
     assert cli._same_sentence("Do you want him?", "do you  want him?")
     assert not cli._same_sentence("Do you want him?", "Do you want her?")
+
+
+def test_serve_can_open_to_the_lan(monkeypatch, capsys):
+    """手机要用就得知道本机地址，省得自己去翻设置。"""
+    seen = {}
+
+    class FakeUvicorn:
+        @staticmethod
+        def run(app, **kwargs):
+            seen.update(kwargs)
+
+    monkeypatch.setitem(sys.modules, "uvicorn", FakeUvicorn)
+    monkeypatch.setattr(cli, "_lan_address", lambda: "192.168.1.23")
+
+    assert cli.main(["serve", "--lan"]) == 0
+    out = capsys.readouterr().out
+    assert seen["host"] == "0.0.0.0"
+    assert "192.168.1.23:8000" in out
+    assert "录不了音" in out
+
+
+def test_serve_stays_local_by_default(monkeypatch):
+    seen = {}
+
+    class FakeUvicorn:
+        @staticmethod
+        def run(app, **kwargs):
+            seen.update(kwargs)
+
+    monkeypatch.setitem(sys.modules, "uvicorn", FakeUvicorn)
+    assert cli.main(["serve"]) == 0
+    assert seen["host"] == "127.0.0.1"
