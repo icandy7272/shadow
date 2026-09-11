@@ -222,6 +222,20 @@ def test_the_page_says_so_when_recording_is_impossible(client, tmp_path):
     assert "跟读请用电脑" in body
 
 
+def test_the_list_carries_what_the_filters_need(client, tmp_path):
+    """盲听自评一直存着却没人用过。它正好回答：哪些句子是真没听懂的。"""
+    segment_id = _seed(tmp_path)
+    client.post("/api/rating", data={"segment": segment_id, "unit": 2, "rating": 2})
+    _finished_run(segment_id, 2, ["“was” 该降没降"])
+
+    body = client.get("/").text
+
+    assert 'data-filter="issues"' in body
+    assert 'data-filter="unheard"' in body
+    assert 'data-rating="2"' in body
+    assert 'data-issues="1"' in body
+
+
 def test_unknown_unit_is_a_404(client, tmp_path):
     segment_id = _seed(tmp_path)
     assert client.get(f"/practice/{segment_id}/99").status_code == 404

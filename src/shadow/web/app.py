@@ -21,7 +21,10 @@ from fastapi.responses import (FileResponse, HTMLResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from collections import Counter
+
 from .. import config, db, history, media, progress
+from ..report.takes import recurrence_threshold
 from ..analysis.diff import accuracy as _accuracy
 from ..drill.gapfill import blanks_of
 from ..drill.units import is_usable, split_into_units
@@ -123,6 +126,14 @@ def _unit_audio(connection, segment_id: int, unit: int) -> Path:
     return _unit_reference(connection, segment_id, unit)[0]
 
 
+def _recurring(metrics: list[dict]) -> int:
+    """上一轮反复出现的问题有几条。偶尔犯一次的不算。"""
+    counted = Counter(issue["title"] for take in metrics
+                      for issue in take.get("issues", ()))
+    threshold = recurrence_threshold(len(metrics))
+    return sum(1 for hits in counted.values() if hits >= threshold)
+
+
 def _sentences(connection) -> list[dict]:
     """全部句子，按素材里的先后排成一条。
 
@@ -156,15 +167,23 @@ def index(request: Request):
     connection = _db()
     sources = db.list_sources(connection)
     catalogue = _sentences(connection)
-    done = {}
+    done, issues, ratings = {}, {}, {}
     for run in db.list_runs(connection):
+        text = run["unit_text"]
+        metrics = db.run_metrics(connection, run["id"])
         # 中途取消留下的空记录不算练过
-        if run["unit_text"] and (run["blind_rating"] is not None
-                                 or run["gapfill_total"] is not None
-                                 or db.run_metrics(connection, run["id"])):
-            done.setdefault(run["unit_text"], []).append(run)
+        if not text or not (run["blind_rating"] is not None
+                            or run["gapfill_total"] is not None or metrics):
+            continue
+        done.setdefault(text, []).append(run)
+        if run["blind_rating"] is not None:
+            ratings[text] = run["blind_rating"]
+        if metrics:
+            issues[text] = _recurring(metrics)
     for item in catalogue:
         item["runs"] = len(done.get(item["text"], ()))
+        item["issues"] = issues.get(item["text"], 0)
+        item["rating"] = ratings.get(item["text"])
     # 没练过的第一句：有个直达入口就不用浏览列表，也就不会被剧透
     next_unit = next((i for i in catalogue if not i["runs"] and i["usable"]), None)
     days = progress.calendar(connection)

@@ -177,3 +177,15 @@ def test_serve_stays_local_by_default(monkeypatch):
     monkeypatch.setitem(sys.modules, "uvicorn", FakeUvicorn)
     assert cli.main(["serve"]) == 0
     assert seen["host"] == "127.0.0.1"
+
+
+def test_import_checks_the_cut_right_away(monkeypatch, capsys):
+    """「想起来才跑的检查」等于没有——库里那五处切坏躺了很久没人发现。"""
+    def fake_import(url, conn):
+        connection, segment_id = _seed_segment()
+        connection.close()
+        return db.list_segments(db.connect(), 1)[0]["source_id"]
+
+    monkeypatch.setattr(cli, "import_source", fake_import)
+    assert cli.main(["import", "https://x/y"]) == 0
+    assert "个句子" in capsys.readouterr().out

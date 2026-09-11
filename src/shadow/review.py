@@ -1,6 +1,7 @@
-"""把若干次录音评成一份反馈。命令行与网页共用同一条链路。
+"""把若干次录音评成一份反馈。
 
-只做编排：转写、diff、节奏、韵律、建议、汇总、出图，全部复用现有模块。
+只做编排：转写、对齐、diff、节奏、韵律、建议、汇总，全部复用现有模块。
+出图的事交给浏览器——几何在 report/geometry.py，画在 static/figures.js。
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from .analysis.rhythm import alignment_drift, analyse_rhythm, snap_first_word
 from .ingest.transcriber import transcribe_words
 from .models import Word
 from .report.advice import PAUSE_KINDS, build_advice, well_done
-from .report.blocks import Flag, PauseNote, render_feedback
+from .report.geometry import Flag, PauseNote
 from .report.takes import TakeMetrics, TakeSummary, summarise
 
 ALIGNMENT_TOLERANCE_SEC = 1.0
@@ -149,18 +150,6 @@ def flags_for(review: Review, limit: int, take=None):
         for item in take.advice[:limit] if item.kind in PAUSE_KINDS
     )
     return tuple(flags), notes
-
-
-def chart(review: Review, out_path: Path, limit: int) -> Path:
-    take = review.best
-    flags, notes = flags_for(review, limit)
-    return render_feedback(
-        ref_words=review.ref_words, usr_words=take.words, tokens=take.tokens,
-        rhythm=take.rhythm, ref_prosody=review.ref_prosody,
-        usr_prosody=take.prosody, flags=flags, pause_notes=notes,
-        accuracy=diff_accuracy(take.tokens),
-        text=" ".join(w.text for w in review.ref_words), out_path=out_path,
-    )
 
 
 def good_words(review: Review) -> tuple[str, ...]:

@@ -8,7 +8,6 @@ dependencies = [
     "praat-parselmouth>=0.4.5",
     "numpy>=1.26",
     "soundfile>=0.12",
-    "matplotlib>=3.8",
     "cmudict>=1.0",
     "torchaudio>=2.5",
     "fastapi>=0.115",

@@ -20,6 +20,35 @@ if (reveal) {
   apply();
 }
 
+// ---------- 首页筛选 ----------
+// 盲听自评一直存着却没人用过。它正好回答一个问题：哪些句子是真没听懂的。
+const filters = document.getElementById("filters");
+if (filters) {
+  const rows = [...document.querySelectorAll("table.units tbody tr")];
+  const count = document.getElementById("filter-count");
+  const keep = {
+    all: () => true,
+    fresh: (row) => Number(row.dataset.runs) === 0,
+    issues: (row) => Number(row.dataset.issues) > 0,
+    unheard: (row) => row.dataset.rating !== "" && Number(row.dataset.rating) <= 2,
+  };
+
+  filters.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button) return;
+    filters.querySelectorAll("button").forEach(
+      (one) => one.classList.toggle("chosen", one === button));
+    const test = keep[button.dataset.filter];
+    let shown = 0;
+    rows.forEach((row) => {
+      const ok = test(row);
+      row.hidden = !ok;
+      if (ok) shown += 1;
+    });
+    count.textContent = button.dataset.filter === "all" ? "" : `${shown} 句`;
+  });
+}
+
 // ---------- 练习页 ----------
 const root = document.getElementById("practice");
 if (root) {

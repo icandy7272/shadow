@@ -30,11 +30,20 @@
   没练过的句子不显示原文——先看到文字，盲听就作废了。
   <label class="reveal"><input type="checkbox" id="reveal"> 我知道，全部显示</label>
 </p>
+<div class="filters" id="filters">
+  <button class="chosen" data-filter="all">全部</button>
+  <button data-filter="fresh">没练过</button>
+  <button data-filter="issues">问题没解决</button>
+  <button data-filter="unheard">没听懂</button>
+  <span class="filters-hint" id="filter-count"></span>
+</div>
 <table class="units">
   <thead><tr><th>#</th><th>句子</th><th>时长</th><th>词</th><th>空</th><th>练过</th></tr></thead>
   <tbody>
   {% for item in catalogue %}
-    <tr class="{{ 'done' if item.runs else 'fresh' }}">
+    <tr class="{{ 'done' if item.runs else 'fresh' }}"
+        data-runs="{{ item.runs }}" data-issues="{{ item.issues }}"
+        data-rating="{{ item.rating if item.rating is not none else '' }}">
       <td class="num">{{ item.number }}</td>
       <td>
         {% if not item.usable %}
@@ -50,7 +59,9 @@
       <td class="num">{{ '%.1f'|format(item.seconds) }}s</td>
       <td class="num">{{ item.words }}</td>
       <td class="num">{{ item.blanks or '' }}</td>
-      <td class="num">{{ item.runs or '' }}</td>
+      <td class="num">{{ item.runs or '' }}{% if item.issues %}
+        <span class="left" title="上次还有 {{ item.issues }} 处没解决"
+          >·{{ item.issues }}</span>{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>

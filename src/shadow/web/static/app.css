@@ -304,3 +304,11 @@ button:disabled { opacity: .5; cursor: default; }
 
 .figure-controls { margin-bottom: 14px; }
 .figure-controls .takes { margin-top: 0; }
+
+.filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin: 0 0 12px; }
+.filters button { padding: 5px 12px; font-size: 13px; }
+.filters button.chosen { background: var(--accent); color: #fff;
+  border-color: var(--accent); }
+.filters-hint { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.units .left { color: var(--warn); }

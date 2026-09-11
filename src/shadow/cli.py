@@ -42,6 +42,16 @@ def cmd_import(args: argparse.Namespace) -> int:
     row = db.get_source(connection, source_id)
     print(f"[{source_id}] {row['title']}")
     print(f"  时长 {row['duration_sec'] / 60:.1f} 分钟，切出 {len(segments)} 个片段")
+
+    # 导入完就地体检：切坏的单元只有扫一遍才看得出来，
+    # 而「想起来才跑的检查」等于没有——库里那五处切坏躺了很久没人发现。
+    total, bad, broken = _survey(connection, source_id)
+    print(f"  {total} 个句子", end="")
+    if bad or broken:
+        print(f"，其中 {len(bad)} 句断在词组中间、{len(broken)} 句时间戳异常"
+              f"（跑 shadow audit 看是哪些）")
+    else:
+        print("，都能练")
     return 0
 
 
@@ -231,6 +241,24 @@ def cmd_recompute(args: argparse.Namespace) -> int:
     return 0
 
 
+def _survey(connection, source_id: int | None = None):
+    """扫一遍切出来的单元，返回 (总数, 切坏的, 时间戳异常的)。"""
+    total, bad, broken = 0, [], []
+    for source in db.list_sources(connection):
+        if source_id is not None and source["id"] != source_id:
+            continue
+        for row in db.list_segments(connection, source["id"]):
+            segment = db.get_segment(connection, row["id"])
+            for index, unit in enumerate(split_into_units(segment["words"]), 1):
+                total += 1
+                text = " ".join(word.text for word in unit)
+                if not is_usable(unit):
+                    broken.append((row["id"], index, text))
+                elif ends_mid_phrase(unit):
+                    bad.append((row["id"], index, text))
+    return total, bad, broken
+
+
 def cmd_audit(args: argparse.Namespace) -> int:
     """扫全库，把切坏的单元挑出来。
 
@@ -238,20 +266,12 @@ def cmd_audit(args: argparse.Namespace) -> int:
     里的切坏。「在最大停顿处断开」这条规则在库里坏了五处，全是这么找出来的。
     """
     connection = _open_db()
-    bad = broken = total = 0
-    for source in db.list_sources(connection):
-        for row in db.list_segments(connection, source["id"]):
-            segment = db.get_segment(connection, row["id"])
-            for index, unit in enumerate(split_into_units(segment["words"]), 1):
-                total += 1
-                text = " ".join(word.text for word in unit)
-                if not is_usable(unit):
-                    broken += 1
-                    print(f"  ⚠ {row['id']}/{index} 时间戳异常：{text[:60]}")
-                elif ends_mid_phrase(unit):
-                    bad += 1
-                    print(f"  ✂ {row['id']}/{index} 断在词组中间：…{text[-50:]}")
-    print(f"\n共 {total} 个单元：切坏 {bad}，时间戳异常 {broken}")
+    total, bad, broken = _survey(connection)
+    for segment_id, index, text in broken:
+        print(f"  ⚠ {segment_id}/{index} 时间戳异常：{text[:60]}")
+    for segment_id, index, text in bad:
+        print(f"  ✂ {segment_id}/{index} 断在词组中间：…{text[-50:]}")
+    print(f"\n共 {total} 个单元：切坏 {len(bad)}，时间戳异常 {len(broken)}")
     return 0
 
 
