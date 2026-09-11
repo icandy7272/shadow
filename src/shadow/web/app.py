@@ -21,7 +21,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .. import config, db, history, media
+from .. import config, db, history, media, progress
 from ..analysis.diff import accuracy as _accuracy
 from ..drill.gapfill import blanks_of
 from ..drill.units import is_usable, split_into_units
@@ -129,9 +129,11 @@ def index(request: Request):
         item["runs"] = len(done.get(item["text"], ()))
     # 没练过的第一句：有个直达入口就不用浏览列表，也就不会被剧透
     next_unit = next((i for i in catalogue if not i["runs"] and i["usable"]), None)
+    days = progress.calendar(connection)
     return templates.TemplateResponse(
         request, "index.html",
-        {"catalogue": catalogue, "sources": sources, "next_unit": next_unit},
+        {"catalogue": catalogue, "sources": sources, "next_unit": next_unit,
+         "days": days},
     )
 
 

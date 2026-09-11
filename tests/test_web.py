@@ -116,6 +116,8 @@ def test_last_time_is_shown_inside_the_shadowing_step(client, tmp_path):
 
     assert "“was” 该降没降" in body
     assert body.index('id="step-record"') < body.index('class="history"')
+    # 锁着的时候只说有几处，不说是哪些词
+    assert "上次" in body[body.index('id="step-record"'):body.index('class="history"')]
     # 指标不进来：开口前看见分数会让人去够数字
     assert "可懂度" not in body
 

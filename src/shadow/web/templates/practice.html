@@ -51,7 +51,10 @@
   {% endif %}
 
   <section class="step locked" id="step-record">
-    <h2><span class="n">{{ 3 if blanks else 2 }}</span> 跟读</h2>
+    <h2><span class="n">{{ 3 if blanks else 2 }}</span> 跟读
+      {%- if history %}<em class="badge">上次{% if history.issues %}有
+        {{ history.issues | length }} 处要改{% else %}没有反复出现的问题{% endif %}</em>
+      {%- endif %}</h2>
     <p class="hint">每遍录音前会自动放几次原声——听和说之间不能有间隔。
       听完嘀一声就开始说，说完点「说完了」。</p>
     <div class="row">

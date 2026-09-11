@@ -8,6 +8,20 @@
   {% endif %}
 </div>
 
+<section class="streak">
+  <p class="streak-head">
+    {% if days.today %}<b>今天 {{ days.today }} 句</b>{% else %}<b>今天还没练</b>{% endif %}
+    {% if days.streak %}<span>· 连续 {{ days.streak }} 天</span>{% endif %}
+    {% if days.week %}<span>· 最近七天 {{ days.week }} 句</span>{% endif %}
+  </p>
+  <div class="grid">
+    {%- for day in days.days -%}
+      <i class="d{{ day.level }}{{ ' ahead' if day.future }}"
+         title="{{ day.date }}{% if day.sentences %}：{{ day.sentences }} 句 / {{ day.rounds }} 轮{% else %}：没练{% endif %}"></i>
+    {%- endfor -%}
+  </div>
+</section>
+
 {% if not catalogue %}
   <p class="empty">还没有导入素材。先在命令行跑
     <code>uv run shadow import &lt;url&gt;</code></p>

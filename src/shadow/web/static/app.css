@@ -233,3 +233,22 @@ button:disabled { opacity: .5; cursor: default; }
 .speeds button { padding: 4px 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .speeds button.chosen { background: var(--accent); color: #fff;
   border-color: var(--accent); }
+
+/* 每日格子。只铺最近几周——刚开始练时，一整年的空格子是劝退 */
+.streak { margin: 0 0 22px; }
+.streak-head { margin: 0 0 10px; font-size: 14px; color: var(--muted); }
+.streak-head b { color: var(--fg); font-weight: 600; }
+.streak-head span { margin-left: 4px; }
+.grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 11px);
+  gap: 3px; justify-content: start; }
+.grid i { width: 11px; height: 11px; border-radius: 2px; background: var(--line); }
+.grid i.d1 { background: rgba(31, 119, 180, .35); }
+.grid i.d2 { background: rgba(31, 119, 180, .55); }
+.grid i.d3 { background: rgba(31, 119, 180, .75); }
+.grid i.d4 { background: var(--accent); }
+.grid i.ahead { background: none; }
+
+/* 锁住时只说有几处要改，不说是哪些词——说了就泄题了 */
+.badge { font-style: normal; font-size: 12px; font-weight: 400; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; }
+.step:not(.locked) .badge { display: none; }
