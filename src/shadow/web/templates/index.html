@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="head">
-  <h1>练习单元</h1>
+  <h1>句子</h1>
   {% if next_unit %}
     <a class="cta" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}">
       开始下一句 →</a>
@@ -31,11 +31,11 @@
   <label class="reveal"><input type="checkbox" id="reveal"> 我知道，全部显示</label>
 </p>
 <table class="units">
-  <thead><tr><th>片段</th><th>句子</th><th>时长</th><th>词</th><th>空</th><th>练过</th></tr></thead>
+  <thead><tr><th>#</th><th>句子</th><th>时长</th><th>词</th><th>空</th><th>练过</th></tr></thead>
   <tbody>
   {% for item in catalogue %}
     <tr class="{{ 'done' if item.runs else 'fresh' }}">
-      <td class="num">{{ item.segment }}·{{ item.unit }}</td>
+      <td class="num">{{ item.number }}</td>
       <td>
         {% if not item.usable %}
           <span class="broken">时间戳异常，无法练习</span>

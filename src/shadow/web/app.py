@@ -69,17 +69,29 @@ def _unit_words(connection, segment_id: int, unit: int):
     return segment, units[unit - 1]
 
 
-def _neighbours(units, unit: int) -> dict:
-    """左右最近的能练的单元。时间戳坏掉的句子要跳过去，不然翻页会卡死。"""
-    def hunt(step: int) -> int | None:
-        index = unit + step
-        while 1 <= index <= len(units):
-            if is_usable(units[index - 1]):
-                return index
+def _place(connection, segment_id: int, unit: int) -> dict:
+    """这一句在整份素材里排第几，以及前后能练的是哪一句。
+
+    翻页按句子走，不在片段边界上断掉——那个边界是切素材时的实现细节。
+    """
+    sentences = _sentences(connection)
+    here = next((i for i, item in enumerate(sentences)
+                 if item["segment"] == segment_id and item["unit"] == unit), None)
+    if here is None:
+        return {"number": unit, "total_units": len(sentences),
+                "prev_unit": None, "next_unit": None, "source": ""}
+
+    def hunt(step: int):
+        index = here + step
+        while 0 <= index < len(sentences):
+            if sentences[index]["usable"]:
+                return sentences[index]
             index += step
         return None
 
-    return {"prev_unit": hunt(-1), "next_unit": hunt(1)}
+    return {"number": here + 1, "total_units": len(sentences),
+            "source": sentences[here]["source"],
+            "prev_unit": hunt(-1), "next_unit": hunt(1)}
 
 
 def _unit_reference(connection, segment_id: int, unit: int):
@@ -111,26 +123,39 @@ def _unit_audio(connection, segment_id: int, unit: int) -> Path:
     return _unit_reference(connection, segment_id, unit)[0]
 
 
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    connection = _db()
-    sources = db.list_sources(connection)
-    catalogue = []
-    for source in sources:
+def _sentences(connection) -> list[dict]:
+    """全部句子，按素材里的先后排成一条。
+
+    「片段」只是切素材时为了保住语义块用的中间层，练的是句子。
+    所以对外只有句子和它的序号，翻页也是一句接一句，不在段边界上断掉。
+    """
+    out = []
+    for source in db.list_sources(connection):
         if source["status"] != db.STATUS_READY:
             continue
         for segment in db.list_segments(connection, source["id"]):
             full = db.get_segment(connection, segment["id"])
             for number, words in enumerate(split_into_units(full["words"]), 1):
-                catalogue.append({
+                out.append({
                     "segment": segment["id"],
                     "unit": number,
+                    "source": source["title"],
                     "text": " ".join(w.text for w in words),
                     "seconds": words[-1].end - words[0].start,
                     "words": len(words),
                     "blanks": sum(w.is_blank for w in words),
                     "usable": is_usable(words),
                 })
+    for order, item in enumerate(out, 1):
+        item["number"] = order
+    return out
+
+
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    connection = _db()
+    sources = db.list_sources(connection)
+    catalogue = _sentences(connection)
     done = {}
     for run in db.list_runs(connection):
         # 中途取消留下的空记录不算练过
@@ -154,14 +179,12 @@ def index(request: Request):
 def practice(request: Request, segment_id: int, unit: int):
     connection = _db()
     segment, words = _unit_words(connection, segment_id, unit)
-    _, units = _units(connection, segment_id)
-    step = _neighbours(units, unit)
+    step = _place(connection, segment_id, unit)
     if not is_usable(words):
         # 不能只回一句 JSON：练下一句会把人送进来，再没有出口就卡死了
         return templates.TemplateResponse(
             request, "unusable.html",
-            {"segment": segment_id, "unit": unit, "total_units": len(units),
-             **step},
+            {"segment": segment_id, "unit": unit, **step},
             status_code=409,
         )
     return templates.TemplateResponse(
@@ -169,7 +192,6 @@ def practice(request: Request, segment_id: int, unit: int):
         {
             "segment": segment_id,
             "unit": unit,
-            "total_units": len(units),
             **step,
             "words": words,
             "blanks": blanks_of(words),

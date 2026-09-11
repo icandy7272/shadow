@@ -172,6 +172,36 @@ def test_the_pager_skips_over_unusable_units(client, tmp_path):
     assert f'href="/practice/{segment_id}/2"' not in body
 
 
+def test_the_page_counts_sentences_not_segments(client, tmp_path):
+    """练的是句子，片段只是切素材时的实现细节，不该出现在界面上。"""
+    segment_id = _seed(tmp_path)
+    body = client.get(f"/practice/{segment_id}/2").text
+
+    assert "第 2 句" in body
+    assert "共 2 句" in body
+    assert "片段" not in body
+
+
+def test_the_pager_walks_across_segment_boundaries(client, tmp_path):
+    """句子是连着编号的，走到一段的末尾该接着进下一段，不是没路了。"""
+    first = _seed(tmp_path)
+    second = _seed_without_blanks(tmp_path)
+
+    body = client.get(f"/practice/{first}/2").text
+    assert f'href="/practice/{second}/1"' in body
+
+    body = client.get(f"/practice/{second}/1").text
+    assert f'href="/practice/{first}/2"' in body
+
+
+def test_the_index_lists_a_running_sentence_number(client, tmp_path):
+    _seed(tmp_path)
+    body = client.get("/").text
+
+    assert "<th>片段</th>" not in body
+    assert ">1</td>" in body
+
+
 def test_unknown_unit_is_a_404(client, tmp_path):
     segment_id = _seed(tmp_path)
     assert client.get(f"/practice/{segment_id}/99").status_code == 404
