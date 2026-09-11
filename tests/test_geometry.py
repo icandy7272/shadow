@@ -111,3 +111,18 @@ def test_a_slot_carries_the_whole_shape_not_just_its_ends(prosody):
         ref_prosody=prosody, usr_prosody=prosody,
     )
     assert len(slots[0].ref_trace) > 2
+
+
+def test_blocks_say_whether_the_word_was_matched():
+    """读错的词要能一眼看出来是哪一个。"""
+
+    class FakeRhythm:
+        lags = ()
+        ref_span = 1.4
+        usr_span = 1.8
+
+    view = geometry.rhythm_view(ref_words=REF, usr_words=USR, rhythm=FakeRhythm(),
+                                pairs=[(0, 0), (2, 2)])
+
+    assert [b.matched for b in view.ref] == [True, False, True]
+    assert [b.matched for b in view.usr] == [True, False, True]

@@ -48,6 +48,7 @@ class Block:
     text: str
     start: float
     width: float
+    matched: bool = True     # 机器有没有在另一条里找到这个词
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,12 +116,13 @@ def lag_annotations(
     return tuple(marked)
 
 
-def blocks_of(words: Sequence[Word]) -> tuple[Block, ...]:
+def blocks_of(words: Sequence[Word], matched=None) -> tuple[Block, ...]:
     origin = words[0].start
     return tuple(
         Block(text=w.text.strip(TRIM), start=w.start - origin,
-              width=max(w.duration, MIN_BLOCK_SEC))
-        for w in words
+              width=max(w.duration, MIN_BLOCK_SEC),
+              matched=matched is None or index in matched)
+        for index, w in enumerate(words)
     )
 
 
@@ -142,7 +144,7 @@ def _pause_span(note, ref_words, usr_words, ref_origin, usr_origin) -> Span | No
 
 def rhythm_view(
     *, ref_words: Sequence[Word], usr_words: Sequence[Word], rhythm: Rhythm,
-    pause_notes: Sequence = (),
+    pause_notes: Sequence = (), pairs: Sequence[tuple[int, int]] = (),
 ) -> RhythmView:
     ref_origin = ref_words[0].start
     usr_origin = usr_words[0].start
@@ -160,7 +162,9 @@ def rhythm_view(
         ) if span is not None
     )
     return RhythmView(
-        ref=blocks_of(ref_words), usr=blocks_of(usr_words), lags=lags, spans=spans,
+        ref=blocks_of(ref_words, {r for r, _ in pairs}),
+        usr=blocks_of(usr_words, {u for _, u in pairs}),
+        lags=lags, spans=spans,
         seconds=max(rhythm.ref_span, rhythm.usr_span),
     )
 

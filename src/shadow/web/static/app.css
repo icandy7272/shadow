@@ -132,20 +132,33 @@ button:disabled { opacity: .5; cursor: default; }
 .playhead i { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
   background: var(--fg); opacity: .5; border-radius: 1px; }
 
-/* 图 1 · 节奏 */
-.lane { display: flex; align-items: center; }
-.lane .tag { flex: none; width: 46px; text-align: right; padding-right: 10px;
+/* 图 1 · 节奏。横轴是真实秒数，块不能为了放字而加宽，词标挪到块外面 */
+.lane { position: relative; }
+.track-row { display: flex; align-items: center; }
+.track-row .tag { flex: none; width: 46px; text-align: right; padding-right: 10px;
   font-size: 13px; color: var(--muted); }
 .lane.ref .tag { color: var(--accent); }
 .lane.usr .tag { color: var(--warn); }
-.track { position: relative; flex: 1; height: 34px; }
-.blk { position: absolute; top: 0; height: 34px; line-height: 32px;
-  text-align: center; border-radius: 6px; font-size: 13px; padding: 0 3px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lane.ref .blk { background: rgba(31, 119, 180, .16);
-  border: 1px solid rgba(31, 119, 180, .5); color: var(--accent); }
-.lane.usr .blk { background: rgba(214, 39, 40, .14);
-  border: 1px solid rgba(214, 39, 40, .5); color: var(--warn); }
+.track { position: relative; flex: 1; height: 30px; }
+.blk { position: absolute; top: 0; height: 30px; border-radius: 5px; }
+.lane.ref .blk { background: rgba(31, 119, 180, .20);
+  border: 1px solid rgba(31, 119, 180, .55); }
+.lane.usr .blk { background: rgba(214, 39, 40, .16);
+  border: 1px solid rgba(214, 39, 40, .55); }
+.blk.missed { border-style: dashed; background: none; }
+
+.callouts { position: relative; height: 36px; margin-left: 46px; }
+.callouts span { position: absolute; transform: translateX(-50%);
+  font-size: 12px; white-space: nowrap; }
+.callouts span::after { content: ""; position: absolute; left: 50%; width: 1px;
+  height: var(--drop, 0); background: currentColor; opacity: .3; }
+.lane.ref .callouts span { color: var(--accent); }
+.lane.ref .callouts span::after { top: 100%; }
+.lane.usr .callouts { padding-top: 4px; }
+.lane.usr .callouts span { color: var(--warn); }
+.lane.usr .callouts span::after { bottom: 100%; }
+.callouts span.missed { text-decoration: underline dashed; opacity: .75; }
+
 .track .span { position: absolute; top: -4px; bottom: -4px;
   background: rgba(214, 39, 40, .14); border-radius: 4px; }
 .track .span-flag { position: absolute; left: 50%; bottom: 100%;

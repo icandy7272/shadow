@@ -3,7 +3,9 @@
 // 之前是服务端出 PNG 再内嵌，图里的字随图片缩放，页面一宽字就小得看不清。
 // 现在几何走 SVG，文字全是普通 HTML，字号跟页面走，跟容器宽度无关。
 
-const GAP = 34;           // 节奏图两行之间留给落后连线的高度
+const GAP = 34;
+const CALLOUT_ROW = 17;   // 词标错行的行距
+const CALLOUT_DROP = 21;  // 第一行词标到词块的引线长度           // 节奏图两行之间留给落后连线的高度
 const PER_SEMITONE = 7;   // 一个半音多少 px，固定不变，句与句之间才可比
 const TRACE_PAD = 10;     // 折线上下留白，笔画不贴边
 const PITCH_PAD = 8;
@@ -36,8 +38,11 @@ function playhead() {
 
 function lane(role, name, blocks, spans, seconds) {
   const row = el("div", `lane ${role}`);
-  row.append(el("span", "tag", name));
+  const callouts = el("div", "callouts");
+  const trackRow = el("div", "track-row");
   const track = el("div", "track");
+
+  trackRow.append(el("span", "tag", name), track);
   spans.forEach((span) => {
     const band = el("div", "span");
     band.style.left = `${(span.start / seconds) * 100}%`;
@@ -45,23 +50,43 @@ function lane(role, name, blocks, spans, seconds) {
     band.append(el("span", "span-flag", span.flag));
     track.append(band);
   });
+
   blocks.forEach((block) => {
-    const box = el("div", "blk", block.text);
-    box.title = block.text;          // 窄块放不下的词，鼠标停一下能看到
+    const box = el("div", block.matched ? "blk" : "blk missed");
     box.style.left = `${(block.start / seconds) * 100}%`;
     box.style.width = `${(block.width / seconds) * 100}%`;
     track.append(box);
-  });
-  row.append(track);
 
-  // 放不下的词用省略号收尾；窄到连两三个字母都摆不开就干脆空着——
-  // 露出半个词比空着还难认。鼠标停一下都还能看到全词。
-  const fit = () => track.querySelectorAll(".blk").forEach((box) => {
-    box.textContent = box.clientWidth < 30 ? "" : box.title;
+    // 词标放在块外面：横轴是真实秒数，块不能为了放字而加宽
+    const tag = el("span", block.matched ? null : "missed", block.text);
+    tag.style.left = `${((block.start + block.width / 2) / seconds) * 100}%`;
+    callouts.append(tag);
   });
-  if (window.ResizeObserver) new ResizeObserver(fit).observe(track);
+
+  row.append(...(role === "ref" ? [callouts, trackRow] : [trackRow, callouts]));
+
+  // 词一多标签就会挤在一起。量出实际宽度，贪心地错到第二行，并画一根引线。
+  const place = () => {
+    const width = track.clientWidth;
+    if (!width) return;
+    const rights = [-Infinity, -Infinity];
+    callouts.childNodes.forEach((node, index) => {
+      const block = blocks[index];
+      const centre = ((block.start + block.width / 2) / seconds) * width;
+      const half = node.offsetWidth / 2;
+      let line = rights.findIndex((right) => centre - half > right + 6);
+      if (line < 0) line = rights.indexOf(Math.min(...rights));
+      rights[line] = centre + half;
+      node.style.top = `${line * CALLOUT_ROW}px`;
+      node.style.setProperty("--drop", role === "ref"
+        ? `${CALLOUT_DROP - line * CALLOUT_ROW}px`
+        : `${4 + line * CALLOUT_ROW}px`);
+    });
+  };
+  if (window.ResizeObserver) new ResizeObserver(place).observe(track);
   return row;
 }
+
 
 function rhythmFigure(rhythm) {
   const seconds = rhythm.seconds || 1;

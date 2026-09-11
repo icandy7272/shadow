@@ -66,7 +66,9 @@ def _draw_rhythm(ax, labels, view) -> None:
             ax.add_patch(FancyBboxPatch(
                 (block.start, base - height), block.width, 2 * height,
                 boxstyle="round,pad=0.004,rounding_size=0.03",
-                facecolor=colour, alpha=0.28, edgecolor=colour, lw=1.0))
+                facecolor=colour, alpha=0.28 if block.matched else 0.10,
+                edgecolor=colour, lw=1.0,
+                ls="solid" if block.matched else (0, (3, 2))))
             ax.text(block.start + block.width / 2, base, block.text,
                     ha="center", va="center",
                     fontsize=min(11, max(6, 26 * block.width)), color=colour)
@@ -153,7 +155,7 @@ def render_feedback(
                   and t.ref_index is not None and t.usr_index is not None)
 
     view = geometry.rhythm_view(ref_words=ref_words, usr_words=usr_words,
-                                rhythm=rhythm, pause_notes=pause_notes)
+                                rhythm=rhythm, pause_notes=pause_notes, pairs=pairs)
     slots = geometry.pitch_slots(ref_words=ref_words, usr_words=usr_words,
                                  pairs=pairs, ref_prosody=ref_prosody,
                                  usr_prosody=usr_prosody, flags=flags)

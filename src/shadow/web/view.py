@@ -17,7 +17,7 @@ def _round(value):
 
 def _block(block) -> dict:
     return {"text": block.text, "start": round(block.start, 4),
-            "width": round(block.width, 4)}
+            "width": round(block.width, 4), "matched": block.matched}
 
 
 def feedback_view(review, limit: int, *, audio: dict) -> dict:
@@ -26,13 +26,14 @@ def feedback_view(review, limit: int, *, audio: dict) -> dict:
 
     take = review.best
     flags, notes = review_mod.flags_for(review, limit)
+    pairs = matched_pairs(take.tokens)
     rhythm = geometry.rhythm_view(
         ref_words=review.ref_words, usr_words=take.words,
-        rhythm=take.rhythm, pause_notes=notes,
+        rhythm=take.rhythm, pause_notes=notes, pairs=pairs,
     )
     slots = geometry.pitch_slots(
         ref_words=review.ref_words, usr_words=take.words,
-        pairs=matched_pairs(take.tokens), ref_prosody=review.ref_prosody,
+        pairs=pairs, ref_prosody=review.ref_prosody,
         usr_prosody=take.prosody, flags=flags,
     )
     return {
