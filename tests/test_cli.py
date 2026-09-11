@@ -670,3 +670,9 @@ def test_serve_reloads_by_default(monkeypatch):
     seen.clear()
     assert cli.main(["serve", "--no-reload"]) == 0
     assert seen["reload"] is False
+
+
+def test_same_sentence_ignores_spacing_and_case():
+    """切分规则一变，同一句可能换了序号——只能靠文本认回来。"""
+    assert cli._same_sentence("Do you want him?", "do you  want him?")
+    assert not cli._same_sentence("Do you want him?", "Do you want her?")

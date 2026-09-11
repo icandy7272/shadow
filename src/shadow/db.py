@@ -322,6 +322,30 @@ def mark_saw_text(conn: sqlite3.Connection, run_id: int, seen: bool) -> None:
     conn.commit()
 
 
+def run_attempts(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
+    return list(conn.execute(
+        "SELECT * FROM attempts WHERE run_id = ? ORDER BY id", (run_id,)))
+
+
+def set_attempt_metrics(
+    conn: sqlite3.Connection, attempt_id: int, metrics: dict[str, Any] | None
+) -> None:
+    """重算之后改写一遍录音的指标。None 表示这一遍已不可用，不再计入。"""
+    payload = None if metrics is None else json.dumps(metrics, ensure_ascii=False)
+    conn.execute("UPDATE attempts SET metrics_json = ? WHERE id = ?",
+                 (payload, attempt_id))
+    conn.commit()
+
+
+def relabel_run(
+    conn: sqlite3.Connection, run_id: int, *, unit_index: int, unit_text: str
+) -> None:
+    """切分规则变了，同一句可能换了序号。按文本找回来之后校正。"""
+    conn.execute("UPDATE practice_runs SET unit_index = ?, unit_text = ? WHERE id = ?",
+                 (unit_index, unit_text, run_id))
+    conn.commit()
+
+
 def run_metrics(conn: sqlite3.Connection, run_id: int) -> list[dict[str, Any]]:
     """一次练习里各 take 的指标。"""
     rows = conn.execute(

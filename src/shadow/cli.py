@@ -180,6 +180,66 @@ def cmd_realign(args: argparse.Namespace) -> int:
     return 0
 
 
+def _same_sentence(left: str, right: str) -> bool:
+    return "".join(left.lower().split()) == "".join(right.lower().split())
+
+
+def cmd_recompute(args: argparse.Namespace) -> int:
+    """拿现在的代码把历史录音全部重算一遍。
+
+    词边界、发声起点、判定规则都改过好几轮，库里存的还是当时算出来的。
+    录音都在磁盘上，重算一遍，趋势线才第一次可信。
+    """
+    connection = _open_db()
+    done = moved = skipped = 0
+    for run in db.list_runs(connection):
+        rows = db.run_attempts(connection, run["id"])
+        paths = [Path(row["audio_path"]) for row in rows]
+        if not rows or not all(p.exists() for p in paths):
+            continue
+
+        segment, _source, units = _segment_units(connection, run["segment_id"])
+        index = next((i for i, unit in enumerate(units, 1)
+                      if _same_sentence(" ".join(w.text for w in unit),
+                                        run["unit_text"] or "")), None)
+        if index is None:
+            print(f"  轮次 {run['id']}：库里已经找不到这句，跳过")
+            skipped += 1
+            continue
+        if index != run["unit_index"]:
+            moved += 1
+
+        dest = config.segment_audio_dir() / f"{run['segment_id']}-u{index}.wav"
+        ref_path, ref_words, text = _segment_reference(
+            connection, run["segment_id"], dest, unit=index)
+        result = review.evaluate(ref_path, ref_words, paths,
+                                 transcribe=transcribe_words)
+        if result is None:
+            print(f"  轮次 {run['id']}：没有一遍能用，指标清空")
+            for row in rows:
+                db.set_attempt_metrics(connection, row["id"], None)
+            skipped += 1
+            continue
+
+        fresh = {str(take.path): take for take in result.takes}
+        for row in rows:
+            take = fresh.get(row["audio_path"])
+            db.set_attempt_metrics(connection, row["id"], None if take is None else {
+                "accuracy": diff_accuracy(take.tokens),
+                "speech_ratio": take.rhythm.speech_ratio,
+                "pause_ratio": take.rhythm.pause_ratio,
+                "issues": [{"kind": a.kind, "ref_index": a.ref_index,
+                            "score": a.score, "title": a.title} for a in take.advice],
+            })
+        db.relabel_run(connection, run["id"], unit_index=index, unit_text=text)
+        done += 1
+        print(f"  轮次 {run['id']}  {run['segment_id']}/{index}  "
+              f"{len(result.takes)}/{len(rows)} 遍可用  {text[:40]}")
+
+    print(f"\n重算 {done} 轮，序号校正 {moved} 轮，跳过 {skipped} 轮。")
+    return 0
+
+
 def cmd_audit(args: argparse.Namespace) -> int:
     """扫全库，把切坏的单元挑出来。
 
@@ -1280,6 +1340,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_audit = sub.add_parser("audit", help="扫全库，挑出切坏的练习单元")
     p_audit.set_defaults(func=cmd_audit)
+
+    p_recompute = sub.add_parser("recompute", help="拿现在的代码重算所有历史录音")
+    p_recompute.set_defaults(func=cmd_recompute)
 
     p_realign = sub.add_parser("realign", help="用强制对齐改写词时间戳")
     p_realign.add_argument("-s", "--segment", type=int, help="只对齐这一个片段")
