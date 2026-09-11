@@ -301,3 +301,6 @@ button:disabled { opacity: .5; cursor: default; }
 }
 
 .insecure { color: var(--warn); }
+
+.figure-controls { margin-bottom: 14px; }
+.figure-controls .takes { margin-top: 0; }

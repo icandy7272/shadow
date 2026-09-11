@@ -661,16 +661,18 @@ function rangeOf(rhythm, audio, role, [low, high]) {
 }
 
 
-// 一遍录音：播放条 + 两张图
+// 一遍录音：播放条和两张图分开返回。
+// 播放条要摆在结果最上面——录完第一件想做的事是听自己刚才那遍，
+// 而它原来埋在指标和建议底下，得滚半屏才够得着。
 function renderTake(take) {
   const node = el("div", "take-figures");
   const rhythm = rhythmFigure(take.rhythm);
   const pitch = pitchFigure(take.pitch);
+  let bar = null;
   let player = null;
   if (take.audio) {
-    const bar = playbar(take.rhythm, take.audio, [rhythm, pitch]);
+    bar = playbar(take.rhythm, take.audio, [rhythm, pitch]);
     player = bar.player;
-    node.append(bar.node);
     pitch.onPick((range, onSide) => {
       player.stop();               // 正在整句播放的话先停下
       player.compare(spanOf(take.pitch, range), onSide);
@@ -682,15 +684,17 @@ function renderTake(take) {
     });
   }
   node.append(rhythm.node, pitch.node);
-  return { node, stop: () => player && player.stop() };
+  return { node, bar: bar && bar.node, stop: () => player && player.stop() };
 }
 
 
 // 给 app.js 用：返回一个包含两张图的元素。
 // 指标是全部遍数的中位数，画的却只能是一遍——所以让人自己切着看。
 function renderFigures(view) {  // eslint-disable-line no-unused-vars
+  const controls = el("div", "figure-controls");
   const box = el("div", "figures");
   const tabs = el("div", "takes");
+  const bar = el("div", "playbar-slot");
   const body = el("div", "take-body");
   let current = null;
 
@@ -710,15 +714,18 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
     buttons.forEach((button, i) => button.classList.toggle("chosen", i === index));
     detail.textContent = numbers(view.takes[index]);
     body.textContent = "";
+    bar.textContent = "";
     current = renderTake(view.takes[index]);
+    if (current.bar) bar.append(current.bar);
     body.append(current.node);
   }
 
   if (view.takes.length > 1) {
     tabs.append(el("span", "takes-label", "看哪一遍"), ...buttons, detail);
-    box.append(tabs);
+    controls.append(tabs);
   }
+  controls.append(bar);
   box.append(body);
   show(view.chosen);
-  return box;
+  return { controls, figures: box };
 }

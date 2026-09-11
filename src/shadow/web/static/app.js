@@ -379,6 +379,9 @@ if (root) {
             `<span>${i.detail}</span><span>${i.action}</span></div>`).join("")
         : "<p class='ok'>没有反复出现的问题。</p>") +
       (data.good.length ? `<p class="guessed">做对了，保持：${data.good.join(" / ")}</p>` : "");
-    box.append(renderFigures(data.view));
+    // 播放条摆在最前面：录完第一件想做的事是听自己刚才那遍
+    const figures = renderFigures(data.view);
+    box.prepend(figures.controls);
+    box.append(figures.figures);
   });
 }
