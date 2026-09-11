@@ -242,7 +242,12 @@ if (root) {
     startButton.disabled = true;
     let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 开降噪：生活噪音一旦超过门限就会被当成发声起点，整段测量跟着前移。
+      // 但不开自动增益——它会在静音处把底噪顶上来，正好帮倒忙。
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { noiseSuppression: true, echoCancellation: true,
+                 autoGainControl: false },
+      });
     } catch (err) {
       status.textContent = "拿不到麦克风权限。浏览器地址栏左侧可以重新允许。";
       startButton.disabled = false;

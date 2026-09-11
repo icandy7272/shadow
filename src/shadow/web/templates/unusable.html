@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block subtitle %}<span class="crumb">片段 {{ segment }} · 单元 {{ unit }}/{{ total_units }}</span>{% endblock %}
+{% block content %}
+<section class="step">
+  <h2>这一句没法练</h2>
+  <p class="hint">词级时间戳异常——十几个词挤在半秒里，切出来的音频对不上词，
+    比对的每一项都会是错的。这是转写的问题，不是你的问题。</p>
+  <nav class="pager">
+    {% if prev_unit %}
+    <a href="/practice/{{ segment }}/{{ prev_unit }}">← 上一句</a>
+    {% else %}<span></span>{% endif %}
+    {% if next_unit %}
+    <a class="next" href="/practice/{{ segment }}/{{ next_unit }}"
+       >跳过，练下一句（{{ next_unit }}/{{ total_units }}）→</a>
+    {% else %}<a class="next" href="/">回到列表 →</a>{% endif %}
+  </nav>
+</section>
+{% endblock %}

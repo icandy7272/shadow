@@ -127,6 +127,51 @@ def test_a_fresh_sentence_has_no_last_time_block(client, tmp_path):
     assert 'class="history"' not in client.get(f"/practice/{segment_id}/2").text
 
 
+def _seed_with_a_broken_unit(tmp_path):
+    """第 2 句时间戳挤成一团，没法练——练下一句不该把人送进去。"""
+    import numpy as np
+    import soundfile as sf
+
+    connection = db.connect()
+    db.init_db(connection)
+    source = config.source_audio_dir() / "9.wav"
+    t_ = np.arange(16000 * 8) / 16000
+    sf.write(source, (0.4 * np.sin(2 * np.pi * 200 * t_)).astype("float32"), 16000)
+    source_id = db.create_source(connection, url="https://x/b", title="B",
+                                 duration_sec=8.0)
+    db.finish_source(connection, source_id, audio_path=str(source))
+    spec = [("One", 0.0, 0.4), ("two.", 0.5, 0.4)]
+    # 十四个词挤在 0.28 秒里，且只在最后一个带句号，合成一个不可练的单元
+    spec += [(f"w{i}", 1.5 + i * 0.02, 0.02) for i in range(13)]
+    spec += [("w13.", 1.76, 0.02)]
+    spec += [("Last", 3.0, 0.4), ("one.", 3.5, 0.4)]
+    words = tuple(Word(text=x, start=a, end=a + d) for x, a, d in spec)
+    db.insert_segments(connection, source_id,
+                       (Segment(idx=0, start=0.0, end=4.0, words=words),))
+    segment_id = db.list_segments(connection, source_id)[0]["id"]
+    connection.close()
+    return segment_id
+
+
+def test_an_unusable_unit_is_a_page_not_raw_json(client, tmp_path):
+    segment_id = _seed_with_a_broken_unit(tmp_path)
+    response = client.get(f"/practice/{segment_id}/2")
+
+    assert response.status_code == 409
+    assert "text/html" in response.headers["content-type"]
+    assert "没法练" in response.text
+    # 得留个出口，不能让人卡在这里
+    assert f"/practice/{segment_id}/3" in response.text
+
+
+def test_the_pager_skips_over_unusable_units(client, tmp_path):
+    segment_id = _seed_with_a_broken_unit(tmp_path)
+    body = client.get(f"/practice/{segment_id}/1").text
+
+    assert f'href="/practice/{segment_id}/3"' in body
+    assert f'href="/practice/{segment_id}/2"' not in body
+
+
 def test_unknown_unit_is_a_404(client, tmp_path):
     segment_id = _seed(tmp_path)
     assert client.get(f"/practice/{segment_id}/99").status_code == 404

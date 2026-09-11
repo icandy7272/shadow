@@ -69,6 +69,19 @@ def _unit_words(connection, segment_id: int, unit: int):
     return segment, units[unit - 1]
 
 
+def _neighbours(units, unit: int) -> dict:
+    """左右最近的能练的单元。时间戳坏掉的句子要跳过去，不然翻页会卡死。"""
+    def hunt(step: int) -> int | None:
+        index = unit + step
+        while 1 <= index <= len(units):
+            if is_usable(units[index - 1]):
+                return index
+            index += step
+        return None
+
+    return {"prev_unit": hunt(-1), "next_unit": hunt(1)}
+
+
 def _unit_reference(connection, segment_id: int, unit: int):
     """按需裁出单元音频并缓存，同时把词的时间戳平移到以裁剪起点为 0。
 
@@ -141,17 +154,23 @@ def index(request: Request):
 def practice(request: Request, segment_id: int, unit: int):
     connection = _db()
     segment, words = _unit_words(connection, segment_id, unit)
-    if not is_usable(words):
-        raise HTTPException(
-            409, "这个单元的词级时间戳异常（十几个词挤在半秒里），没法练。换一个吧。"
-        )
     _, units = _units(connection, segment_id)
+    step = _neighbours(units, unit)
+    if not is_usable(words):
+        # 不能只回一句 JSON：练下一句会把人送进来，再没有出口就卡死了
+        return templates.TemplateResponse(
+            request, "unusable.html",
+            {"segment": segment_id, "unit": unit, "total_units": len(units),
+             **step},
+            status_code=409,
+        )
     return templates.TemplateResponse(
         request, "practice.html",
         {
             "segment": segment_id,
             "unit": unit,
             "total_units": len(units),
+            **step,
             "words": words,
             "blanks": blanks_of(words),
             "seconds": round(words[-1].end - words[0].start, 1),

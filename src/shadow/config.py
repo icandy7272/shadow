@@ -67,6 +67,8 @@ SILENCE_DROP_DB = 22.0     # 比窗口内最响低这么多就算安静
 SILENCE_MIN_RUN_SEC = 0.08 # 安静得有这么长才算停顿，滤掉爆破音的闭塞
 SILENCE_WINDOW_SEC = 0.45  # 裁剪点前后各找这么远的停顿
 SPEECH_FLOOR_DB = -20.0
+SPEECH_EDGE_MIN_SEC = 0.25   # 两端短于这么久的一小段，八成不是这句话
+SPEECH_EDGE_GAP_SEC = 0.06   # 而且要跟主体隔着这么久才敢扔
 
 # --- 录音校验 ---
 MIN_ATTEMPT_SEC = 1.0

@@ -125,17 +125,55 @@ def analyse_rhythm(
     )
 
 
+def _runs(flags) -> list[tuple[int, int]]:
+    """连续为真的区段，返回 [(起, 止)]，止是闭区间。"""
+    spans: list[tuple[int, int]] = []
+    start = None
+    for index, flag in enumerate(flags):
+        if flag and start is None:
+            start = index
+        elif not flag and start is not None:
+            spans.append((start, index - 1))
+            start = None
+    if start is not None:
+        spans.append((start, len(flags) - 1))
+    return spans
+
+
 def speech_region(prosody, *, floor_db: float = None) -> tuple[float, float] | None:
-    """从波形能量找出实际发声的起止，与转写时间戳无关。"""
+    """从波形能量找出实际发声的起止，与转写时间戳无关。
+
+    两端那种「又短又跟主体隔着一段」的小块会被扔掉：开口前的咂嘴、呼吸、
+    椅子响都长这样。不扔的话它就成了发声起点，整段测量跟着前移，
+    说话时长凭空变长——实测有一遍录音，真正开口在 0.64 秒，
+    而 0.06 秒处的一声杂音把起点拽到了那里。
+    """
     import numpy as np
 
     from .. import config
 
     threshold = config.SPEECH_FLOOR_DB if floor_db is None else floor_db
-    loud = np.where(prosody.energy_db > threshold)[0]
-    if loud.size == 0:
+    spans = _runs(prosody.energy_db > threshold)
+    if not spans:
         return None
-    return float(prosody.times[loud[0]]), float(prosody.times[loud[-1]])
+
+    step = (float(prosody.times[1] - prosody.times[0])
+            if prosody.times.size > 1 else 0.01)
+    short = config.SPEECH_EDGE_MIN_SEC
+    gap = config.SPEECH_EDGE_GAP_SEC
+
+    def trim(items):
+        while len(items) > 1:
+            low, high = items[0]
+            after = items[1][0] - high - 1
+            if (high - low + 1) * step >= short or after * step < gap:
+                break
+            items = items[1:]
+        return items
+
+    spans = trim(spans)
+    spans = trim(spans[::-1])[::-1]
+    return float(prosody.times[spans[0][0]]), float(prosody.times[spans[-1][1]])
 
 
 def snap_first_word(words, prosody, *, tolerance: float = 0.05):

@@ -220,3 +220,57 @@ def test_a_transcript_that_starts_after_the_speech_is_still_drift(tmp_path):
     words = (Word(text="a", start=1.2, end=1.5),)
 
     assert alignment_drift(words, prosody) > 1.0
+
+
+def _bursts(path, pattern, sr=16000):
+    """pattern: [(秒数, 响不响)]"""
+    import numpy as np
+    import soundfile as sf
+
+    out = []
+    for seconds, loud in pattern:
+        n = int(seconds * sr)
+        out.append(0.4 * np.sin(2 * np.pi * 150 * np.arange(n) / sr) if loud
+                   else np.zeros(n))
+    sf.write(path, np.concatenate(out).astype("float32"), sr)
+    return path
+
+
+def test_a_click_before_you_speak_is_not_the_onset(tmp_path):
+    """开口前的咂嘴、呼吸、椅子响，都会被当成发声起点，
+    整段测量跟着前移，说话时长凭空变长。"""
+    from shadow.analysis.prosody import analyse
+    from shadow.analysis.rhythm import speech_region
+
+    prosody = analyse(_bursts(tmp_path / "click.wav", [
+        (0.10, True), (0.16, False), (0.80, True), (0.20, False),
+    ]))
+
+    start, _end = speech_region(prosody)
+    assert start == pytest.approx(0.26, abs=0.05)
+
+
+def test_continuous_speech_is_left_alone(tmp_path):
+    from shadow.analysis.prosody import analyse
+    from shadow.analysis.rhythm import speech_region
+
+    prosody = analyse(_bursts(tmp_path / "clean.wav", [
+        (0.12, False), (0.90, True), (0.15, False),
+    ]))
+
+    start, end = speech_region(prosody)
+    assert start == pytest.approx(0.12, abs=0.05)
+    assert end == pytest.approx(1.02, abs=0.06)
+
+
+def test_a_long_opening_stretch_is_kept_even_with_a_pause_after_it(tmp_path):
+    """句首本来就可能有个短词加停顿，别把真话当噪音扔掉。"""
+    from shadow.analysis.prosody import analyse
+    from shadow.analysis.rhythm import speech_region
+
+    prosody = analyse(_bursts(tmp_path / "word.wav", [
+        (0.05, False), (0.40, True), (0.18, False), (0.60, True),
+    ]))
+
+    start, _end = speech_region(prosody)
+    assert start == pytest.approx(0.05, abs=0.05)
