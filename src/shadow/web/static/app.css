@@ -1,6 +1,6 @@
 :root {
   --bg: #fbfbfa; --fg: #1a1a1a; --muted: #6b6b6b; --line: #e2e0dc;
-  --accent: #1f77b4; --warn: #d62728; --card: #ffffff;
+  --accent: #1f77b4; --warn: #d62728; --card: #ffffff; --ok: #2ca02c;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #16171a; --fg: #e8e6e3; --muted: #9a9a9a; --line: #2c2e33;
@@ -312,3 +312,30 @@ button:disabled { opacity: .5; cursor: default; }
   border-color: var(--accent); }
 .filters-hint { color: var(--muted); font-size: 12px; margin-left: 4px; }
 .units .left { color: var(--warn); }
+
+/* ---------- 服务指示灯：每个页面顶上都有 ---------- */
+.service { margin-left: auto; align-self: center; display: inline-flex;
+  align-items: center; gap: 6px; font-size: 12px; color: var(--muted);
+  white-space: nowrap; }
+.service i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.service.down { color: var(--warn); font-weight: 500; }
+.service.down i { background: var(--warn); animation: breathe 1.4s ease-in-out infinite; }
+/* 断了要一直看得见：滚到图下面也一样 */
+.service-banner { position: sticky; top: 0; z-index: 50; display: flex;
+  align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 10px 24px;
+  font-size: 14px; background: var(--card); border-bottom: 2px solid var(--line); }
+/* 上面的 display:flex 会盖掉 hidden 属性，得显式收回来 */
+.service-banner[hidden] { display: none; }
+.service-banner.down { border-bottom-color: var(--warn); }
+.service-banner.down b { color: var(--warn); }
+.service-banner.stale { border-bottom-color: var(--accent); }
+/* 命令里是一长串路径，手机上不折行会把整页撑出横向滚动 */
+.service-banner code { user-select: all; overflow-wrap: anywhere; max-width: 100%; }
+.saved.bad { color: var(--warn); }
+.service-banner button { padding: 4px 10px; font-size: 13px; }
+.service-hint { color: var(--muted); font-size: 13px; }
+#resubmit { border-color: var(--accent); color: var(--accent); font-size: 15px;
+  padding: 10px 18px; }
+@media (max-width: 640px) {
+  .service-banner { padding: 10px 12px; }
+}

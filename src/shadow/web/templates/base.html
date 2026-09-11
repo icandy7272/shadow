@@ -7,9 +7,13 @@
 <link rel="stylesheet" href="/static/app.css?v={{ assets() }}">
 </head>
 <body>
-<header><a href="/" class="home">Shadow</a>{% block subtitle %}{% endblock %}</header>
+<header><a href="/" class="home">Shadow</a>{% block subtitle %}{% endblock %}
+  <span id="service" class="service up" role="status" data-assets="{{ assets() }}"
+        data-start="{{ start_command }}"><i></i><span>服务在线</span></span></header>
+<div id="service-banner" class="service-banner" hidden></div>
 <main>{% block content %}{% endblock %}</main>
 <script src="/static/ui.js?v={{ assets() }}"></script>
+<script src="/static/service.js?v={{ assets() }}"></script>
 <script src="/static/figures.js?v={{ assets() }}"></script>
 <script src="/static/app.js?v={{ assets() }}"></script>
 </body>

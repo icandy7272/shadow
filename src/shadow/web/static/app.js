@@ -106,10 +106,18 @@ if (root) {
       body.append("segment", segment);
       body.append("unit", unit);
       body.append("rating", button.dataset.rating);
-      const response = await fetch("/api/rating", { method: "POST", body });
       const note = listenStep.querySelector(".saved");
       note.hidden = false;
-      note.textContent = response.ok ? "记下了。" : "保存失败。";
+      try {
+        const response = await fetch("/api/rating", { method: "POST", body });
+        note.textContent = response.ok ? "记下了。" : "保存失败。";
+        note.classList.toggle("bad", !response.ok);
+      } catch (err) {
+        // 听已经听过了，别因为存不上就卡住后面的步骤
+        note.textContent = "没存上：服务断了。恢复后再点一次分数就行。";
+        note.classList.add("bad");
+        service.check();
+      }
       // 没有挖空位时第二步整个不存在，直接解锁跟读，不让人多点一次
       const next = document.getElementById("step-drill")
                 || document.getElementById("step-record");
@@ -126,16 +134,25 @@ if (root) {
       guessed: slot.querySelector("input[type=checkbox]").checked,
     }));
     const replayButton = drillStep.querySelector("button.play");
-    const response = await fetch("/api/gapfill", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        segment: Number(segment), unit: Number(unit),
-        answers, replays: counts.get(replayButton) || 0,
-      }),
-    });
-    const data = await response.json();
     const box = drillStep.querySelector(".result");
+    let data;
+    try {
+      const response = await fetch("/api/gapfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          segment: Number(segment), unit: Number(unit),
+          answers, replays: counts.get(replayButton) || 0,
+        }),
+      });
+      data = await response.json();
+    } catch (err) {
+      // 填的还在输入框里：不揭晓、不收起，恢复后再点一次就行
+      box.hidden = false;
+      box.innerHTML = "<p class='bad'>没连上服务，填的都还在。恢复后再点「对答案」。</p>";
+      service.check();
+      return;
+    }
     box.hidden = false;
     box.innerHTML =
       `<p>${data.correct}/${data.total} 对，其中 <b>${data.heard}</b> 个是听出来的` +
@@ -349,44 +366,81 @@ if (root) {
     }
     stream.getTracks().forEach((t) => t.stop());
     status.classList.remove("live");
-    if (!blobs.length) {
-      startButton.disabled = false;
-      return;
-    }
+    startButton.disabled = false;
+    if (blobs.length) await submit(blobs);
+  });
+
+  // 录音只存在这个页面里。服务断了、提交失败，也不能把它们扔掉——
+  // 留着，恢复后点「重新提交」，不用再录一轮。
+  const resubmitButton = document.getElementById("resubmit");
+  let pending = null;
+  resubmitButton?.addEventListener("click", () => {
+    if (pending) submit(pending);
+  });
+
+  function lost(count) {
+    bar.classList.remove("working");
+    bar.hidden = true;
+    status.textContent = `没连上服务。刚录的 ${count} 遍还在这个页面里——`
+      + "服务恢复后点「重新提交」，先别刷新页面。";
+    if (resubmitButton) resubmitButton.hidden = false;
+    service.check();
+  }
+
+  async function submit(blobs) {
+    pending = blobs;
+    if (resubmitButton) resubmitButton.hidden = true;
+    startButton.disabled = true;
     status.textContent = "正在转写和比对，大约十几秒 …";
+    const box = document.getElementById("rec-result");
 
     const body = new FormData();
     body.append("segment", segment);
     body.append("unit", unit);
     body.append("saw_text", sawText ? "1" : "0");
     blobs.forEach((blob, i) => body.append("files", blob, `take${i + 1}.webm`));
-    const response = await fetch("/api/takes", { method: "POST", body });
-    startButton.disabled = false;
-    const box = document.getElementById("rec-result");
-    box.hidden = false;
-    if (!response.ok) {
-      const detail = await response.json().catch(() => ({}));
-      status.textContent = "";
-      box.innerHTML = `<p class="bad">${detail.detail || "比对失败"}</p>`;
+
+    let last;
+    try {
+      const response = await fetch("/api/takes", { method: "POST", body });
+      if (!response.ok) {
+        // 录音本身不合格（太短、静音），重交也没用
+        pending = null;
+        const detail = await response.json().catch(() => ({}));
+        status.textContent = "";
+        box.hidden = false;
+        box.innerHTML = `<p class="bad">${detail.detail || "比对失败"}</p>`;
+        return;
+      }
+      bar.hidden = false;
+      bar.classList.add("working");
+      fill.style.width = "0%";
+      last = await readEvents(response, (p) => {
+        fill.style.width = `${Math.round((p.done / p.total) * 100)}%`;
+        status.textContent = `${p.label}（${p.done + 1}/${p.total}）`;
+      });
+    } catch (err) {
+      // 连不上，或者比对到一半服务没了
+      lost(blobs.length);
       return;
+    } finally {
+      startButton.disabled = false;
     }
 
-    bar.hidden = false;
-    bar.classList.add("working");
-    fill.style.width = "0%";
-    const last = await readEvents(response, (p) => {
-      fill.style.width = `${Math.round((p.done / p.total) * 100)}%`;
-      status.textContent = `${p.label}（${p.done + 1}/${p.total}）`;
-    });
+    pending = null;
     bar.classList.remove("working");
     bar.hidden = true;
     status.textContent = "";
+    box.hidden = false;
     if (!last || last.error) {
       box.innerHTML =
         `<p class="bad">${(last && last.error) || "比对中断了，重录一遍试试。"}</p>`;
       return;
     }
-    const data = last.result;
+    showResult(last.result, box);
+  }
+
+  function showResult(data, box) {
     box.innerHTML =
       `<div class="metrics"><span>可懂度 <b>${data.accuracy}%</b></span>` +
       `<span>发声 <b>${data.speech}x</b></span>` +
@@ -412,5 +466,5 @@ if (root) {
     const figures = renderFigures(data.view);
     box.prepend(figures.controls);
     box.append(figures.figures);
-  });
+  }
 }

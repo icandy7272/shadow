@@ -638,3 +638,39 @@ def test_step_two_is_present_when_there_are_blanks(client, tmp_path):
     body = client.get(f"/practice/{segment_id}/2").text
     assert 'id="step-drill"' in body
     assert '<span class="n">3</span> 跟读' in body
+
+
+def test_health_says_the_service_is_up(client):
+    """页面靠它判断服务还在不在，顺带看自己加载的脚本是不是最新的。"""
+    from shadow.web.app import _asset_version
+
+    response = client.get("/api/health")
+
+    assert response.json() == {"ok": True, "assets": _asset_version()}
+    # 缓存住的「在线」比没有指示灯更糟
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_every_page_carries_the_service_light(client, tmp_path):
+    """服务从终端里开，关掉终端就停了；页面还开着却什么都存不进去，人是不知道的。"""
+    segment_id = _seed_with_a_broken_unit(tmp_path)
+
+    for url, status in (("/", 200), (f"/practice/{segment_id}/1", 200),
+                        (f"/practice/{segment_id}/2", 409)):
+        response = client.get(url)
+        assert response.status_code == status
+        assert 'id="service"' in response.text
+        assert 'id="service-banner"' in response.text
+        assert "/static/service.js" in response.text
+
+
+def test_the_light_carries_the_command_that_brings_the_service_back(client):
+    """断了的时候光说「断了」没用，得告诉人怎么恢复。"""
+    body = client.get("/").text
+    assert "uv run shadow serve" in body
+
+
+def test_a_failed_submit_can_be_sent_again(client, tmp_path):
+    """服务断掉那一刻最亏的是刚录的几遍。录音还在页面里，恢复后重新提交就行。"""
+    segment_id = _seed(tmp_path)
+    assert 'id="resubmit"' in client.get(f"/practice/{segment_id}/2").text

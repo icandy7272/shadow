@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shlex
 from dataclasses import replace
 from pathlib import Path
 
@@ -16,8 +17,8 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import (FileResponse, HTMLResponse, RedirectResponse,
-                               StreamingResponse)
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
+                               RedirectResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -46,10 +47,32 @@ def _asset_version() -> str:
     return str(int(max(stamps))) if stamps else "0"
 
 
+def _start_command() -> str:
+    """服务断了时页面上给的那条命令，粘进终端就能跑。
+
+    光说「服务断了」没用——人得知道去哪个目录、敲什么。
+    """
+    project = HERE.parents[2]
+    if not (project / "pyproject.toml").exists():
+        return "shadow serve"
+    return f"cd {shlex.quote(str(project))} && uv run shadow serve"
+
+
 templates.env.globals["assets"] = _asset_version
+templates.env.globals["start_command"] = _start_command()
 
 app = FastAPI(title="Shadow")
 app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
+
+
+@app.get("/api/health")
+async def health():
+    """页面顶上那盏灯靠它判断服务还在不在。
+
+    顺带报静态文件的版本：页面跑着旧脚本时，灯要能提醒刷新。
+    """
+    return JSONResponse({"ok": True, "assets": _asset_version()},
+                        headers={"Cache-Control": "no-store"})
 
 
 def _db():
