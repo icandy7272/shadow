@@ -410,6 +410,60 @@ def save_dictation(payload: dict = Body(...)):
     }
 
 
+def _vocab_link(connection, source: dict) -> str | None:
+    """原句还能不能点回去练：素材删了、切分变了，就只留文字。"""
+    segment_id, unit = source["segment_id"], source["unit_index"]
+    if segment_id is None or unit is None:
+        return None
+    segment = db.get_segment(connection, segment_id)
+    if segment is None or not 1 <= unit <= len(split_into_units(segment["words"])):
+        return None
+    return f"/practice/{segment_id}/{unit}"
+
+
+@app.get("/vocab", response_class=HTMLResponse)
+def vocab_page(request: Request):
+    connection = _db()
+    items = db.list_vocab(connection)
+    entries = dictionary.lookup_many(item["word"] for item in items)
+    shown = [{
+        **item,
+        "entry": entries.get(item["word"]),
+        "first_day": datetime.fromisoformat(item["first_added"]).astimezone().strftime("%m-%d"),
+        "sources": [{**source, "link": _vocab_link(connection, source)}
+                    for source in item["sources"]],
+    } for item in items]
+    return templates.TemplateResponse(
+        request, "vocab.html", {"items": shown, "dictionary": dictionary.installed()})
+
+
+def _optional_int(value) -> int | None:
+    return None if value is None else int(value)
+
+
+@app.post("/api/vocab")
+def add_vocab_api(payload: dict = Body(...)):
+    """写错的词由人决定要不要记；不会的词在对答案时已经自动记过了。"""
+    word = dictation.key(str(payload.get("word") or ""))
+    if not dictation.needs_box(word):
+        raise HTTPException(400, "没有要记的词。")
+    try:
+        segment_id = _optional_int(payload.get("segment"))
+        unit_index = _optional_int(payload.get("unit"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "原句的编号不对。")
+    times = db.add_vocab(_db(), word, sentence=str(payload.get("sentence") or "").strip(),
+                         segment_id=segment_id, unit_index=unit_index)
+    return {"word": word, "times": times}
+
+
+@app.delete("/api/vocab/{word}")
+def remove_vocab_api(word: str):
+    if not db.remove_vocab(_db(), dictation.key(word)):
+        raise HTTPException(404, "生词本里没有这个词。")
+    return {"removed": True}
+
+
 MAX_ADVICE = 3
 
 

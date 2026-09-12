@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}生词本 · Shadow{% endblock %}
+{% block content %}
+<div class="head"><h1>生词本{% if items %}<span class="count" id="vocab-count">{{ items|length }} 个词</span>{% endif %}</h1></div>
+{% if not dictionary %}
+<p class="hint">词典还没装，先只记词和原句。装上就有音标和释义：在终端运行 <code>uv run shadow dict install</code></p>
+{% endif %}
+
+{% if not items %}
+  <p class="empty">生词本还是空的。默写时勾「不会」的词会自动记进来；写错的词，可以在对完答案后点「加入生词本」。</p>
+{% else %}
+<ul class="vocab" id="vocab">
+  {% for item in items %}
+  <li class="vocab-item" data-word="{{ item.word }}">
+    <div class="vocab-head">
+      <b class="vocab-word">{{ item.word }}</b>
+      {% if item.entry and item.entry.phonetic %}<span class="phonetic">/{{ item.entry.phonetic }}/</span>{% endif %}
+      <span class="vocab-meta">记过 {{ item.times }} 次 · {{ item.first_day }} 起</span>
+      <button type="button" data-action="forget">记住了</button>
+    </div>
+    {% if item.entry and item.entry.meanings %}
+    <ul class="meanings">{% for meaning in item.entry.meanings %}<li>{{ meaning }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if item.entry and item.entry.lemma %}
+    <p class="lemma">原形 {{ item.entry.lemma.word }}：{{ item.entry.lemma.meanings|join('；') }}</p>
+    {% endif %}
+    {% if dictionary and not (item.entry and (item.entry.meanings or item.entry.lemma)) %}
+    <p class="lemma">词典里没有</p>
+    {% endif %}
+    <ul class="vocab-sources">
+      {% for source in item.sources if source.sentence %}
+      <li>{% if source.link %}<a href="{{ source.link }}">{{ source.sentence }}</a>{% else %}{{ source.sentence }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}
