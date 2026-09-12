@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="head">
-  <h1>句子</h1>
+  <div class="source-head">
+    <h1>{{ source.title }}</h1>
+    <p class="source-meta">练过 {{ practised }} / {{ catalogue|length }} 句 · {{ '%.0f'|format(source.duration_sec / 60) }} 分钟</p>
+  </div>
   {% if next_unit %}
     <a class="cta" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}">
       开始下一句 →</a>
@@ -23,8 +26,7 @@
 </section>
 
 {% if not catalogue %}
-  <p class="empty">还没有导入素材。先在命令行跑
-    <code>uv run shadow import &lt;url&gt;</code></p>
+  <p class="empty">这份素材没有切出能练的句子。</p>
 {% else %}
 <p class="hint">
   没练过的句子不显示原文——先看到文字，盲听就作废了。

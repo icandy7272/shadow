@@ -182,16 +182,73 @@ def test_the_page_counts_sentences_not_segments(client, tmp_path):
     assert "片段" not in body
 
 
+def _source_of(segment_id):
+    connection = db.connect()
+    try:
+        return db.get_segment(connection, segment_id)["source_id"]
+    finally:
+        connection.close()
+
+
+def _seed_second_segment():
+    """在 _seed 那份素材里再加一个片段。"""
+    connection = db.connect()
+    source_id = next(row["id"] for row in db.list_sources(connection) if row["title"] == "T")
+    words = tuple(Word(text=t_, start=a, end=a + 0.4)
+                  for t_, a in (("Thank", 3.0), ("you", 3.5), ("all.", 4.0)))
+    db.insert_segments(connection, source_id,
+                       (Segment(idx=1, start=3.0, end=4.4, words=words),))
+    segment_id = db.list_segments(connection, source_id)[-1]["id"]
+    connection.close()
+    return segment_id
+
+
 def test_the_pager_walks_across_segment_boundaries(client, tmp_path):
     """句子是连着编号的，走到一段的末尾该接着进下一段，不是没路了。"""
     first = _seed(tmp_path)
-    second = _seed_without_blanks(tmp_path)
+    second = _seed_second_segment()
 
     body = client.get(f"/practice/{first}/2").text
     assert f'href="/practice/{second}/1"' in body
 
     body = client.get(f"/practice/{second}/1").text
     assert f'href="/practice/{first}/2"' in body
+
+
+def test_another_source_is_not_mixed_in(client, tmp_path):
+    """新导入一份素材，它的句子不该接在上一份后面。"""
+    first = _seed(tmp_path)
+    other = _seed_without_blanks(tmp_path)
+
+    body = client.get(f"/practice/{first}/2").text
+    assert f"/practice/{other}/1" not in body
+    assert "共 2 句" in body
+
+    page = client.get(f"/sources/{_source_of(other)}").text
+    assert f"/practice/{other}/1" in page
+    assert f"/practice/{first}/1" not in page
+
+
+def test_the_practice_page_links_back_to_its_source(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    body = client.get(f"/practice/{segment_id}/1").text
+    assert f'href="/sources/{_source_of(segment_id)}"' in body
+
+
+def test_home_goes_to_the_source_you_opened_last(client, tmp_path):
+    first = _seed(tmp_path)
+    _seed_without_blanks(tmp_path)
+    client.get(f"/sources/{_source_of(first)}")
+
+    response = client.get("/", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/sources/{_source_of(first)}"
+
+
+def test_home_without_sources_goes_to_the_library(client):
+    response = client.get("/", follow_redirects=False)
+    assert response.headers["location"] == "/sources"
 
 
 def test_the_index_lists_a_running_sentence_number(client, tmp_path):

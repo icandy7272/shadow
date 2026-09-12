@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block subtitle %}<span class="crumb">{{ source }} · 第 {{ number }} 句 / 共 {{ total_units }} 句</span>{% endblock %}
+{% block subtitle %}<span class="crumb"><a href="/sources/{{ source_id }}">{{ source }}</a> · 第 {{ number }} 句 / 共 {{ total_units }} 句</span>{% endblock %}
 {% block content %}
 <div id="practice" data-segment="{{ segment }}" data-unit="{{ unit }}"
      data-min-take="{{ min_take_sec }}">

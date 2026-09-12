@@ -24,8 +24,15 @@ class NotRetryable(RuntimeError):
     """只有导入失败的素材能重试。"""
 
 
-def _run(source_id: int) -> None:
+def _connect():
+    """各开各的连接（sqlite 连接不能跨线程）；表不在就先建好，全新的数据目录也能直接导入。"""
     connection = db.connect()
+    db.init_db(connection)
+    return connection
+
+
+def _run(source_id: int) -> None:
+    connection = _connect()
     try:
         pipeline.run_import(source_id, conn=connection)
     except Exception:
@@ -45,7 +52,7 @@ def start(url: str, *, launch=None) -> int:
     # 默认值在运行时解析：测试要能换掉 _in_background
     launch = launch or _in_background
     with _lock:
-        connection = db.connect()
+        connection = _connect()
         try:
             if db.importing_source(connection) is not None:
                 raise Busy("上一份还在导入，等它完成再导入下一份。")
@@ -58,7 +65,7 @@ def start(url: str, *, launch=None) -> int:
 
 def retry(source_id: int, *, launch=None) -> int:
     """用原链接重新导入，删掉失败的那条。"""
-    connection = db.connect()
+    connection = _connect()
     try:
         row = db.get_source(connection, source_id)
         if row is None or row["status"] != db.STATUS_FAILED:

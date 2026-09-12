@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 import logging
 import shlex
-from dataclasses import replace
+from contextlib import asynccontextmanager
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from datetime import datetime
@@ -24,12 +25,14 @@ from fastapi.templating import Jinja2Templates
 
 from collections import Counter
 
-from .. import config, db, history, media, progress
+from .. import config, db, history, library, media, progress
 from ..report.takes import recurrence_threshold
 from ..analysis.diff import accuracy as _accuracy
 from ..drill.gapfill import blanks_of
 from ..drill.units import split_into_units
 from .. import review as review_mod
+from ..ingest.downloader import DownloadError
+from . import importer
 from .view import feedback_view
 
 log = logging.getLogger(__name__)
@@ -61,8 +64,65 @@ def _start_command() -> str:
 templates.env.globals["assets"] = _asset_version
 templates.env.globals["start_command"] = _start_command()
 
-app = FastAPI(title="Shadow")
+@asynccontextmanager
+async def _lifespan(app):
+    # 导入跑在后台线程里，服务一重启线程就没了；卡在半路的记录标成中断，可以重试
+    connection = _db()
+    try:
+        db.reset_stale_sources(connection)
+    finally:
+        connection.close()
+    yield
+
+
+app = FastAPI(title="Shadow", lifespan=_lifespan)
 app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
+
+
+@app.get("/sources", response_class=HTMLResponse)
+def library_page(request: Request):
+    connection = _db()
+    return templates.TemplateResponse(
+        request, "library.html",
+        {"cards": library.cards(connection),
+         "importing": db.importing_source(connection) is not None},
+    )
+
+
+@app.get("/api/sources")
+def sources_api():
+    cards = [asdict(card) for card in library.cards(_db())]
+    return JSONResponse({"sources": cards}, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/sources", status_code=201)
+def import_api(url: str = Form(...)):
+    try:
+        return {"id": importer.start(url)}
+    except DownloadError as exc:
+        raise HTTPException(400, str(exc))
+    except importer.Busy as exc:
+        raise HTTPException(409, str(exc))
+
+
+@app.post("/api/sources/{source_id}/retry", status_code=201)
+def retry_api(source_id: int):
+    try:
+        return {"id": importer.retry(source_id)}
+    except (importer.NotRetryable, importer.Busy) as exc:
+        raise HTTPException(409, str(exc))
+
+
+@app.delete("/api/sources/{source_id}")
+def delete_api(source_id: int):
+    connection = _db()
+    if db.get_source(connection, source_id) is None:
+        raise HTTPException(404, "这份素材已经不在了。")
+    try:
+        after = library.remove(connection, source_id)
+    except library.LibraryError as exc:
+        raise HTTPException(409, str(exc))
+    return {"next": f"/sources/{after}" if after else "/sources"}
 
 
 @app.get("/api/health")
@@ -96,16 +156,19 @@ def _unit_words(connection, segment_id: int, unit: int):
 
 
 def _place(connection, segment_id: int, unit: int) -> dict:
-    """这一句在整份素材里排第几，以及前后能练的是哪一句。
+    """这一句在它那份素材里排第几，以及前后能练的是哪一句。
 
     翻页按句子走，不在片段边界上断掉——那个边界是切素材时的实现细节。
+    但不跨素材：两份素材各练各的。
     """
-    sentences = _sentences(connection)
+    source_id = db.get_segment(connection, segment_id)["source_id"]
+    sentences = _sentences(connection, source_id)
     here = next((i for i, item in enumerate(sentences)
                  if item["segment"] == segment_id and item["unit"] == unit), None)
     if here is None:
         return {"number": unit, "total_units": len(sentences),
-                "prev_unit": None, "next_unit": None, "source": ""}
+                "prev_unit": None, "next_unit": None, "source": "",
+                "source_id": source_id}
 
     def hunt(step: int):
         index = here + step
@@ -116,7 +179,7 @@ def _place(connection, segment_id: int, unit: int) -> dict:
         return None
 
     return {"number": here + 1, "total_units": len(sentences),
-            "source": sentences[here]["source"],
+            "source": sentences[here]["source"], "source_id": source_id,
             "prev_unit": hunt(-1), "next_unit": hunt(1)}
 
 
@@ -157,43 +220,55 @@ def _recurring(metrics: list[dict]) -> int:
     return sum(1 for hits in counted.values() if hits >= threshold)
 
 
-def _sentences(connection) -> list[dict]:
-    """全部句子，按素材里的先后排成一条。
+def _sentences(connection, source_id: int) -> list[dict]:
+    """一份素材的全部句子，按先后排成一条。
 
     「片段」只是切素材时为了保住语义块用的中间层，练的是句子。
     所以对外只有句子和它的序号，翻页也是一句接一句，不在段边界上断掉。
     """
+    source = db.get_source(connection, source_id)
+    if source is None or source["status"] != db.STATUS_READY:
+        return []
     out = []
-    for source in db.list_sources(connection):
-        if source["status"] != db.STATUS_READY:
-            continue
-        for segment in db.list_segments(connection, source["id"]):
-            full = db.get_segment(connection, segment["id"])
-            for number, words in enumerate(split_into_units(full["words"]), 1):
-                problem = media.unit_problem(source["audio_path"], words)
-                out.append({
-                    "segment": segment["id"],
-                    "unit": number,
-                    "source": source["title"],
-                    "text": " ".join(w.text for w in words),
-                    "seconds": words[-1].end - words[0].start,
-                    "words": len(words),
-                    "blanks": sum(w.is_blank for w in words),
-                    "usable": problem is None,
-                    "problem": problem,
-                })
+    for segment in db.list_segments(connection, source_id):
+        full = db.get_segment(connection, segment["id"])
+        for number, words in enumerate(split_into_units(full["words"]), 1):
+            problem = media.unit_problem(source["audio_path"], words)
+            out.append({
+                "segment": segment["id"],
+                "unit": number,
+                "source": source["title"],
+                "text": " ".join(w.text for w in words),
+                "seconds": words[-1].end - words[0].start,
+                "words": len(words),
+                "blanks": sum(w.is_blank for w in words),
+                "usable": problem is None,
+                "problem": problem,
+            })
     for order, item in enumerate(out, 1):
         item["number"] = order
     return out
 
 
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request):
+@app.get("/")
+def home():
+    """首页就是当前那份素材；一份能练的都没有，就去素材库导入。"""
+    chosen = library.current(_db())
+    return RedirectResponse(f"/sources/{chosen}" if chosen else "/sources",
+                            status_code=303)
+
+
+@app.get("/sources/{source_id}", response_class=HTMLResponse)
+def source_page(request: Request, source_id: int):
     connection = _db()
-    sources = db.list_sources(connection)
-    catalogue = _sentences(connection)
+    source = db.get_source(connection, source_id)
+    if source is None or source["status"] != db.STATUS_READY:
+        return RedirectResponse("/sources", status_code=303)
+    library.select(connection, source_id)     # 打开哪份，哪份就是当前
+    catalogue = _sentences(connection, source_id)
     done, issues, ratings = {}, {}, {}
-    for run in db.list_runs(connection):
+    # 只看这份素材上的记录：两份素材里文字相同的句子不能串在一起
+    for run in db.source_runs(connection, source_id):
         text = run["unit_text"]
         metrics = db.run_metrics(connection, run["id"])
         # 中途取消留下的空记录不算练过
@@ -211,11 +286,11 @@ def index(request: Request):
         item["rating"] = ratings.get(item["text"])
     # 没练过的第一句：有个直达入口就不用浏览列表，也就不会被剧透
     next_unit = next((i for i in catalogue if not i["runs"] and i["usable"]), None)
-    days = progress.calendar(connection)
     return templates.TemplateResponse(
         request, "index.html",
-        {"catalogue": catalogue, "sources": sources, "next_unit": next_unit,
-         "days": days},
+        {"catalogue": catalogue, "source": source, "next_unit": next_unit,
+         "practised": sum(1 for item in catalogue if item["runs"]),
+         "days": progress.calendar(connection)},
     )
 
 

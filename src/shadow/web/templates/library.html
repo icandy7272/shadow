@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block subtitle %}<span class="crumb">素材库</span>{% endblock %}
+{% block content %}
+<div class="head"><h1>素材库</h1></div>
+<form id="import-form" class="import-form">
+  <input type="url" name="url" required aria-label="素材链接"
+         placeholder="https://www.youtube.com/watch?v=…">
+  <button class="primary" type="submit">导入</button>
+</form>
+<p class="hint" id="import-note">{% if importing %}上一份还在导入，等它完成再导入下一份。{% else %}YouTube、播客都行，60 分钟以内。下载、转写、切句要几分钟，期间可以照常练别的。{% endif %}</p>
+
+{% if not cards %}
+  <p class="empty">还没有导入素材。在上面贴一个链接开始。</p>
+{% endif %}
+<ul class="cards" id="cards">
+  {% for card in cards %}
+  <li class="card{{ ' current' if card.current }}" data-id="{{ card.id }}" data-status="{{ card.status }}"
+      data-sentences="{{ card.sentences }}" data-rounds="{{ card.rounds }}" data-takes="{{ card.takes }}">
+    <div class="card-main">
+      <p class="card-title">{{ card.title }}</p>
+      {% if card.status == 'ready' %}
+        <p class="card-meta">{{ '%.0f'|format(card.minutes) }} 分钟 · 练过 {{ card.practised }} / {{ card.sentences }} 句{% if card.last_practised %} · 上次 {{ card.last_practised }}{% endif %}</p>
+      {% elif card.status == 'failed' %}
+        <p class="card-meta card-error">{{ card.error }}</p>
+      {% else %}
+        <p class="card-meta">正在导入：<span class="card-step">{{ card.step }}</span></p>
+      {% endif %}
+    </div>
+    <div class="card-actions">
+      {% if card.status == 'ready' %}
+        {% if card.current %}<span class="badge">正在练</span>
+        {% else %}<a class="button" href="/sources/{{ card.id }}">{{ '切到这份' if card.practised else '开始练' }}</a>{% endif %}
+        <button type="button" data-action="delete">删除</button>
+      {% elif card.status == 'failed' %}
+        <button type="button" data-action="retry">重试</button>
+        <button type="button" data-action="delete">删除</button>
+      {% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}
