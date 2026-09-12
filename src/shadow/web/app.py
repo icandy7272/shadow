@@ -241,7 +241,6 @@ def _sentences(connection, source_id: int) -> list[dict]:
                 "text": " ".join(w.text for w in words),
                 "seconds": words[-1].end - words[0].start,
                 "words": len(words),
-                "blanks": sum(w.is_blank for w in words),
                 "usable": problem is None,
                 "problem": problem,
             })

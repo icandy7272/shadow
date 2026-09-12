@@ -40,7 +40,7 @@
   <span class="filters-hint" id="filter-count"></span>
 </div>
 <table class="units">
-  <thead><tr><th>#</th><th>句子</th><th>时长</th><th>词</th><th>空</th><th>练过</th></tr></thead>
+  <thead><tr><th>#</th><th>句子</th><th>时长</th><th>词</th><th>练过</th></tr></thead>
   <tbody>
   {% for item in catalogue %}
     <tr class="{{ 'done' if item.runs else 'fresh' }}"

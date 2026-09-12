@@ -1,4 +1,4 @@
-"""导入流程编排：URL -> 音频 -> 转写 -> 切片 -> 挖空 -> 入库。
+"""导入流程编排：URL -> 音频 -> 转写 -> 切片 -> 入库。
 
 时长上限在下载之前检查，避免用户等十分钟才发现失败。
 任何一步失败都把原始错误写进 sources.error 并原样抛出。
@@ -8,12 +8,9 @@ from __future__ import annotations
 
 import sqlite3
 import tempfile
-from dataclasses import replace
 from pathlib import Path
 
 from .. import config, db
-from ..drill.blanks import select_blanks
-from ..models import Segment, with_blanks
 from .downloader import download_audio, probe, validate_url
 from .segmenter import split_into_segments
 from .transcriber import transcribe_words
@@ -21,13 +18,6 @@ from .transcriber import transcribe_words
 
 class ImportError_(RuntimeError):
     """导入前置校验失败（命名避开内置 ImportError）。"""
-
-
-def _apply_blanks(segments: tuple[Segment, ...]) -> tuple[Segment, ...]:
-    return tuple(
-        replace(segment, words=with_blanks(segment.words, select_blanks(segment.words)))
-        for segment in segments
-    )
 
 
 def _realign(wav_path, words):
@@ -78,8 +68,7 @@ def run_import(source_id: int, *, conn: sqlite3.Connection) -> None:
 
         db.set_source_status(conn, source_id, db.STATUS_SEGMENTING)
         words = _realign(wav_path, words)
-        segments = _apply_blanks(split_into_segments(words))
-        db.insert_segments(conn, source_id, segments)
+        db.insert_segments(conn, source_id, split_into_segments(words))
 
         db.finish_source(conn, source_id, audio_path=str(wav_path))
     except Exception as exc:

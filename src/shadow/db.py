@@ -270,26 +270,13 @@ def set_blind_rating(conn: sqlite3.Connection, run_id: int, rating: int) -> None
     conn.commit()
 
 
-def set_gapfill(
-    conn: sqlite3.Connection, run_id: int, correct: int, total: int,
-    heard: int | None = None, replays: int | None = None,
-) -> None:
-    """heard = 答对且自称听出来的；replays = 重听次数。
-
-    重听次数是必要的：「给无限次重听能挖出来」和「一遍就听懂」差得很远，
-    不记下来，两者会被混成同一个分数。
-    """
-    conn.execute(
-        "UPDATE practice_runs SET gapfill_correct = ?, gapfill_total = ?,"
-        " gapfill_heard = ?, gapfill_replays = ? WHERE id = ?",
-        (correct, total, heard, replays, run_id),
-    )
-    conn.commit()
-
-
 def set_dictation(conn: sqlite3.Connection, run_id: int, *, correct: int, total: int,
                   unknown: int, replays: int) -> None:
-    """整句默写的记分。沿用填空时代的列名，gapfill_heard 不再写。"""
+    """整句默写的记分。沿用填空时代的列名，gapfill_heard 不再写。
+
+    重听次数要记：「重听十遍才写出来」和「一遍就写对」差得很远，
+    不记下来，两者会被混成同一个分数。
+    """
     conn.execute(
         "UPDATE practice_runs SET gapfill_correct = ?, gapfill_total = ?,"
         " gapfill_unknown = ?, gapfill_replays = ? WHERE id = ?",

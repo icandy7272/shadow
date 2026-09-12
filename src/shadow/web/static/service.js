@@ -38,7 +38,7 @@ const service = (() => {  // eslint-disable-line no-unused-vars
 
   function downBanner() {
     banner.append(el("b", null, "服务断了"),
-                  el("span", null, "打分、填空、录音比对都存不进去。在终端里运行"),
+                  el("span", null, "打分、默写、录音比对都存不进去。在终端里运行"),
                   el("code", null, command));
     if (navigator.clipboard) {
       const copy = el("button", null, "复制");

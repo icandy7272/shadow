@@ -14,7 +14,7 @@ def client(monkeypatch, tmp_path):
 
 
 def _seed(tmp_path):
-    """一个片段，两句话，第二句有两个挖空位。"""
+    """一个片段，两句话。"""
     import numpy as np
     import soundfile as sf
 
@@ -29,10 +29,7 @@ def _seed(tmp_path):
     spec = [("Hello", 0.0, 0.4), ("there.", 0.5, 0.4),
             ("It", 1.5, 0.3), ("was", 1.9, 0.1),
             ("a", 2.0, 0.1), ("start.", 2.2, 0.4)]
-    words = tuple(
-        Word(text=t_, start=a, end=a + d, is_blank=t_ in {"was", "a"})
-        for t_, a, d in spec
-    )
+    words = tuple(Word(text=t_, start=a, end=a + d) for t_, a, d in spec)
     db.insert_segments(connection, source_id,
                        (Segment(idx=0, start=0.0, end=2.6, words=words),))
     segment_id = db.list_segments(connection, source_id)[0]["id"]
@@ -108,7 +105,7 @@ def _finished_run(segment_id, unit, titles):
 
 
 def test_last_time_is_shown_inside_the_shadowing_step(client, tmp_path):
-    """记录里带着句子原文的片段，提前露出来盲听和填空就废了。"""
+    """记录里带着句子原文的片段，提前露出来盲听和默写就废了。"""
     segment_id = _seed(tmp_path)
     _finished_run(segment_id, 2, ["“was” 该降没降"])
 
@@ -218,7 +215,7 @@ def test_the_pager_walks_across_segment_boundaries(client, tmp_path):
 def test_another_source_is_not_mixed_in(client, tmp_path):
     """新导入一份素材，它的句子不该接在上一份后面。"""
     first = _seed(tmp_path)
-    other = _seed_without_blanks(tmp_path)
+    other = _seed_other_source(tmp_path)
 
     body = client.get(f"/practice/{first}/2").text
     assert f"/practice/{other}/1" not in body
@@ -237,7 +234,7 @@ def test_the_practice_page_links_back_to_its_source(client, tmp_path):
 
 def test_home_goes_to_the_source_you_opened_last(client, tmp_path):
     first = _seed(tmp_path)
-    _seed_without_blanks(tmp_path)
+    _seed_other_source(tmp_path)
     client.get(f"/sources/{_source_of(first)}")
 
     response = client.get("/", follow_redirects=False)
@@ -691,7 +688,7 @@ def test_practice_page_has_the_recording_controls(client, tmp_path):
     assert 'id="redo-take"' in body
 
 
-def _seed_without_blanks(tmp_path):
+def _seed_other_source(tmp_path):
     import numpy as np
     import soundfile as sf
 
@@ -716,7 +713,7 @@ def _seed_without_blanks(tmp_path):
 
 def test_every_sentence_gets_a_dictation_step_with_a_box_per_word(client, tmp_path):
     """默写每个词都写，不再挑空；标点留在框外，不用写。"""
-    segment_id = _seed_without_blanks(tmp_path)
+    segment_id = _seed_other_source(tmp_path)
     body = client.get(f"/practice/{segment_id}/1").text
     assert 'id="step-drill"' in body
     assert "默写" in body

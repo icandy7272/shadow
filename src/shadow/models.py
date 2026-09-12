@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, replace
-from typing import Iterable, Sequence
+from dataclasses import dataclass
+from typing import Sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -12,7 +12,6 @@ class Word:
     text: str
     start: float
     end: float
-    is_blank: bool = False
 
     @property
     def duration(self) -> float:
@@ -36,28 +35,13 @@ class Segment:
 
 
 def words_to_json(words: Sequence[Word]) -> str:
-    payload = [
-        {"text": w.text, "start": w.start, "end": w.end, "is_blank": w.is_blank}
-        for w in words
-    ]
+    payload = [{"text": w.text, "start": w.start, "end": w.end} for w in words]
     return json.dumps(payload, ensure_ascii=False)
 
 
 def words_from_json(raw: str) -> tuple[Word, ...]:
+    # 老片段里还带着挖空时代的 is_blank，读的时候忽略
     return tuple(
-        Word(
-            text=item["text"],
-            start=float(item["start"]),
-            end=float(item["end"]),
-            is_blank=bool(item.get("is_blank", False)),
-        )
+        Word(text=item["text"], start=float(item["start"]), end=float(item["end"]))
         for item in json.loads(raw)
-    )
-
-
-def with_blanks(words: Sequence[Word], indices: Iterable[int]) -> tuple[Word, ...]:
-    """返回标记了挖空位的新词序列，不修改入参。"""
-    marked = frozenset(indices)
-    return tuple(
-        replace(word, is_blank=index in marked) for index, word in enumerate(words)
     )

@@ -301,10 +301,9 @@ def cmd_units(args: argparse.Namespace) -> int:
              media.PROBLEM_SILENT: "  ⚠ 音频里没有这句，无法练习"}
     for index, unit in enumerate(units, 1):
         duration = unit[-1].end - unit[0].start
-        blanks = sum(word.is_blank for word in unit)
         text = " ".join(word.text for word in unit)
         flag = flags.get(media.unit_problem(audio, unit), "")
-        print(f"  {index:2d}. [{duration:4.1f}s {len(unit):2d}词 {blanks}空]  {text}{flag}")
+        print(f"  {index:2d}. [{duration:4.1f}s {len(unit):2d}词]  {text}{flag}")
     return 0
 
 
@@ -448,7 +447,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         if address:
             print(f"手机同一个 Wi-Fi 下打开 http://{address}:{args.port}")
         print("注意：手机上录不了音——浏览器只在 HTTPS 或 localhost 下给"
-              "麦克风权限。盲听和填空照常。")
+              "麦克风权限。盲听和默写照常。")
     uvicorn.run("shadow.web.app:app", host=host, port=args.port,
                 reload=args.reload, reload_dirs=_reload_dirs(), log_level="warning")
     return 0

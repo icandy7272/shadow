@@ -34,14 +34,14 @@ def test_status_transitions_and_failure(conn):
 def test_insert_and_list_segments(conn):
     source_id = db.create_source(conn, url="https://x/y", title="T", duration_sec=60.0)
     segments = (
-        Segment(idx=0, start=0.0, end=1.0, words=(Word("hi", 0.0, 1.0, is_blank=True),)),
+        Segment(idx=0, start=0.0, end=1.0, words=(Word("hi", 0.0, 1.0),)),
     )
     db.insert_segments(conn, source_id, segments)
     listed = db.list_segments(conn, source_id)
     assert len(listed) == 1
     assert listed[0]["text"] == "hi"
     stored = db.get_segment(conn, listed[0]["id"])
-    assert stored["words"][0].is_blank is True
+    assert stored["words"] == (Word("hi", 0.0, 1.0),)
 
 
 def test_reset_stale_sources_marks_non_terminal_as_failed(conn):
@@ -125,7 +125,8 @@ def test_run_with_any_data_is_kept(conn):
     ))
     segment_id = db.list_segments(conn, source_id)[0]["id"]
     for setter in (lambda r: db.set_blind_rating(conn, r, 3),
-                   lambda r: db.set_gapfill(conn, r, 1, 2)):
+                   lambda r: db.set_dictation(conn, r, correct=1, total=2,
+                                              unknown=0, replays=0)):
         run_id = db.start_run(conn, segment_id=segment_id, unit_index=1)
         setter(run_id)
         db.finish_run(conn, run_id)

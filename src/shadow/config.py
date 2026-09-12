@@ -22,13 +22,6 @@ SEGMENT_MIN_SEC = 30.0
 SEGMENT_MAX_SEC = 90.0
 PAUSE_GAP_SEC = 0.4
 
-# --- 挖空 ---
-BLANK_RATIO_MAX = 0.15
-BLANK_MIN = 3
-BLANK_MAX = 12
-WEAK_RATIO_STRICT = 0.6
-WEAK_RATIO_RELAXED = 0.8
-
 # --- 练习单元（在片段内部按句子再切）---
 # 素材单元 30-90s 是为了「完整语义块」，但跟读时太长会跟丢，图上也挤不下。
 # 默认严格按句子切：一句一个单元。实测 0.7s / 2 词的短句仍有 25-54 个浊音帧，
