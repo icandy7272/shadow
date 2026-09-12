@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from ..analysis.diff import accuracy as _accuracy
-from ..analysis.diff import matched_pairs
+from ..analysis.diff import matched_pairs, spoken_pairs
 from ..report import geometry
 
 
@@ -30,9 +30,10 @@ def _take_view(review, take, limit: int, audio: dict) -> dict:
         ref_words=review.ref_words, usr_words=take.words,
         rhythm=take.rhythm, pause_notes=notes, pairs=pairs,
     )
+    # 图 2 只是把音高摆在一起看：读成别的词也是在这个位置出了声，照样画
     slots = geometry.pitch_slots(
         ref_words=review.ref_words, usr_words=take.words,
-        pairs=pairs, ref_prosody=review.ref_prosody,
+        pairs=spoken_pairs(take.tokens), ref_prosody=review.ref_prosody,
         usr_prosody=take.prosody, flags=flags,
     )
     return {

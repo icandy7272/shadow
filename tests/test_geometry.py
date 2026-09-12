@@ -104,6 +104,28 @@ def test_an_unmatched_word_gets_no_block_of_yours(prosody):
     assert slots[1].usr_width == 0.0
 
 
+def test_a_word_read_as_something_else_still_shows_your_pitch(prosody):
+    """实际遇到的：papers 被听成 paper。图 1 有你的块，图 2 却一条线都没有——
+    你在这个位置确实出了声，音高照样该画出来比着看。"""
+    from types import SimpleNamespace
+
+    from shadow.analysis.diff import diff_words
+    from shadow.web.view import _take_view
+
+    usr = _words([("Just", 0.0, 0.9), ("three", 1.0, 0.2), ("story.", 1.3, 0.5)])
+    rhythm = SimpleNamespace(lags=(), ref_span=1.4, usr_span=1.8,
+                             speech_ratio=1.0, pause_ratio=None)
+    take = SimpleNamespace(tokens=diff_words([w.text for w in REF], [w.text for w in usr]),
+                           words=usr, rhythm=rhythm, prosody=prosody, advice=())
+    review = SimpleNamespace(ref_words=REF, ref_prosody=prosody, best=take)
+
+    view = _take_view(review, take, 3, {"ref": "r"})
+
+    assert view["pitch"][2]["usrTrace"]
+    # 图 1 照旧标出这个词没对上
+    assert view["rhythm"]["usr"][2]["matched"] is False
+
+
 def test_a_slot_carries_the_whole_shape_not_just_its_ends(prosody):
     """两点摘要会把「先扬后抑」画成上扬。格子里要带上整条走向。"""
     slots = geometry.pitch_slots(

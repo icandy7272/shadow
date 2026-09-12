@@ -83,6 +83,21 @@ def matched_pairs(tokens: Sequence[DiffToken]) -> tuple[tuple[int, int], ...]:
     )
 
 
+def spoken_pairs(tokens: Sequence[DiffToken]) -> tuple[tuple[int, int], ...]:
+    """同一个位置上两边各说了一个词：对上的，加上读成别的词的。
+
+    画音高用——papers 读成 paper 也是在这个位置出了声，音高照样能比着看。
+    不能拿来当时间锚点，也不能拿来判对错：词本身就不是同一个。
+    """
+    return tuple(
+        (token.ref_index, token.usr_index)
+        for token in tokens
+        if token.kind in (KIND_EQUAL, KIND_WRONG)
+        and token.ref_index is not None
+        and token.usr_index is not None
+    )
+
+
 def accuracy(tokens: Sequence[DiffToken]) -> float:
     """可懂度：原文里有多少词被机器正确听出来。分母只算原文词。"""
     reference_total = sum(1 for token in tokens if token.ref_index is not None)

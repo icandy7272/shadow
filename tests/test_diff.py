@@ -4,6 +4,7 @@ from shadow.analysis.diff import (
     accuracy,
     diff_words,
     matched_pairs,
+    spoken_pairs,
     unreliable_indices,
 )
 
@@ -51,6 +52,19 @@ def test_matched_pairs_are_index_pairs_of_equal_tokens():
     pairs = matched_pairs(tokens)
     assert (0, 0) in pairs and (2, 2) in pairs
     assert all(isinstance(r, int) and isinstance(u, int) for r, u in pairs)
+
+
+def test_spoken_pairs_include_a_word_read_as_something_else():
+    """papers 读成 paper：词没对上，可这个位置两边确实都出了声。
+
+    画音高要用它；当时间锚点、判对错不能用它。
+    """
+    tokens = diff_words(REF, ["Should", "half", "been", "uh", "there", "earlier"])
+
+    assert (1, 1) not in matched_pairs(tokens)
+    assert (1, 1) in spoken_pairs(tokens)
+    # 多出来的词在原文里没有位置，不成对
+    assert all(usr != 3 for _, usr in spoken_pairs(tokens))
 
 
 def test_accuracy_counts_reference_words_only():
