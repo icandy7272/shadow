@@ -368,3 +368,40 @@ a.button:hover { border-color: var(--accent); }
 @media (max-width: 640px) {
   .card { flex-direction: column; align-items: stretch; }
 }
+
+/* ---------- 默写 ----------
+   框一样宽，不泄露单词长短；标点留在框外 */
+:root { --unknown: #a8650a; }
+@media (prefers-color-scheme: dark) {
+  :root { --unknown: #e0a449; }
+}
+.dictation .slot { margin: 0 3px 4px; }
+.dictation .box { display: inline-flex; align-items: baseline; }
+.dictation input[type=text] { width: 6.5em; }
+.dictation input[type=text]:disabled { border-bottom: 2px dashed var(--line); }
+.step.graded > .hint, .step.graded .dictation, .step.graded #submit-drill { display: none; }
+.tally { margin: 0 0 4px; font-variant-numeric: tabular-nums; }
+.tally b { font-weight: 600; }
+.tally-ok { color: var(--ok); }
+.tally-wrong { color: var(--warn); }
+.tally-unknown { color: var(--unknown); }
+.graded-line { font-size: 17px; line-height: 1.9; margin: 0 0 12px; }
+.mark { text-underline-offset: 4px; }
+.mark-wrong { color: var(--warn); text-decoration: underline wavy; }
+.mark-unknown { color: var(--unknown); text-decoration: underline dashed; }
+.misses { display: grid; gap: 12px; }
+.miss { border-left: 3px solid var(--warn); padding: 2px 0 2px 12px; }
+.miss-unknown { border-left-color: var(--unknown); }
+.miss-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; }
+.miss-word { font-size: 16px; font-weight: 600; }
+.phonetic, .miss-guess { color: var(--muted); font-size: 13px; }
+.miss-head .add-vocab, .miss-head .in-vocab { margin-left: auto; }
+.add-vocab { padding: 3px 10px; font-size: 13px; }
+.in-vocab { color: var(--muted); font-size: 12px; }
+.meanings { margin: 4px 0 0; padding-left: 18px; }
+.meanings li { margin: 1px 0; }
+.lemma { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+@media (max-width: 640px) {
+  .dictation input[type=text] { width: 5.2em; }
+  .add-vocab { padding: 6px 12px; }
+}

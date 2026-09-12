@@ -118,56 +118,161 @@ if (root) {
         note.classList.add("bad");
         service.check();
       }
-      // 没有挖空位时第二步整个不存在，直接解锁跟读，不让人多点一次
-      const next = document.getElementById("step-drill")
-                || document.getElementById("step-record");
-      next.classList.remove("locked");
+      document.getElementById("step-drill").classList.remove("locked");
     });
   });
 
-  // 第二步：填空（这一句没有挖空位时整段不存在）
+  // 第二步：整句默写。每个词一个框，回车跳到下一个；不会的勾「不会」
   const drillStep = document.getElementById("step-drill");
-  document.getElementById("submit-drill")?.addEventListener("click", async () => {
-    const answers = [...drillStep.querySelectorAll(".slot")].map((slot) => ({
-      index: Number(slot.querySelector("input[type=text]").dataset.index),
-      guess: slot.querySelector("input[type=text]").value.trim(),
-      guessed: slot.querySelector("input[type=checkbox]").checked,
-    }));
+  const submitDrill = document.getElementById("submit-drill");
+  const slots = [...drillStep.querySelectorAll(".slot")].map((slot) => ({
+    input: slot.querySelector("input[type=text]"),
+    unknown: slot.querySelector("input[type=checkbox]"),
+  }));
+
+  slots.forEach(({ input, unknown }, i) => {
+    unknown.addEventListener("change", () => {
+      input.disabled = unknown.checked;
+      if (unknown.checked) input.value = "";
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing) return;   // 输入法选词的回车不算
+      event.preventDefault();
+      const next = slots.slice(i + 1).find((slot) => !slot.input.disabled);
+      if (next) next.input.focus();
+      else submitDrill.click();
+    });
+  });
+
+  submitDrill.addEventListener("click", async () => {
     const replayButton = drillStep.querySelector("button.play");
     const box = drillStep.querySelector(".result");
-    let data;
+    submitDrill.disabled = true;
+    let response;
     try {
-      const response = await fetch("/api/gapfill", {
+      response = await fetch("/api/dictation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           segment: Number(segment), unit: Number(unit),
-          answers, replays: counts.get(replayButton) || 0,
+          replays: counts.get(replayButton) || 0,
+          answers: slots.map(({ input, unknown }) => ({
+            index: Number(input.dataset.index),
+            guess: input.value.trim(),
+            unknown: unknown.checked,
+          })),
         }),
       });
-      data = await response.json();
     } catch (err) {
-      // 填的还在输入框里：不揭晓、不收起，恢复后再点一次就行
+      // 写的还在框里：不揭晓、不收起，恢复后再点一次就行
       box.hidden = false;
-      box.innerHTML = "<p class='bad'>没连上服务，填的都还在。恢复后再点「对答案」。</p>";
+      box.replaceChildren(el("p", "bad", "没连上服务，写的都还在。恢复后再点「对答案」。"));
+      submitDrill.disabled = false;
       service.check();
       return;
     }
     box.hidden = false;
-    box.innerHTML =
-      `<p>${data.correct}/${data.total} 对，其中 <b>${data.heard}</b> 个是听出来的` +
-      (data.replays ? `，重听 ${data.replays} 遍` : "，一遍过") + "</p>" +
-      data.items.map((item) => {
-        if (item.correct && item.heard) return `<div class="ok">✓ ${item.answer}</div>`;
-        if (item.correct) return `<div class="guessed">○ ${item.answer} （猜的，不算听力）</div>`;
-        const wrote = item.guess ? `你填了 “${item.guess}”` : "空着";
-        return `<div class="bad">✗ ${item.answer} —— ${wrote}，` +
-               `原声只有 ${item.ms} 毫秒</div>`;
-      }).join("");
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      box.replaceChildren(el("p", "bad", `没存上：${detail.detail || response.status}`));
+      submitDrill.disabled = false;
+      return;
+    }
+    box.replaceChildren(...dictationResult(await response.json()));
+    // 框收起来，只留答案和释义；开始跟读时整步再收起
+    drillStep.classList.add("graded");
     document.getElementById("step-record").classList.remove("locked");
-    // 原文已经揭晓，把这一步收起来：跟读时屏幕上不该有字
-    drillStep.classList.add("done");
   });
+
+  // 整句逐词着色：标点照原样放在词的前后
+  function gradedLine(items) {
+    const byIndex = new Map(items.map((item) => [item.index, item]));
+    const line = el("p", "graded-line");
+    drillStep.querySelectorAll(".dictation > span").forEach((span) => {
+      const input = span.querySelector("input[type=text]");
+      if (!input) {
+        line.append(span.textContent, " ");
+        return;
+      }
+      const item = byIndex.get(Number(input.dataset.index));
+      const [lead, trail] = [input.previousSibling, input.nextSibling].map(
+        (node) => (node && node.nodeType === Node.TEXT_NODE ? node.textContent : ""));
+      const mark = el("span", `mark mark-${item.status}`, item.answer);
+      if (item.status === "wrong") mark.title = item.guess ? `你写了 ${item.guess}` : "没写";
+      line.append(lead, mark, trail, " ");
+    });
+    return line;
+  }
+
+  function vocabButton(item, sentence) {
+    if (item.status === "unknown") return el("span", "in-vocab", "已加入生词本");
+    const button = el("button", "add-vocab", item.in_vocab ? "已在生词本" : "加入生词本");
+    button.disabled = item.in_vocab;
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch("/api/vocab", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ word: item.answer, sentence,
+                                 segment: Number(segment), unit: Number(unit) }),
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        button.textContent = "已在生词本";
+      } catch (err) {
+        button.disabled = false;
+        button.textContent = "没存上，再点一次";
+        service.check();
+      }
+    });
+    return button;
+  }
+
+  function missCard(item, data) {
+    const card = el("div", `miss miss-${item.status}`);
+    const head = el("div", "miss-head");
+    head.append(el("b", "miss-word", item.answer));
+    if (item.entry && item.entry.phonetic) {
+      head.append(el("span", "phonetic", `/${item.entry.phonetic}/`));
+    }
+    head.append(el("span", "miss-guess", item.status === "unknown" ? "不会"
+      : item.guess ? `你写了 ${item.guess}` : "没写"));
+    head.append(vocabButton(item, data.sentence));
+    card.append(head);
+    const entry = item.entry;
+    if (entry && entry.meanings.length) {
+      const list = el("ul", "meanings");
+      entry.meanings.forEach((meaning) => list.append(el("li", null, meaning)));
+      card.append(list);
+    }
+    if (entry && entry.lemma) {
+      card.append(el("p", "lemma",
+        `原形 ${entry.lemma.word}：${entry.lemma.meanings.join("；")}`));
+    }
+    if (data.dictionary && !(entry && (entry.meanings.length || entry.lemma))) {
+      card.append(el("p", "lemma", "词典里没有"));
+    }
+    return card;
+  }
+
+  function dictationResult(data) {
+    const summary = el("p", "tally");
+    summary.append(el("b", "tally-ok", `写对 ${data.correct}`), " · ",
+                   el("b", "tally-wrong", `写错 ${data.wrong}`), " · ",
+                   el("b", "tally-unknown", `不会 ${data.unknown}`),
+                   data.replays ? `，重听 ${data.replays} 遍` : "，一遍过");
+    const nodes = [summary, gradedLine(data.items)];
+    const misses = data.items.filter((item) => item.status !== "ok");
+    if (misses.length && !data.dictionary) {
+      nodes.push(el("p", "hint", "词典还没装：在终端运行 uv run shadow dict install"));
+    }
+    if (misses.length) {
+      const list = el("div", "misses");
+      misses.forEach((item) => list.append(missCard(item, data)));
+      nodes.push(list);
+    }
+    return nodes;
+  }
 }
 
 // ---------- 看一眼原文 ----------
@@ -311,6 +416,8 @@ if (root) {
     const takes = Math.max(1, Number(document.getElementById("takes").value) || 1);
     const pre = Math.max(0, Number(document.getElementById("prelisten").value) || 0);
     startButton.disabled = true;
+    // 默写的答案和释义看完了，开录时收起来：跟读时屏幕上不该有原文
+    document.getElementById("step-drill").classList.add("done");
     let stream;
     try {
       // 开降噪：生活噪音一旦超过门限就会被当成发声起点，整段测量跟着前移。

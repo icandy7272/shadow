@@ -25,10 +25,10 @@ from fastapi.templating import Jinja2Templates
 
 from collections import Counter
 
-from .. import config, db, history, library, media, progress
+from .. import config, db, dictionary, history, library, media, progress
 from ..report.takes import recurrence_threshold
 from ..analysis.diff import accuracy as _accuracy
-from ..drill.gapfill import blanks_of
+from ..drill import dictation
 from ..drill.units import split_into_units
 from .. import review as review_mod
 from ..ingest.downloader import DownloadError
@@ -315,7 +315,7 @@ def practice(request: Request, segment_id: int, unit: int):
             "unit": unit,
             **step,
             "words": words,
-            "blanks": blanks_of(words),
+            "tokens": [_token(w.text) for w in words],
             "seconds": round(words[-1].end - words[0].start, 1),
             "min_take_sec": config.MIN_ATTEMPT_SEC,
             # 只传给第三步。里面带着句子原文的片段，提前露出来盲听就废了。
@@ -353,37 +353,61 @@ def save_rating(segment: int = Form(...), unit: int = Form(...),
     return {"ok": True, "run_id": run_id}
 
 
-@app.post("/api/gapfill")
-def save_gapfill(payload: dict = Body(...)):
+def _token(text: str) -> dict:
+    """默写框的三段：框前的标点、要写的词、框后的标点。"""
+    token = dictation.split(text)
+    return {"lead": token.lead, "core": token.core, "trail": token.trail,
+            "box": dictation.needs_box(text)}
+
+
+def _entry_json(entry) -> dict | None:
+    if entry is None:
+        return None
+    lemma = entry.lemma
+    return {"word": entry.word, "phonetic": entry.phonetic,
+            "meanings": list(entry.meanings),
+            "lemma": None if lemma is None
+            else {"word": lemma.word, "meanings": list(lemma.meanings)}}
+
+
+@app.post("/api/dictation")
+def save_dictation(payload: dict = Body(...)):
+    try:
+        segment, unit = int(payload["segment"]), int(payload["unit"])
+        answers = {int(item["index"]): dictation.Answer(
+                       guess=str(item.get("guess") or ""), unknown=bool(item.get("unknown")))
+                   for item in payload.get("answers", [])}
+        replays = int(payload.get("replays") or 0)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise HTTPException(400, "默写提交的格式不对。")
     connection = _db()
-    segment = int(payload["segment"])
-    unit = int(payload["unit"])
     _, words = _unit_words(connection, segment, unit)
-    blanks = {b.word_index: b for b in blanks_of(words)}
-
-    items, correct, heard = [], 0, 0
-    for answer in payload.get("answers", []):
-        blank = blanks.get(int(answer["index"]))
-        if blank is None:
-            continue
-        guess = (answer.get("guess") or "").strip()
-        guessed = bool(answer.get("guessed"))
-        ok = blank.matches(guess)
-        if ok:
-            correct += 1
-            if not guessed:
-                heard += 1
-        items.append({
-            "answer": blank.answer, "guess": guess, "correct": ok,
-            "heard": ok and not guessed, "ms": round(blank.duration * 1000),
-        })
-
-    replays = int(payload.get("replays") or 0)
+    marks = dictation.grade(words, answers)
+    correct, wrong, unknown = dictation.tally(marks)
+    sentence = " ".join(w.text for w in words)
     run_id = _run_for(connection, segment, unit, payload.get("run_id"), words)
-    db.set_gapfill(connection, run_id, correct, len(blanks), heard, replays)
+    db.set_dictation(connection, run_id, correct=correct, total=len(marks),
+                     unknown=unknown, replays=replays)
+    # 不会的自动进生词本；写错的可能只是手滑，由人决定
+    for mark in marks:
+        if mark.status == dictation.UNKNOWN:
+            db.add_vocab(connection, dictation.key(mark.answer), sentence=sentence,
+                         segment_id=segment, unit_index=unit)
     db.finish_run(connection, run_id)
-    return {"correct": correct, "total": len(blanks), "heard": heard,
-            "replays": replays, "items": items, "run_id": run_id}
+    saved = db.vocab_words(connection)
+    entries = dictionary.lookup_many(
+        dictation.key(mark.answer) for mark in marks if mark.status != dictation.OK)
+    return {
+        "correct": correct, "wrong": wrong, "unknown": unknown, "total": len(marks),
+        "replays": replays, "run_id": run_id, "sentence": sentence,
+        "dictionary": dictionary.installed(),
+        "items": [{
+            "index": mark.index, "answer": mark.answer, "guess": mark.guess,
+            "status": mark.status, "in_vocab": dictation.key(mark.answer) in saved,
+            "entry": (None if mark.status == dictation.OK
+                      else _entry_json(entries.get(dictation.key(mark.answer)))),
+        } for mark in marks],
+    }
 
 
 MAX_ADVICE = 3

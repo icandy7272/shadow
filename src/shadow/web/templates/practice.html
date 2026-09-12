@@ -23,24 +23,23 @@
     <p class="saved" hidden></p>
   </section>
 
-  {% if blanks %}
   <section class="step locked" id="step-drill">
-    <h2><span class="n">2</span> 精听填空</h2>
-    <p class="hint">听出来的直接填；靠上下文猜的，勾上「猜的」。
-      功能词太好猜了，不分开就测不出听力。</p>
+    <h2><span class="n">2</span> 默写</h2>
+    <p class="hint">每个词写进一个框，回车跳到下一个。不会的勾「不会」——
+      对完答案会给出释义，并记进生词本。</p>
     <div class="row">
       <button class="play" data-src="/audio/{{ segment }}/{{ unit }}">▶ 重听</button>
       <label class="repeat">连播 <input type="number" class="times" value="3" min="1" max="50"> 遍</label>
       <button class="stop" hidden>■ 停</button>
       <span class="plays"></span>
     </div>
-    <p class="sentence">
-      {%- for w in words -%}
-        {%- if w.is_blank -%}
-          <span class="slot"><input type="text" size="6" autocomplete="off"
-            data-index="{{ loop.index0 }}"><label><input type="checkbox"> 猜的</label></span>
+    <p class="sentence dictation">
+      {%- for t in tokens -%}
+        {%- if t.box -%}
+          <span class="slot"><span class="box">{{ t.lead }}<input type="text" autocomplete="off"
+            autocapitalize="off" autocorrect="off" spellcheck="false" data-index="{{ loop.index0 }}">{{ t.trail }}</span><label><input type="checkbox"> 不会</label></span>
         {%- else -%}
-          <span class="w">{{ w.text }}</span>
+          <span class="w">{{ t.lead }}{{ t.core }}{{ t.trail }}</span>
         {%- endif -%}
         {{ ' ' }}
       {%- endfor -%}
@@ -48,10 +47,9 @@
     <button class="primary" id="submit-drill">对答案</button>
     <div class="result" hidden></div>
   </section>
-  {% endif %}
 
   <section class="step locked" id="step-record">
-    <h2><span class="n">{{ 3 if blanks else 2 }}</span> 跟读
+    <h2><span class="n">3</span> 跟读
       {%- if history %}<em class="badge">上次{% if history.issues %}有
         {{ history.issues | length }} 处要改{% else %}没有反复出现的问题{% endif %}</em>
       {%- endif %}</h2>
