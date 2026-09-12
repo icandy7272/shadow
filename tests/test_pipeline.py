@@ -59,7 +59,39 @@ def test_import_rejects_overlong_source(conn, monkeypatch):
     monkeypatch.setattr(pipeline, "probe", lambda url: ("Long", 3601.0))
     with pytest.raises(pipeline.ImportError_, match="60"):
         pipeline.import_source("https://x/y", conn=conn)
+    # 记录留着、标成失败：素材库里要能看到为什么没导进来
+    row = db.list_sources(conn)[0]
+    assert row["status"] == db.STATUS_FAILED
+    assert "60" in row["error"]
+
+
+def test_begin_import_returns_at_once_with_the_link_as_title(conn, monkeypatch):
+    """网页导入要让卡片马上出现，查标题要联网，不能卡在这一步。"""
+    monkeypatch.setattr(pipeline, "probe", lambda url: pytest.fail("这一步不该联网"))
+    source_id = pipeline.begin_import("https://x/y", conn=conn)
+    row = db.get_source(conn, source_id)
+    assert (row["status"], row["title"]) == (db.STATUS_PENDING, "https://x/y")
+
+
+def test_begin_import_rejects_a_non_http_link(conn):
+    with pytest.raises(DownloadError):
+        pipeline.begin_import("ftp://x/y", conn=conn)
     assert db.list_sources(conn) == []
+
+
+def test_run_import_walks_through_every_status(conn, stub_externals, monkeypatch):
+    seen = []
+    real = db.set_source_status
+    monkeypatch.setattr(pipeline.db, "set_source_status",
+                        lambda c, i, s: (seen.append(s), real(c, i, s)))
+    source_id = pipeline.begin_import("https://x/y", conn=conn)
+
+    pipeline.run_import(source_id, conn=conn)
+
+    assert seen == [db.STATUS_PROBING, db.STATUS_DOWNLOADING,
+                    db.STATUS_TRANSCRIBING, db.STATUS_SEGMENTING]
+    row = db.get_source(conn, source_id)
+    assert (row["status"], row["title"], row["duration_sec"]) == (db.STATUS_READY, "Talk", 100.0)
 
 
 def test_import_records_failure_and_reraises(conn, monkeypatch):
