@@ -416,6 +416,16 @@ def _lan_address() -> str | None:
         probe.close()
 
 
+def _reload_dirs() -> list[str]:
+    """自动重载只盯自己的代码。
+
+    默认盯整个工作目录，而没装 watchfiles 时 uvicorn 每 0.25 秒把目录下所有 .py
+    stat 一遍——连 .venv 一共 8604 个，监工进程空闲时一直占着半个核。
+    自己的代码只有 33 个。
+    """
+    return [str(Path(__file__).parent)]
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -429,7 +439,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print("注意：手机上录不了音——浏览器只在 HTTPS 或 localhost 下给"
               "麦克风权限。盲听和填空照常。")
     uvicorn.run("shadow.web.app:app", host=host, port=args.port,
-                reload=args.reload, log_level="warning")
+                reload=args.reload, reload_dirs=_reload_dirs(), log_level="warning")
     return 0
 
 

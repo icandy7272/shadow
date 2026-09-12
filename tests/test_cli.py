@@ -166,6 +166,23 @@ def test_serve_can_open_to_the_lan(monkeypatch, capsys):
     assert "录不了音" in out
 
 
+def test_serve_watches_only_its_own_code_for_reload(monkeypatch):
+    """自动重载默认盯整个工作目录，连 .venv 里的第三方库一起反复扫——
+    实测监工进程空闲时一直占着半个核。只盯自己的代码就够了。"""
+    from pathlib import Path
+
+    seen = {}
+
+    class FakeUvicorn:
+        @staticmethod
+        def run(app, **kwargs):
+            seen.update(kwargs)
+
+    monkeypatch.setitem(sys.modules, "uvicorn", FakeUvicorn)
+    assert cli.main(["serve"]) == 0
+    assert seen["reload_dirs"] == [str(Path(cli.__file__).parent)]
+
+
 def test_serve_stays_local_by_default(monkeypatch):
     seen = {}
 
