@@ -254,8 +254,8 @@ function pitchScale(slots) {
   return { height, y: (semitones) => zero - semitones * PER_SEMITONE };
 }
 
-// 每格给一个最小宽度，剩下的按相对时长分。挤不下就横向滚动——
-// 十几个词硬塞进一屏，词标会叠成一堆，那才是真看不懂。
+// 每格给一个最小宽度，剩下的按相对时长分。十几个词硬塞进一行，词标会叠成一堆，
+// 所以挤不下时不压窄格子，而是折行（见 wrap）。
 function layout(slots, available) {
   const natural = slots.map((s) => Math.max(s.refWidth, s.usrWidth) || 0.001);
   const sum = natural.reduce((a, b) => a + b, 0) || 1;
@@ -265,6 +265,32 @@ function layout(slots, available) {
   let cursor = 0;
   widths.forEach((w) => { xs.push(cursor); cursor += w + SLOT_GAP_PX; });
   return { xs, widths, natural, total: Math.max(0, cursor - SLOT_GAP_PX) };
+}
+
+// 一行放不下就折到下一行，像文字换行。以前是横向滚动，划着看不方便。
+// 格子宽度就用整句排一行时的比例（短词照样抬到最小宽度），挤不下也不放大、
+// 不压窄，只换行，行尾可能空一截：长词在哪一行都一样宽，词与词的长短才比得了。
+// 别按「几行的总宽」重新分配——短词被抬宽的那部分永远多出来，行数会一路加到
+// 一词一行，每格还被放大好几倍。
+const WRAP_SLACK_PX = 0.5;        // 刚好放满时，别让浮点误差把最后一格挤到下一行
+
+function wrap(slots, available) {
+  const placed = layout(slots, available);
+  const rows = [];
+  const where = [];               // 第 i 格：在第几行、行内的 x、宽度
+  let row = null;
+  placed.widths.forEach((raw, index) => {
+    const width = Math.min(raw, available);
+    if (!row || row.end + SLOT_GAP_PX + width > available + WRAP_SLACK_PX) {
+      row = { slots: [], end: -SLOT_GAP_PX };
+      rows.push(row);
+    }
+    const x = row.end + SLOT_GAP_PX;
+    row.slots.push(index);
+    row.end = x + width;
+    where.push({ row: rows.length - 1, x, width });
+  });
+  return { rows, where, natural: placed.natural };
 }
 
 function pitchFigure(slots) {
@@ -277,38 +303,37 @@ function pitchFigure(slots) {
   caption.append(el("i", "legend-usr", "你（实心）"));
   node.append(caption);
 
-  const scroll = el("div", "pitch-scroll");
-  const body = el("div", "fig-body pitch");
-  const head = playhead();
-  const bands = el("div", "slot-bands");
-  const labels = el("div", "slot-labels");
-  const notes = el("div", "slot-flags");
-  const scale = pitchScale(slots);
-  let placed = layout(slots, FALLBACK_WIDTH);
+  const rows = el("div", "pitch-rows");
+  const scale = pitchScale(slots);    // 各行共用一套纵轴，音高跨行才比得了
+  let placed = wrap(slots, FALLBACK_WIDTH);
+  let bodies = [];
+  let heads = [];
+  let bands = [];                     // 按格子下标存：跨行也能一起点亮
+  let labels = [];
 
-  function draw(available) {
-    placed = layout(slots, available);
-    body.style.width = `${placed.total}px`;
-    bands.textContent = "";
-    labels.textContent = "";
-    notes.textContent = "";
-
+  function drawRow(row) {
+    const body = el("div", "fig-body pitch");
+    const head = playhead();
+    const bandRow = el("div", "slot-bands");
+    const labelRow = el("div", "slot-labels");
+    const notes = el("div", "slot-flags");
     const canvas = svg("svg", { class: "quads",
-                                viewBox: `0 0 ${placed.total} ${scale.height}` });
+                                viewBox: `0 0 ${row.end} ${scale.height}` });
     canvas.style.height = `${scale.height}px`;
-    canvas.style.width = `${placed.total}px`;
-    canvas.append(svg("line", { x1: 0, y1: scale.y(0), x2: placed.total,
+    canvas.style.width = `${row.end}px`;
+    canvas.append(svg("line", { x1: 0, y1: scale.y(0), x2: row.end,
                                 y2: scale.y(0), class: "baseline" }));
 
-    slots.forEach((slot, index) => {
-      const x0 = placed.xs[index];
-      const width = placed.widths[index];
+    row.slots.forEach((index) => {
+      const slot = slots[index];
+      const { x: x0, width } = placed.where[index];
       const natural = placed.natural[index];
 
       const band = el("div", index % 2 ? "band odd" : "band");
       band.style.left = `${x0}px`;
       band.style.width = `${width}px`;
-      bands.append(band);
+      bandRow.append(band);
+      bands[index] = band;
 
       if (slot.usrTrace && slot.usrTrace.length) {
         traceLine(canvas, scale.y, x0, (slot.usrWidth / natural) * width,
@@ -321,7 +346,8 @@ function pitchFigure(slots) {
       label.title = slot.text;
       label.style.left = `${x0}px`;
       label.style.width = `${width}px`;
-      labels.append(label);
+      labelRow.append(label);
+      labels[index] = label;
       if (slot.flag) {
         const note = el("span", null, slot.flag);
         note.style.left = `${x0 - 20}px`;
@@ -330,15 +356,22 @@ function pitchFigure(slots) {
       }
     });
 
-    const old = body.querySelector("svg.quads");
-    if (old) old.replaceWith(canvas);
-    else labels.after(canvas);
+    body.append(head, bandRow, labelRow, canvas, notes);
+    return { body, head };
   }
 
-  body.append(head, bands, labels, notes);
+  function draw(available) {
+    placed = wrap(slots, available);
+    bands = [];
+    labels = [];
+    const drawn = placed.rows.map(drawRow);
+    bodies = drawn.map((row) => row.body);
+    heads = drawn.map((row) => row.head);
+    rows.replaceChildren(...bodies);
+  }
+
   draw(FALLBACK_WIDTH);
-  scroll.append(body);
-  node.append(scroll);
+  node.append(rows);
 
   // ResizeObserver 首次观测就会回调，拿到真实宽度再排一次
   let lastRoom = FALLBACK_WIDTH;
@@ -349,7 +382,7 @@ function pitchFigure(slots) {
         lastRoom = width;
         draw(width);
       }
-    }).observe(scroll);
+    }).observe(rows);
   }
 
   // 当前时刻落在哪一格的什么位置。图 2 的横轴不是时间，得逐格换算。
@@ -360,66 +393,72 @@ function pitchFigure(slots) {
     for (let i = 0; i < slots.length; i += 1) {
       const at = useRef ? slots[i].refAt : slots[i].usrAt;
       if (!at) continue;
-      if (time < at[0]) return { x: placed.xs[i], index: -1 };
+      const spot = placed.where[i];
+      if (time < at[0]) return { row: spot.row, x: spot.x, index: -1 };
       if (time < at[1]) {
         const share = (time - at[0]) / Math.max(at[1] - at[0], 1e-6);
-        return { x: placed.xs[i] + share * placed.widths[i], index: i };
+        return { row: spot.row, x: spot.x + share * spot.width, index: i };
       }
     }
-    return { x: placed.total, index: -1 };
+    const last = placed.rows.length - 1;
+    return { row: last, x: placed.rows[last].end, index: -1 };
   }
 
   // 横轴不是时间，指针在长词上慢、短词上快。把当前那一格点亮，
   // 这种快慢才读得懂：不是走得不稳，是正走在哪个词上。
   function highlight(index) {
-    bands.childNodes.forEach((node, i) =>
-      node.classList.toggle("active", i === index));
-    labels.childNodes.forEach((node, i) =>
-      node.classList.toggle("active", i === index));
+    bands.forEach((node, i) => node.classList.toggle("active", i === index));
+    labels.forEach((node, i) => node.classList.toggle("active", i === index));
   }
 
-  // 点到的是哪一格。词标、折线、底色都在同一列上，认坐标最省事。
-  function slotAt(clientX) {
-    const rect = body.getBoundingClientRect();
-    const x = clientX - rect.left;
-    return placed.xs.findIndex(
-      (left, i) => x >= left && x <= left + placed.widths[i]);
+  // 点到的是哪一格：先看落在哪一行，再看行内的横坐标。
+  function slotAt(clientX, clientY) {
+    for (let r = 0; r < bodies.length; r += 1) {
+      const rect = bodies[r].getBoundingClientRect();
+      if (clientY < rect.top || clientY > rect.bottom) continue;
+      const x = clientX - rect.left;
+      const hit = placed.rows[r].slots.find((i) => {
+        const spot = placed.where[i];
+        return x >= spot.x && x <= spot.x + spot.width;
+      });
+      return hit === undefined ? -1 : hit;
+    }
+    return -1;
   }
 
   function tint(range, side) {
-    bands.childNodes.forEach((node, i) => {
+    bands.forEach((node, i) => {
       node.classList.toggle("hear-ref", within(i, range) && side === "ref");
       node.classList.toggle("hear-usr", within(i, range) && side === "usr");
     });
   }
 
   function select(range) {
-    bands.childNodes.forEach((node, i) =>
-      node.classList.toggle("picked", within(i, range)));
+    bands.forEach((node, i) => node.classList.toggle("picked", within(i, range)));
   }
 
   return {
     node,
     onPick(handler) {
-      // 拖着选一段。连读时单个词只有几十毫秒，拆开听不出什么，得连着放。
+      // 拖着选一段，可以跨行。连读时单个词只有几十毫秒，拆开听不出什么，得连着放。
       let from = -1;
-      body.style.cursor = "pointer";
+      rows.style.cursor = "pointer";
 
-      body.addEventListener("mousedown", (event) => {
-        from = slotAt(event.clientX);
+      rows.addEventListener("mousedown", (event) => {
+        from = slotAt(event.clientX, event.clientY);
         if (from >= 0) {
           select([from, from]);
           event.preventDefault();      // 别让拖动变成选中词标文字
         }
       });
-      body.addEventListener("mousemove", (event) => {
+      rows.addEventListener("mousemove", (event) => {
         if (from < 0) return;
-        const to = slotAt(event.clientX);
+        const to = slotAt(event.clientX, event.clientY);
         if (to >= 0) select([Math.min(from, to), Math.max(from, to)]);
       });
       window.addEventListener("mouseup", (event) => {
         if (from < 0) return;
-        const to = slotAt(event.clientX);
+        const to = slotAt(event.clientX, event.clientY);
         const range = to < 0 ? [from, from]
                              : [Math.min(from, to), Math.max(from, to)];
         from = -1;
@@ -430,18 +469,19 @@ function pitchFigure(slots) {
     move(frame) {
       const at = locate(frame);
       if (at === null) return;
-      const x = at.x;
       highlight(at.index);
-      head.hidden = false;
-      head.firstChild.style.left = `${x}px`;
-      // 长句子要横向滚动，别让播放头跑出视野
-      const left = scroll.scrollLeft;
-      const edge = 48;
-      if (x < left + edge || x > left + scroll.clientWidth - edge) {
-        scroll.scrollLeft = Math.max(0, x - scroll.clientWidth / 2);
-      }
+      // 指针只出现在正在播的那一行
+      heads.forEach((head, r) => {
+        head.hidden = r !== at.row;
+        if (r === at.row) head.firstChild.style.left = `${at.x}px`;
+      });
     },
-    hide() { head.hidden = true; highlight(-1); tint(null, null); select(null); },
+    hide() {
+      heads.forEach((head) => { head.hidden = true; });
+      highlight(-1);
+      tint(null, null);
+      select(null);
+    },
   };
 }
 
