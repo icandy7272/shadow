@@ -129,3 +129,18 @@ def test_the_grid_covers_whole_weeks_and_reaches_today(tmp_path, monkeypatch, we
     assert here and not here[0].future
     # 本周还没到的日子只占位，不该被当成「没练」
     assert all(d.future for d in calendar.days if d.date > today)
+
+
+def test_deleting_a_source_keeps_the_grid_and_streak(tmp_path, monkeypatch):
+    """删素材是彻底删，但每天练了几句、连续几天得留下来。"""
+    conn, segment_id = _seeded(tmp_path, monkeypatch)
+    for unit, days_ago in ((1, 0), (1, 0), (2, 1), (3, 2)):
+        _round(conn, segment_id, unit=unit, days_ago=days_ago)
+    source_id = db.get_segment(conn, segment_id)["source_id"]
+    before = progress.calendar(conn, weeks=4)
+
+    db.delete_source(conn, source_id, archive=progress.archive_rows(conn, source_id))
+
+    after = progress.calendar(conn, weeks=4)
+    assert after == before
+    assert (after.today, after.streak) == (1, 3)

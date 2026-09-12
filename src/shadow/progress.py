@@ -39,19 +39,36 @@ def _local_day(stamp: str) -> str | None:
         return None
 
 
-def _practised(connection) -> dict[str, set[str]]:
-    """每天练过哪些句子。没录音的一轮不算——那一轮什么也没留下。"""
-    by_day: dict[str, set[str]] = defaultdict(set)
-    counts: dict[str, int] = defaultdict(int)
-    for run in db.list_runs(connection):
+def _rounds(connection, runs) -> dict[tuple[str, str], int]:
+    """每天每句练了几轮。没录音的一轮不算——那一轮什么也没留下。"""
+    tally: dict[tuple[str, str], int] = defaultdict(int)
+    for run in runs:
         if not db.run_metrics(connection, run["id"]):
             continue
         when = _local_day(run["finished_at"] or run["started_at"])
         if when is None:
             continue
-        by_day[when].add(run["unit_text"] or f'{run["segment_id"]}-{run["unit_index"]}')
-        counts[when] += 1
+        tally[(when, run["unit_text"] or f'{run["segment_id"]}-{run["unit_index"]}')] += 1
+    return tally
+
+
+def _practised(connection) -> tuple[dict[str, set[str]], dict[str, int]]:
+    """每天练过哪些句子、一共几轮。删掉的素材只剩归档，照样算进来。"""
+    tally = _rounds(connection, db.list_runs(connection))
+    for row in db.list_archive(connection):
+        tally[(row["day"], row["sentence"])] += row["rounds"]
+    by_day: dict[str, set[str]] = defaultdict(set)
+    counts: dict[str, int] = defaultdict(int)
+    for (day, sentence), rounds in tally.items():
+        by_day[day].add(sentence)
+        counts[day] += rounds
     return by_day, counts
+
+
+def archive_rows(connection, source_id: int) -> list[tuple[str, str, int]]:
+    """删素材前要留下的打卡：哪天、哪句、几轮。"""
+    tally = _rounds(connection, db.source_runs(connection, source_id))
+    return [(day, sentence, rounds) for (day, sentence), rounds in sorted(tally.items())]
 
 
 def calendar(connection, *, weeks: int = 10) -> Calendar:
