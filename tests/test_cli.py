@@ -219,3 +219,72 @@ def test_audit_reports_sentences_the_audio_does_not_contain(monkeypatch, capsys)
     out = capsys.readouterr().out
     assert f"{segment_id}/1 音频里没有这句" in out
     assert "没有声音 1" in out
+
+
+def test_dict_install_reports_the_word_count_once(monkeypatch, capsys):
+    from shadow import dictionary
+    from tests.test_dictionary import _fetch
+
+    monkeypatch.setattr(dictionary, "download", _fetch)
+    assert cli.main(["dict", "install"]) == 0
+    assert "4 个词条" in capsys.readouterr().out
+    assert cli.main(["dict", "install"]) == 0
+    assert "已经装好" in capsys.readouterr().out
+
+
+def test_dict_install_explains_a_failed_download(monkeypatch, capsys):
+    from urllib.error import URLError
+
+    from shadow import dictionary
+
+    def offline(url, dest, report=None):
+        raise URLError("no network")
+
+    monkeypatch.setattr(dictionary, "download", offline)
+    assert cli.main(["dict", "install"]) == 1
+    assert "下载失败" in capsys.readouterr().err
+    assert not dictionary.installed()
+
+
+def test_dict_lookup_prints_meanings_and_the_lemma(capsys):
+    from shadow import dictionary
+    from tests.test_dictionary import _fetch
+
+    dictionary.install(fetch=_fetch)
+    assert cli.main(["dict", "lookup", "Graduated,"]) == 0
+    out = capsys.readouterr().out
+    assert "a. 毕业了的" in out
+    assert "原形 graduate" in out
+    assert "n. 毕业生" in out
+
+
+def test_dict_lookup_needs_a_word_and_the_dictionary(capsys):
+    assert cli.main(["dict", "lookup"]) == 1
+    assert "要查哪个词" in capsys.readouterr().err
+    assert cli.main(["dict", "lookup", "graduate"]) == 1
+    assert "uv run shadow dict install" in capsys.readouterr().err
+
+
+def test_dict_lookup_of_a_word_the_dictionary_lacks(capsys):
+    from shadow import dictionary
+    from tests.test_dictionary import _fetch
+
+    dictionary.install(fetch=_fetch)
+    assert cli.main(["dict", "lookup", "Reed"]) == 1
+    assert "词典里没有" in capsys.readouterr().err
+
+
+def test_progress_shows_dictation_scores(capsys):
+    connection, segment_id = _seed_segment()
+    run_id = db.start_run(connection, segment_id=segment_id, unit_index=1,
+                          unit_text="should have been there")
+    db.set_dictation(connection, run_id, correct=2, total=4, unknown=1, replays=0)
+    db.finish_run(connection, run_id)
+    connection.close()
+
+    assert cli.main(["progress"]) == 0
+    out = capsys.readouterr().out
+    assert "默写" in out
+    assert "2/4" in out
+    assert "不会 1" in out
+    assert "一遍过" in out

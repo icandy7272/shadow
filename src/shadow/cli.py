@@ -9,8 +9,9 @@ from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
 
-from . import config, db, media, review
+from . import config, db, dictionary, media, review
 from .analysis.diff import accuracy as diff_accuracy
+from .drill import dictation
 from .drill.units import ends_mid_phrase, split_into_units
 from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
@@ -466,15 +467,21 @@ def cmd_progress(args: argparse.Namespace) -> int:
         takes = db.run_metrics(connection, row["id"])
         if not takes:
             if row["gapfill_total"]:
-                heard = row["gapfill_heard"]
                 text = (row["unit_text"] or "")[:40]
-                listened = ("—" if heard is None
-                            else f"听出 {heard}/{row['gapfill_total']}")
                 rep = row["gapfill_replays"]
                 shown = "" if rep is None else (f"重听{rep}" if rep else "一遍过")
-                print(f"{_local_time(row['started_at']):<14}{'填空':>5}"
+                if row["gapfill_unknown"] is None:
+                    # 改成整句默写之前的挖空记录
+                    heard = row["gapfill_heard"]
+                    label = "填空"
+                    detail = ("—" if heard is None
+                              else f"听出 {heard}/{row['gapfill_total']}")
+                else:
+                    label = "默写"
+                    detail = f"不会 {row['gapfill_unknown']}"
+                print(f"{_local_time(row['started_at']):<14}{label:>5}"
                       f"{row['gapfill_correct']}/{row['gapfill_total']:<4}"
-                      f"{listened:>10}{shown:>8}   {text}")
+                      f"{detail:>10}{shown:>8}   {text}")
                 continue
             if row["blind_rating"] is not None:
                 text = (row["unit_text"] or "")[:44]
@@ -502,6 +509,62 @@ def cmd_progress(args: argparse.Namespace) -> int:
 
 
 
+
+
+def cmd_dict(args: argparse.Namespace) -> int:
+    if args.action == "install":
+        return _dict_install(force=args.force)
+    return _dict_lookup(args.word)
+
+
+def _dict_install(*, force: bool) -> int:
+    shown = False
+
+    def report(done: int, total: int) -> None:
+        nonlocal shown
+        shown = True
+        size = f" / {total / 1e6:.1f}" if total else ""
+        print(f"\r下载词典 {done / 1e6:.1f}{size} MB", end="", file=sys.stderr, flush=True)
+
+    try:
+        try:
+            count = dictionary.install(force=force, report=report)
+        finally:
+            if shown:
+                print(file=sys.stderr)          # 收掉进度那一行
+    except OSError as exc:                      # 断网、超时、磁盘写不进去
+        print(f"词典下载失败：{exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"词典没装上：{exc}", file=sys.stderr)
+        return 1
+    if count is None:
+        print(f"词典已经装好了（{dictionary.path()}）。要重装加 --force。")
+    else:
+        print(f"装好了：{count} 个词条，存在 {dictionary.path()}")
+    return 0
+
+
+def _dict_lookup(word: str | None) -> int:
+    key = dictation.key(word or "")
+    if not dictation.needs_box(key):
+        print("要查哪个词？比如：shadow dict lookup graduated", file=sys.stderr)
+        return 1
+    if not dictionary.installed():
+        print("词典还没装：在终端运行 uv run shadow dict install", file=sys.stderr)
+        return 1
+    entry = dictionary.lookup(key)
+    if entry is None:
+        print(f"词典里没有 {key}", file=sys.stderr)
+        return 1
+    print(f"{entry.word}  /{entry.phonetic}/" if entry.phonetic else entry.word)
+    for meaning in entry.meanings:
+        print(f"  {meaning}")
+    if entry.lemma is not None:
+        print(f"原形 {entry.lemma.word}")
+        for meaning in entry.lemma.meanings:
+            print(f"  {meaning}")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -565,6 +628,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_progress.add_argument("-s", "--segment", type=int)
     p_progress.add_argument("-u", "--unit", type=int)
     p_progress.set_defaults(func=cmd_progress)
+
+    p_dict = sub.add_parser("dict", help="离线英汉词典：安装、查词")
+    p_dict.add_argument("action", choices=("install", "lookup"))
+    p_dict.add_argument("word", nargs="?", help="要查的词（lookup 用）")
+    p_dict.add_argument("--force", action="store_true", help="已经装过也重新下载")
+    p_dict.set_defaults(func=cmd_dict)
 
 
     return parser
