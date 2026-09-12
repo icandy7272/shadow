@@ -83,6 +83,23 @@ CREATE TABLE IF NOT EXISTS practice_archive (
     rounds   INTEGER NOT NULL
 );
 
+-- 生词本。出处不设外键：删素材时生词和原句都要留下
+CREATE TABLE IF NOT EXISTS vocab (
+    word        TEXT PRIMARY KEY,
+    first_added TEXT NOT NULL,
+    last_added  TEXT NOT NULL,
+    times       INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS vocab_sources (
+    word       TEXT NOT NULL,
+    sentence   TEXT NOT NULL,
+    segment_id INTEGER,
+    unit_index INTEGER,
+    added_at   TEXT NOT NULL,
+    PRIMARY KEY (word, sentence)
+);
+
 CREATE INDEX IF NOT EXISTS idx_segments_source ON segments(source_id);
 CREATE INDEX IF NOT EXISTS idx_attempts_run ON attempts(run_id);
 """
@@ -96,6 +113,7 @@ MIGRATIONS = (
     ("practice_runs", "gapfill_replays", "INTEGER"),
     ("attempts", "metrics_json", "TEXT"),
     ("practice_runs", "saw_text", "INTEGER"),
+    ("practice_runs", "gapfill_unknown", "INTEGER"),
 )
 
 
@@ -266,6 +284,16 @@ def set_gapfill(
         " gapfill_heard = ?, gapfill_replays = ? WHERE id = ?",
         (correct, total, heard, replays, run_id),
     )
+    conn.commit()
+
+
+def set_dictation(conn: sqlite3.Connection, run_id: int, *, correct: int, total: int,
+                  unknown: int, replays: int) -> None:
+    """整句默写的记分。沿用填空时代的列名，gapfill_heard 不再写。"""
+    conn.execute(
+        "UPDATE practice_runs SET gapfill_correct = ?, gapfill_total = ?,"
+        " gapfill_unknown = ?, gapfill_replays = ? WHERE id = ?",
+        (correct, total, unknown, replays, run_id))
     conn.commit()
 
 
@@ -464,3 +492,43 @@ def delete_source(conn: sqlite3.Connection, source_id: int, *,
         conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
     own = (source["audio_path"],) if source is not None and source["audio_path"] else ()
     return Removed(audio_paths=own + takes, segment_ids=segment_ids)
+
+
+# --- 生词本 -----------------------------------------------------------------
+
+
+def add_vocab(conn: sqlite3.Connection, word: str, *, sentence: str,
+              segment_id: int | None = None, unit_index: int | None = None) -> int:
+    """记下一个生词，返回记过几次。同一句的出处不重复记。"""
+    now = _now()
+    with conn:
+        conn.execute(
+            "INSERT INTO vocab (word, first_added, last_added, times) VALUES (?, ?, ?, 1)"
+            " ON CONFLICT(word) DO UPDATE SET last_added = excluded.last_added,"
+            " times = times + 1", (word, now, now))
+        conn.execute(
+            "INSERT OR IGNORE INTO vocab_sources"
+            " (word, sentence, segment_id, unit_index, added_at) VALUES (?, ?, ?, ?, ?)",
+            (word, sentence, segment_id, unit_index, now))
+    return conn.execute("SELECT times FROM vocab WHERE word = ?", (word,)).fetchone()["times"]
+
+
+def vocab_words(conn: sqlite3.Connection) -> set[str]:
+    return {row["word"] for row in conn.execute("SELECT word FROM vocab")}
+
+
+def list_vocab(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """生词本，最近记下的在前；每个词带上全部出处。"""
+    items = [dict(row) for row in conn.execute(
+        "SELECT * FROM vocab ORDER BY last_added DESC, word")]
+    sources: dict[str, list[dict[str, Any]]] = {}
+    for row in conn.execute("SELECT * FROM vocab_sources ORDER BY added_at, rowid"):
+        sources.setdefault(row["word"], []).append(dict(row))
+    return [{**item, "sources": sources.get(item["word"], [])} for item in items]
+
+
+def remove_vocab(conn: sqlite3.Connection, word: str) -> bool:
+    with conn:
+        conn.execute("DELETE FROM vocab_sources WHERE word = ?", (word,))
+        cursor = conn.execute("DELETE FROM vocab WHERE word = ?", (word,))
+    return cursor.rowcount > 0

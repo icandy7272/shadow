@@ -196,3 +196,59 @@ def test_delete_source_leaves_nothing_behind(conn):
     assert removed.segment_ids == (doomed_segment,)
     assert len(db.source_runs(conn, kept)) == 1
     assert [tuple(row) for row in db.list_archive(conn)] == [("2026-09-10", "It was.", 1)]
+
+
+def test_set_dictation_records_unknown_words(conn):
+    source_id = db.create_source(conn, url="https://x/y", title="T", duration_sec=1.0)
+    db.insert_segments(conn, source_id, (
+        Segment(idx=0, start=0.0, end=1.0, words=(Word("hi", 0.0, 1.0),)),
+    ))
+    segment_id = db.list_segments(conn, source_id)[0]["id"]
+    run_id = db.start_run(conn, segment_id=segment_id, unit_index=1)
+
+    db.set_dictation(conn, run_id, correct=2, total=4, unknown=1, replays=3)
+    db.finish_run(conn, run_id)
+
+    row = db.list_runs(conn)[0]
+    assert (row["gapfill_correct"], row["gapfill_total"],
+            row["gapfill_unknown"], row["gapfill_replays"]) == (2, 4, 1, 3)
+
+
+def test_vocab_counts_times_and_keeps_every_sentence_once(conn):
+    assert db.add_vocab(conn, "adoption", sentence="She refused.",
+                        segment_id=3, unit_index=11) == 1
+    assert db.add_vocab(conn, "adoption", sentence="She refused.",
+                        segment_id=3, unit_index=11) == 2
+    assert db.add_vocab(conn, "adoption", sentence="Final adoption papers.") == 3
+
+    [item] = db.list_vocab(conn)
+
+    assert (item["word"], item["times"]) == ("adoption", 3)
+    assert [s["sentence"] for s in item["sources"]] == ["She refused.", "Final adoption papers."]
+    assert item["sources"][0]["segment_id"] == 3
+    assert db.vocab_words(conn) == {"adoption"}
+
+
+def test_newest_vocab_comes_first(conn):
+    db.add_vocab(conn, "older", sentence="A.")
+    conn.execute("UPDATE vocab SET last_added = '2026-01-01T00:00:00+00:00' WHERE word = 'older'")
+    db.add_vocab(conn, "newer", sentence="B.")
+    assert [item["word"] for item in db.list_vocab(conn)] == ["newer", "older"]
+
+
+def test_remove_vocab_takes_its_sentences_too(conn):
+    db.add_vocab(conn, "adoption", sentence="She refused.")
+    assert db.remove_vocab(conn, "adoption") is True
+    assert db.list_vocab(conn) == []
+    assert conn.execute("SELECT COUNT(*) FROM vocab_sources").fetchone()[0] == 0
+    assert db.remove_vocab(conn, "adoption") is False
+
+
+def test_vocab_outlives_a_deleted_source(conn):
+    """删素材是彻底删，但生词本是自己的，要留下。"""
+    source_id, segment_id = _source_with_practice(conn, title="A")
+    db.add_vocab(conn, "was", sentence="It was.", segment_id=segment_id, unit_index=1)
+
+    db.delete_source(conn, source_id)
+
+    assert [item["word"] for item in db.list_vocab(conn)] == ["was"]
