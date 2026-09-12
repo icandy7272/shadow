@@ -28,6 +28,11 @@ def test_the_library_is_where_you_start_when_empty(client):
     assert 'id="import-form"' in body
 
 
+def test_the_library_page_loads_its_script(client):
+    """实际遇到的：模板里漏了脚本，点「导入」变成表单原样提交，页面一刷新什么都没发生。"""
+    assert "/static/library.js" in client.get("/sources").text
+
+
 def test_the_library_shows_every_state(client, tmp_path):
     _seed(tmp_path)
     connection = db.connect()
