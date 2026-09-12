@@ -131,3 +131,68 @@ def test_run_with_any_data_is_kept(conn):
         db.finish_run(conn, run_id)
         assert db.discard_if_empty(conn, run_id) is False
     assert len(db.list_runs(conn)) == 2
+
+
+def _source_with_practice(conn, *, title, text="It was."):
+    source_id = db.create_source(conn, url=f"https://x/{title}", title=title,
+                                 duration_sec=8.0)
+    db.finish_source(conn, source_id, audio_path=f"/tmp/{title}.wav")
+    db.insert_segments(conn, source_id, (Segment(
+        idx=0, start=0.0, end=1.0,
+        words=(Word("It", 0.0, 0.5), Word("was.", 0.5, 1.0))),))
+    segment_id = db.list_segments(conn, source_id)[0]["id"]
+    run_id = db.start_run(conn, segment_id=segment_id, unit_index=1, unit_text=text)
+    db.add_attempt(conn, run_id=run_id, audio_path=f"/tmp/{title}-take.wav",
+                   asr_text=text, metrics={"issues": []})
+    db.finish_run(conn, run_id)
+    return source_id, segment_id
+
+
+def test_settings_round_trip(conn):
+    assert db.get_setting(conn, "current_source") is None
+    db.set_setting(conn, "current_source", "3")
+    db.set_setting(conn, "current_source", "4")
+    assert db.get_setting(conn, "current_source") == "4"
+    db.set_setting(conn, "current_source", None)
+    assert db.get_setting(conn, "current_source") is None
+
+
+def test_importing_source_is_the_one_not_finished(conn):
+    ready = db.create_source(conn, url="https://x/a", title="A", duration_sec=1.0)
+    db.finish_source(conn, ready, audio_path="a.wav")
+    assert db.importing_source(conn) is None
+    busy = db.create_source(conn, url="https://x/b", title="B", duration_sec=0.0)
+    db.set_source_status(conn, busy, db.STATUS_PROBING)
+    assert db.importing_source(conn)["id"] == busy
+
+
+def test_source_meta_is_filled_in_after_probing(conn):
+    source_id = db.create_source(conn, url="https://x/y", title="https://x/y",
+                                 duration_sec=0.0)
+    db.update_source_meta(conn, source_id, title="Talk", duration_sec=90.0)
+    row = db.get_source(conn, source_id)
+    assert (row["title"], row["duration_sec"]) == ("Talk", 90.0)
+
+
+def test_source_runs_and_takes_only_cover_that_source(conn):
+    first, _ = _source_with_practice(conn, title="A")
+    _source_with_practice(conn, title="B")
+    assert len(db.source_runs(conn, first)) == 1
+    assert db.count_takes(conn, first) == 1
+
+
+def test_delete_source_leaves_nothing_behind(conn):
+    """外键没有级联：素材下面的片段、练习记录、每遍录音都得一起删干净。"""
+    doomed, doomed_segment = _source_with_practice(conn, title="A")
+    kept, _ = _source_with_practice(conn, title="B")
+
+    removed = db.delete_source(conn, doomed, archive=[("2026-09-10", "It was.", 1)])
+
+    assert db.get_source(conn, doomed) is None
+    assert db.list_segments(conn, doomed) == []
+    assert db.source_runs(conn, doomed) == []
+    assert conn.execute("SELECT COUNT(*) FROM attempts").fetchone()[0] == 1
+    assert set(removed.audio_paths) == {"/tmp/A.wav", "/tmp/A-take.wav"}
+    assert removed.segment_ids == (doomed_segment,)
+    assert len(db.source_runs(conn, kept)) == 1
+    assert [tuple(row) for row in db.list_archive(conn)] == [("2026-09-10", "It was.", 1)]

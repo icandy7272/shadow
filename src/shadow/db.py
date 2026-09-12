@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Sequence
 
@@ -11,6 +12,7 @@ from . import config
 from .models import Segment, words_from_json, words_to_json
 
 STATUS_PENDING = "pending"
+STATUS_PROBING = "probing"          # 查标题和时长
 STATUS_DOWNLOADING = "downloading"
 STATUS_TRANSCRIBING = "transcribing"
 STATUS_SEGMENTING = "segmenting"
@@ -66,6 +68,19 @@ CREATE TABLE IF NOT EXISTS saved_phrases (
     segment_id INTEGER NOT NULL REFERENCES segments(id),
     text       TEXT NOT NULL,
     created_at TEXT NOT NULL
+);
+
+-- 键值设置。目前只有 current_source：首页显示哪份素材，电脑和手机一致
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- 删掉的素材只留下打卡：哪天、哪句、几轮。格子和连续天数靠它照算
+CREATE TABLE IF NOT EXISTS practice_archive (
+    day      TEXT NOT NULL,
+    sentence TEXT NOT NULL,
+    rounds   INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_segments_source ON segments(source_id);
@@ -352,3 +367,100 @@ def run_metrics(conn: sqlite3.Connection, run_id: int) -> list[dict[str, Any]]:
         "SELECT metrics_json FROM attempts WHERE run_id = ? ORDER BY id", (run_id,)
     )
     return [json.loads(row["metrics_json"]) for row in rows if row["metrics_json"]]
+
+
+# --- 素材库 -----------------------------------------------------------------
+
+
+def update_source_meta(conn: sqlite3.Connection, source_id: int, *,
+                       title: str, duration_sec: float) -> None:
+    """查到标题和时长后补上。网页导入先用链接占位，好让卡片马上出现。"""
+    conn.execute("UPDATE sources SET title = ?, duration_sec = ? WHERE id = ?",
+                 (title, duration_sec, source_id))
+    conn.commit()
+
+
+def importing_source(conn: sqlite3.Connection) -> sqlite3.Row | None:
+    """正在导入的那一份。同一时间只允许一个。"""
+    placeholders = ", ".join("?" for _ in TERMINAL_STATUSES)
+    return conn.execute(
+        f"SELECT * FROM sources WHERE status NOT IN ({placeholders}) ORDER BY id LIMIT 1",
+        TERMINAL_STATUSES,
+    ).fetchone()
+
+
+def get_setting(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return None if row is None else row["value"]
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str | None) -> None:
+    if value is None:
+        conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+    else:
+        conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
+                     " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                     (key, value))
+    conn.commit()
+
+
+def source_runs(conn: sqlite3.Connection, source_id: int) -> list[sqlite3.Row]:
+    """这份素材上做完的练习记录。"""
+    return list(conn.execute(
+        "SELECT practice_runs.* FROM practice_runs"
+        " JOIN segments ON segments.id = practice_runs.segment_id"
+        " WHERE segments.source_id = ? AND practice_runs.finished_at IS NOT NULL"
+        " ORDER BY practice_runs.id",
+        (source_id,),
+    ))
+
+
+def count_takes(conn: sqlite3.Connection, source_id: int) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) FROM attempts"
+        " JOIN practice_runs ON practice_runs.id = attempts.run_id"
+        " JOIN segments ON segments.id = practice_runs.segment_id"
+        " WHERE segments.source_id = ?",
+        (source_id,),
+    ).fetchone()[0]
+
+
+def list_archive(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return list(conn.execute("SELECT day, sentence, rounds FROM practice_archive"))
+
+
+@dataclass(frozen=True, slots=True)
+class Removed:
+    """删掉一份素材后，留给调用方去删的磁盘文件。"""
+
+    audio_paths: tuple[str, ...]    # 原音和每遍录音
+    segment_ids: tuple[int, ...]    # 句子音频缓存按片段号命名
+
+
+def delete_source(conn: sqlite3.Connection, source_id: int, *,
+                  archive: Sequence[tuple[str, str, int]] = ()) -> Removed:
+    """一个事务里删掉素材和挂在它下面的一切，同时写进打卡归档。
+
+    外键没有级联，得按依赖顺序手动删。磁盘文件交给调用方——
+    文件删一半失败，不该让数据库也跟着回不去。
+    """
+    source = get_source(conn, source_id)
+    segment_ids = tuple(row["id"] for row in conn.execute(
+        "SELECT id FROM segments WHERE source_id = ?", (source_id,)))
+    marks = ", ".join("?" for _ in segment_ids) or "NULL"
+    takes = tuple(row["audio_path"] for row in conn.execute(
+        "SELECT attempts.audio_path FROM attempts"
+        " JOIN practice_runs ON practice_runs.id = attempts.run_id"
+        f" WHERE practice_runs.segment_id IN ({marks})", segment_ids))
+    with conn:
+        conn.executemany(
+            "INSERT INTO practice_archive (day, sentence, rounds) VALUES (?, ?, ?)", archive)
+        conn.execute("DELETE FROM attempts WHERE run_id IN"
+                     f" (SELECT id FROM practice_runs WHERE segment_id IN ({marks}))",
+                     segment_ids)
+        conn.execute(f"DELETE FROM practice_runs WHERE segment_id IN ({marks})", segment_ids)
+        conn.execute(f"DELETE FROM saved_phrases WHERE segment_id IN ({marks})", segment_ids)
+        conn.execute("DELETE FROM segments WHERE source_id = ?", (source_id,))
+        conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
+    own = (source["audio_path"],) if source is not None and source["audio_path"] else ()
+    return Removed(audio_paths=own + takes, segment_ids=segment_ids)
