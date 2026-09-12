@@ -28,7 +28,7 @@ from .. import config, db, history, media, progress
 from ..report.takes import recurrence_threshold
 from ..analysis.diff import accuracy as _accuracy
 from ..drill.gapfill import blanks_of
-from ..drill.units import is_usable, split_into_units
+from ..drill.units import split_into_units
 from .. import review as review_mod
 from .view import feedback_view
 
@@ -170,6 +170,7 @@ def _sentences(connection) -> list[dict]:
         for segment in db.list_segments(connection, source["id"]):
             full = db.get_segment(connection, segment["id"])
             for number, words in enumerate(split_into_units(full["words"]), 1):
+                problem = media.unit_problem(source["audio_path"], words)
                 out.append({
                     "segment": segment["id"],
                     "unit": number,
@@ -178,7 +179,8 @@ def _sentences(connection) -> list[dict]:
                     "seconds": words[-1].end - words[0].start,
                     "words": len(words),
                     "blanks": sum(w.is_blank for w in words),
-                    "usable": is_usable(words),
+                    "usable": problem is None,
+                    "problem": problem,
                 })
     for order, item in enumerate(out, 1):
         item["number"] = order
@@ -222,11 +224,13 @@ def practice(request: Request, segment_id: int, unit: int):
     connection = _db()
     segment, words = _unit_words(connection, segment_id, unit)
     step = _place(connection, segment_id, unit)
-    if not is_usable(words):
+    source = db.get_source(connection, segment["source_id"])
+    problem = media.unit_problem(source["audio_path"] if source else None, words)
+    if problem:
         # 不能只回一句 JSON：练下一句会把人送进来，再没有出口就卡死了
         return templates.TemplateResponse(
             request, "unusable.html",
-            {"segment": segment_id, "unit": unit, **step},
+            {"segment": segment_id, "unit": unit, "problem": problem, **step},
             status_code=409,
         )
     return templates.TemplateResponse(

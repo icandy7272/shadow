@@ -670,6 +670,51 @@ def test_the_light_carries_the_command_that_brings_the_service_back(client):
     assert "uv run shadow serve" in body
 
 
+def _seed_with_a_phantom_sentence(tmp_path):
+    """第 2 句是转写凭空编的：词速正常，可那几秒的音频里没人说话。"""
+    import numpy as np
+    import soundfile as sf
+
+    connection = db.connect()
+    db.init_db(connection)
+    source = config.source_audio_dir() / "7.wav"
+    sr = 16000
+    t_ = np.arange(sr * 6) / sr
+    voice = (0.4 * np.sin(2 * np.pi * 200 * t_)).astype("float32")
+    voice[int(1.2 * sr):int(3.8 * sr)] = 0.0      # 中间一段停顿，什么声音都没有
+    sf.write(source, voice, sr)
+    source_id = db.create_source(connection, url="https://x/p", title="P",
+                                 duration_sec=6.0)
+    db.finish_source(connection, source_id, audio_path=str(source))
+    spec = [("One", 0.1, 0.3), ("two.", 0.5, 0.4),
+            ("You", 1.6, 0.2), ("know,", 2.0, 0.3), ("I'm", 2.5, 0.2), ("fine.", 2.9, 0.4),
+            ("Last", 4.1, 0.3), ("one.", 4.5, 0.4)]
+    words = tuple(Word(text=x, start=a, end=a + d) for x, a, d in spec)
+    db.insert_segments(connection, source_id,
+                       (Segment(idx=0, start=0.0, end=6.0, words=words),))
+    segment_id = db.list_segments(connection, source_id)[0]["id"]
+    connection.close()
+    return segment_id
+
+
+def test_a_sentence_the_audio_does_not_contain_is_not_offered(client, tmp_path):
+    """转写偶尔凭空编一句。强制对齐把它摊到停顿上，词速正常，老的检查拦不住，
+    切出来却是静音——盲听时一点声音都没有。"""
+    segment_id = _seed_with_a_phantom_sentence(tmp_path)
+
+    response = client.get(f"/practice/{segment_id}/2")
+    assert response.status_code == 409
+    assert "找不到声音" in response.text
+    assert f"/practice/{segment_id}/3" in response.text
+
+    # 翻页跳过它，列表里标出来、不给链接
+    assert f'href="/practice/{segment_id}/2"' not in client.get(
+        f"/practice/{segment_id}/1").text
+    index = client.get("/").text
+    assert "音频里没有这句" in index
+    assert f'href="/practice/{segment_id}/2"' not in index
+
+
 def test_a_failed_submit_can_be_sent_again(client, tmp_path):
     """服务断掉那一刻最亏的是刚录的几遍。录音还在页面里，恢复后重新提交就行。"""
     segment_id = _seed(tmp_path)

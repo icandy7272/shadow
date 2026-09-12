@@ -3,8 +3,13 @@
 {% block content %}
 <section class="step">
   <h2>这一句没法练</h2>
+  {% if problem == "silent" %}
+  <p class="hint">这句的时间范围里找不到声音——多半是转写凭空编出来的一句，
+    落在了掌声或长停顿上，原音里根本没人说。这是转写的问题，不是你的问题。</p>
+  {% else %}
   <p class="hint">词级时间戳异常——十几个词挤在半秒里，切出来的音频对不上词，
     比对的每一项都会是错的。这是转写的问题，不是你的问题。</p>
+  {% endif %}
   <nav class="pager">
     {% if prev_unit %}
     <a href="/practice/{{ prev_unit.segment }}/{{ prev_unit.unit }}">← 上一句</a>

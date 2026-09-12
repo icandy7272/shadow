@@ -214,3 +214,68 @@ def test_unit_bounds_falls_back_when_the_words_run_together(tmp_path):
     start, _end = media.unit_bounds(source, words, low=0.0, high=2.0)
 
     assert start == pytest.approx(0.6 - config.UNIT_PAD_SEC, abs=0.01)
+
+
+def _source_with_a_gap(tmp_path):
+    """0-1.2s 在说话，1.2-3.8s 一片静，3.8-6s 又在说话。"""
+    sr = 16000
+    t = np.arange(6 * sr) / sr
+    voice = (0.4 * np.sin(2 * np.pi * 180 * t)).astype("float32")
+    voice[int(1.2 * sr):int(3.8 * sr)] = 0.0
+    path = tmp_path / "gap.wav"
+    sf.write(path, voice, sr)
+    return path
+
+
+def _phantom():
+    from shadow.models import Word
+
+    return (Word(text="You", start=1.6, end=1.9), Word(text="know.", start=2.4, end=3.2))
+
+
+def test_a_sentence_laid_over_silence_is_silent(tmp_path):
+    """转写凭空编的句子会被强制对齐摊到停顿上：词速正常，音频里却没人说话。"""
+    from shadow.models import Word
+
+    source = _source_with_a_gap(tmp_path)
+    spoken = (Word(text="One", start=0.1, end=0.5), Word(text="two.", start=0.6, end=1.0))
+
+    assert not media.silent(source, spoken)
+    assert media.silent(source, _phantom())
+
+
+def test_a_missing_source_is_not_called_silent(tmp_path):
+    """素材文件不在就判断不了。判不了就别拦——拦错了，那句就再也练不到。"""
+    from shadow.models import Word
+
+    words = (Word(text="a", start=0.1, end=0.5),)
+
+    assert not media.silent(tmp_path / "gone.wav", words)
+    assert not media.silent(None, words)
+
+
+def test_silence_is_rechecked_when_the_source_changes(tmp_path):
+    """一份素材的能量只算一次——但文件换了，缓存得跟着失效。"""
+    import os
+
+    source = _source_with_a_gap(tmp_path)
+    assert media.silent(source, _phantom())
+
+    write_tone(source, seconds=6.0)
+    stamp = source.stat().st_mtime + 10
+    os.utime(source, (stamp, stamp))
+
+    assert not media.silent(source, _phantom())
+
+
+def test_unit_problem_names_why_a_sentence_cannot_be_practised(tmp_path):
+    from shadow.models import Word
+
+    source = _source_with_a_gap(tmp_path)
+    crushed = tuple(Word(text=f"w{i}", start=4.0 + i * 0.02, end=4.02 + i * 0.02)
+                    for i in range(14))
+    spoken = (Word(text="Last", start=4.1, end=4.5), Word(text="one.", start=4.6, end=5.0))
+
+    assert media.unit_problem(source, crushed) == media.PROBLEM_CRUSHED
+    assert media.unit_problem(source, _phantom()) == media.PROBLEM_SILENT
+    assert media.unit_problem(source, spoken) is None

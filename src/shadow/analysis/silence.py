@@ -1,8 +1,10 @@
-"""在一段能量曲线里找停顿。纯函数，无 IO。
+"""在一段能量曲线里找停顿，以及判断一段里有没有人声。纯函数，无 IO。
 
-用途是给裁剪点找落脚处：转写的词级时间戳常整体偏早几百毫秒，照它裁
+用途一是给裁剪点找落脚处：转写的词级时间戳常整体偏早几百毫秒，照它裁
 会把上一句的尾巴带进来。句子之间通常有一小段停顿，裁在那段停顿的中点上，
 比信时间戳准得多。
+
+用途二是认出转写凭空编出来的句子：它落在停顿上，那几秒里没人说话。
 """
 
 from __future__ import annotations
@@ -10,6 +12,8 @@ from __future__ import annotations
 import numpy as np
 
 from .. import config
+
+SILENT_DB = -120.0      # 一帧都没有时当作的响度
 
 
 def quiet_midpoint(
@@ -44,3 +48,26 @@ def quiet_midpoint(
     if best_len * step < min_run:
         return None
     return float(times[best_start] + (best_len - 1) * step / 2)
+
+
+def loud_level(energy_db: np.ndarray, *,
+               percentile: float = config.SPEECH_LOUD_PERCENTILE) -> float:
+    """整段素材「在说话」时的典型响度。
+
+    取高分位而不是最大值：一声咳嗽、一下掌声不该定标准。
+    """
+    if energy_db.size == 0:
+        return SILENT_DB
+    return float(np.percentile(energy_db, percentile))
+
+
+def voiced_fraction(energy_db: np.ndarray, *, loud_db: float,
+                    drop_db: float = config.SPEECH_DROP_DB) -> float:
+    """这一段里有多少帧够得上人声。
+
+    门槛跟着整段素材的典型响度走，不用绝对值：录音电平差得远，
+    同样 -50 dB，在响的素材里是静音，在轻的素材里是说话。
+    """
+    if energy_db.size == 0:
+        return 0.0
+    return float(np.mean(energy_db > loud_db - drop_db))

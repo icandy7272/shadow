@@ -206,3 +206,16 @@ def test_import_checks_the_cut_right_away(monkeypatch, capsys):
     monkeypatch.setattr(cli, "import_source", fake_import)
     assert cli.main(["import", "https://x/y"]) == 0
     assert "个句子" in capsys.readouterr().out
+
+
+def test_audit_reports_sentences_the_audio_does_not_contain(monkeypatch, capsys):
+    """体检得把「音频里没有这句」也挑出来，不然只能等人练到那句才发现没声音。"""
+    connection, segment_id = _seed_segment()
+    connection.close()
+    monkeypatch.setattr(media, "unit_problem",
+                        lambda source, words: media.PROBLEM_SILENT)
+
+    assert cli.main(["audit"]) == 0
+    out = capsys.readouterr().out
+    assert f"{segment_id}/1 音频里没有这句" in out
+    assert "没有声音 1" in out

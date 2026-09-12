@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from shadow.analysis.silence import quiet_midpoint
+from shadow.analysis.silence import loud_level, quiet_midpoint, voiced_fraction
 
 
 def frames(pattern, hop=0.01):
@@ -44,3 +44,27 @@ def test_returns_none_when_speech_never_stops():
 
 def test_returns_none_on_an_empty_window():
     assert quiet_midpoint(np.array([]), np.array([])) is None
+
+
+def test_loud_level_is_where_the_source_is_speaking():
+    """「在说话」的典型响度取高分位，不取最大值——一声咳嗽不该定标准。"""
+    energy = np.linspace(-80.0, -20.0, 101)
+
+    assert loud_level(energy) == pytest.approx(-26.0)
+
+
+def test_loud_level_of_nothing_is_very_quiet():
+    assert loud_level(np.array([])) < -100
+
+
+def test_voiced_fraction_follows_the_source_not_an_absolute_level():
+    """录音电平差得远：同样 -50 dB，在响的素材里是静音，在轻的素材里是说话。"""
+    span = np.array([-50.0] * 8 + [-30.0] * 2)
+
+    assert voiced_fraction(span, loud_db=-25.0) == pytest.approx(0.2)
+    assert voiced_fraction(span, loud_db=-45.0) == pytest.approx(1.0)
+
+
+def test_voiced_fraction_of_an_empty_span_is_zero():
+    """时间范围落在音频之外，一帧都取不到——那就是没声音。"""
+    assert voiced_fraction(np.array([]), loud_db=-20.0) == 0.0

@@ -66,6 +66,13 @@ WORD_TRACE_POINTS = 14   # 一个词的音高画成几段，够看出先扬后�
 SILENCE_DROP_DB = 22.0     # 比窗口内最响低这么多就算安静
 SILENCE_MIN_RUN_SEC = 0.08 # 安静得有这么长才算停顿，滤掉爆破音的闭塞
 SILENCE_WINDOW_SEC = 0.45  # 裁剪点前后各找这么远的停顿
+
+# 一句话的时间范围里有没有人声。转写偶尔凭空编出一句，强制对齐会把它摊到
+# 停顿上，词速看着正常，切出来却是静音。实测 Jobs 演讲 210 句：以整段素材
+# 帧能量的 p90 往下 20 dB 为界，编出来的那句只有 4% 的帧够得上，真句子最低 34%。
+SPEECH_LOUD_PERCENTILE = 90.0
+SPEECH_DROP_DB = 20.0
+MIN_VOICED_FRACTION = 0.15
 SPEECH_FLOOR_DB = -20.0
 SPEECH_EDGE_MIN_SEC = 0.25   # 两端短于这么久的一小段，八成不是这句话
 SPEECH_EDGE_GAP_SEC = 0.06   # 而且要跟主体隔着这么久才敢扔

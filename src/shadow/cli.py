@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import config, db, media, review
 from .analysis.diff import accuracy as diff_accuracy
-from .drill.units import ends_mid_phrase, is_usable, split_into_units
+from .drill.units import ends_mid_phrase, split_into_units
 from .ingest.pipeline import import_source
 from .ingest.transcriber import transcribe_words
 
@@ -45,11 +45,11 @@ def cmd_import(args: argparse.Namespace) -> int:
 
     # 导入完就地体检：切坏的单元只有扫一遍才看得出来，
     # 而「想起来才跑的检查」等于没有——库里那五处切坏躺了很久没人发现。
-    total, bad, broken = _survey(connection, source_id)
+    total, bad, broken, silent = _survey(connection, source_id)
     print(f"  {total} 个句子", end="")
-    if bad or broken:
-        print(f"，其中 {len(bad)} 句断在词组中间、{len(broken)} 句时间戳异常"
-              f"（跑 shadow audit 看是哪些）")
+    if bad or broken or silent:
+        print(f"，其中 {len(bad)} 句断在词组中间、{len(broken)} 句时间戳异常、"
+              f"{len(silent)} 句音频里没有（跑 shadow audit 看是哪些）")
     else:
         print("，都能练")
     return 0
@@ -242,8 +242,8 @@ def cmd_recompute(args: argparse.Namespace) -> int:
 
 
 def _survey(connection, source_id: int | None = None):
-    """扫一遍切出来的单元，返回 (总数, 切坏的, 时间戳异常的)。"""
-    total, bad, broken = 0, [], []
+    """扫一遍切出来的单元，返回 (总数, 切坏的, 时间戳异常的, 音频里没有的)。"""
+    total, bad, broken, silent = 0, [], [], []
     for source in db.list_sources(connection):
         if source_id is not None and source["id"] != source_id:
             continue
@@ -252,11 +252,14 @@ def _survey(connection, source_id: int | None = None):
             for index, unit in enumerate(split_into_units(segment["words"]), 1):
                 total += 1
                 text = " ".join(word.text for word in unit)
-                if not is_usable(unit):
+                problem = media.unit_problem(source["audio_path"], unit)
+                if problem == media.PROBLEM_CRUSHED:
                     broken.append((row["id"], index, text))
+                elif problem == media.PROBLEM_SILENT:
+                    silent.append((row["id"], index, text))
                 elif ends_mid_phrase(unit):
                     bad.append((row["id"], index, text))
-    return total, bad, broken
+    return total, bad, broken, silent
 
 
 def cmd_audit(args: argparse.Namespace) -> int:
@@ -266,12 +269,15 @@ def cmd_audit(args: argparse.Namespace) -> int:
     里的切坏。「在最大停顿处断开」这条规则在库里坏了五处，全是这么找出来的。
     """
     connection = _open_db()
-    total, bad, broken = _survey(connection)
+    total, bad, broken, silent = _survey(connection)
     for segment_id, index, text in broken:
         print(f"  ⚠ {segment_id}/{index} 时间戳异常：{text[:60]}")
+    for segment_id, index, text in silent:
+        print(f"  ⚠ {segment_id}/{index} 音频里没有这句：{text[:60]}")
     for segment_id, index, text in bad:
         print(f"  ✂ {segment_id}/{index} 断在词组中间：…{text[-50:]}")
-    print(f"\n共 {total} 个单元：切坏 {len(bad)}，时间戳异常 {len(broken)}")
+    print(f"\n共 {total} 个单元：切坏 {len(bad)}，时间戳异常 {len(broken)}，"
+          f"没有声音 {len(silent)}")
     return 0
 
 
@@ -288,11 +294,15 @@ def cmd_units(args: argparse.Namespace) -> int:
     span = segment["end_sec"] - segment["start_sec"]
     print(f"片段 #{args.segment}（{span:.1f}s，{len(segment['words'])} 词）"
           f"切成 {len(units)} 个练习单元：")
+    source = db.get_source(connection, segment["source_id"])
+    audio = source["audio_path"] if source else None
+    flags = {media.PROBLEM_CRUSHED: "  ⚠ 时间戳异常，无法练习",
+             media.PROBLEM_SILENT: "  ⚠ 音频里没有这句，无法练习"}
     for index, unit in enumerate(units, 1):
         duration = unit[-1].end - unit[0].start
         blanks = sum(word.is_blank for word in unit)
         text = " ".join(word.text for word in unit)
-        flag = "" if is_usable(unit) else "  ⚠ 时间戳异常，无法练习"
+        flag = flags.get(media.unit_problem(audio, unit), "")
         print(f"  {index:2d}. [{duration:4.1f}s {len(unit):2d}词 {blanks}空]  {text}{flag}")
     return 0
 
