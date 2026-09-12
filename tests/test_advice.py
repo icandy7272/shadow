@@ -164,6 +164,46 @@ def test_pause_advice_is_not_merged_with_the_word_own_issue():
     assert today & {"flat_rise", "pitch_off", "stretched"}
 
 
+SAME_TIMING = [("today", 0.0, 0.4), ("i", 0.9, 0.4), ("want", 1.3, 0.4), ("it", 1.7, 0.4)]
+
+
+def test_a_syllable_caught_on_one_side_only_is_not_called_off_pitch():
+    """实际遇到的：refused 两边都是「re- 低、-fused 往上走」，听着一样。
+    原声的 re- 只测到一小截浊音，被当成邻词蹭进来的剪掉了；你的 re- 测全了、留着。
+    于是拿你的 re- 去比原声的 -fu-，报了「音高偏低 3 个半音」。"""
+    ref_pitch = [(0.0, 0.028, -0.3, -0.3), (0.115, 0.4, 2.9, 5.9)] + FLAT[1:]
+    usr_pitch = [(0.0, 0.114, 0.0, -0.5), (0.115, 0.4, 3.3, 4.7)] + FLAT[1:]
+    ctx = scenario(SAME_TIMING, ref_pitch=ref_pitch, usr_pitch=usr_pitch)
+
+    advice = build_advice(**ctx)
+
+    assert not [a for a in advice if a.ref_index == 0 and a.kind == "pitch_off"]
+
+
+def test_a_word_said_clearly_lower_is_still_called_off_pitch():
+    ref_pitch = [(0.0, 0.4, 3.0, 3.0)] + FLAT[1:]
+    usr_pitch = [(0.0, 0.4, -1.0, -1.0)] + FLAT[1:]
+    ctx = scenario(SAME_TIMING, ref_pitch=ref_pitch, usr_pitch=usr_pitch)
+
+    advice = build_advice(**ctx)
+
+    item = next(a for a in advice if a.ref_index == 0 and a.kind == "pitch_off")
+    assert "偏低" in item.title
+
+
+def test_a_word_held_lower_after_a_matching_start_is_called_off_pitch():
+    """开头对上了，后面整个词都比原声低一截：听起来就是低。
+    只比起音会漏掉这种——起音那一小段恰好一样。"""
+    ref_pitch = [(0.0, 0.114, 1.0, 1.0), (0.115, 0.4, 3.5, 3.5)] + FLAT[1:]
+    usr_pitch = [(0.0, 0.114, 1.0, 1.0), (0.115, 0.4, 0.0, 0.0)] + FLAT[1:]
+    ctx = scenario(SAME_TIMING, ref_pitch=ref_pitch, usr_pitch=usr_pitch)
+
+    advice = build_advice(**ctx)
+
+    item = next(a for a in advice if a.ref_index == 0 and a.kind == "pitch_off")
+    assert "偏低" in item.title
+
+
 def test_a_tiny_word_is_not_flagged_for_a_tiny_overrun():
     """原声 60 毫秒的词，你说了 170 毫秒——比例是 2.8 倍，绝对值只差 110 毫秒。
     转写的词边界本来就有几十毫秒的误差，这种「问题」不可操作，只会稀释真问题。"""

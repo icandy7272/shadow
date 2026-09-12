@@ -9,6 +9,7 @@ from shadow.analysis.prosody import (
     adaptive_pitch_bounds,
     analyse,
     bounds_from_voiced,
+    level_gap,
 )
 
 SR = 16000
@@ -26,6 +27,22 @@ def write_two_tones(path, *, first=220.0, second=440.0, seconds=1.0, amplitude=0
     tail = amplitude * np.sin(2 * np.pi * second * t)
     sf.write(path, np.concatenate([head, tail]).astype(np.float32), SR)
     return path
+
+
+def test_level_gap_is_how_far_your_line_sits_from_the_reference():
+    """图 2 里两条线叠着看到的高低：同一格两边都有浊音才比，逐格相减取中位数。"""
+    ref = (0.0, None, 1.0, 2.0, 3.0, 4.0, 5.0)
+    usr = (None, 9.0, -1.0, 0.0, 1.0, 2.0, 3.0)
+
+    assert level_gap(ref, usr) == pytest.approx(-2.0)
+
+
+def test_level_gap_refuses_when_too_few_points_line_up():
+    """共同的格太少，比出来的只是噪声。宁可不判。"""
+    ref = (1.0, 1.0, None, None, None, None, 1.0)
+    usr = (None, 0.0, 0.0, 0.0, 0.0, 0.0, None)
+
+    assert level_gap(ref, usr) is None
 
 
 def write_two_levels(path, *, seconds=1.0, loud=0.5, quiet=0.25, freq=220.0):

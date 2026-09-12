@@ -110,6 +110,22 @@ def word_pitch(prosody: "Prosody", start: float, end: float) -> "WordPitch | Non
     return WordPitch(head=head, tail=tail, move=None if arch else tail - head)
 
 
+def level_gap(ref_trace: tuple[float | None, ...], usr_trace: tuple[float | None, ...], *,
+              min_points: int = config.WORD_MOVE_MIN_POINTS) -> float | None:
+    """你的线比原声高（正）或低（负）多少半音：同一格两边都有浊音才比，
+    逐格相减取中位数。就是图 2 里两条线叠在一起看到的高低。
+
+    不先各自摘成「起音」再比：浊音是估出来的。原声 refused 的 re- 只测到一小截，
+    被当成邻词蹭进来的剪掉了；你的 re- 测全了、留着——两个「起音」成了两个音节，
+    听着一样却报「偏低 3 个半音」。共同的格太少就不下结论。
+    """
+    diffs = [usr - ref for ref, usr in zip(ref_trace, usr_trace)
+             if ref is not None and usr is not None]
+    if len(diffs) < min_points:
+        return None
+    return float(np.median(diffs))
+
+
 def bounds_from_voiced(
     voiced: np.ndarray, *, floor: float, ceiling: float
 ) -> tuple[float, float]:
