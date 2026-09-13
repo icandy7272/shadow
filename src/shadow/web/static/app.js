@@ -368,29 +368,83 @@ if (root) {
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  const playOnce = () => new Promise((resolve) => {
-    // 这里刻意不套变速：这几遍是你马上要模仿的东西，放慢了就不是它了，
-    // 而比对仍拿原速的原声当基准，每个词都会显得拖长。
-    const audio = new Audio(src);
-    audio.addEventListener("ended", resolve, { once: true });
-    audio.addEventListener("error", resolve, { once: true });
-    audio.play();
+  // 跟读前的示范原声和开录前的嘀声，都走 Web Audio，不用 <audio>。
+  //
+  // iPhone 上麦克风一打开，<audio> 会被系统打断停在半路，也不再发 ended——
+  // 实测只放了一遍，后面整个流程就卡在那儿等。Web Audio 的上下文趁点「开始」
+  // 那一下解锁，之后每一遍都能放；万一 ended 还是没来，按时长兜底往下走。
+  //
+  // 这里刻意不套变速：这几遍是你马上要模仿的东西，放慢了就不是它了，
+  // 而比对仍拿原速的原声当基准，每个词都会显得拖长。
+  function createSpeaker() {
+    const Context = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Context();
+    const wake = () => { ctx.resume().catch(() => {}); };   // 在点击里调用，iPhone 才放行
+    wake();
+    const clip = fetch(src)
+      .then((response) => {
+        if (!response.ok) throw new Error(`原声没取到（${response.status}）`);
+        return response.arrayBuffer();
+      })
+      .then((data) => ctx.decodeAudioData(data));
+    clip.catch(() => {});   // 先别报：等 ready() 时由调用方说清楚
+
+    return {
+      ready: () => clip,
+      running: () => ctx.state === "running",
+      wake,
+      // 放一遍，放完才返回。ended 没来就按时长兜底，绝不卡住
+      async play() {
+        const buffer = await clip;
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        await new Promise((resolve) => {
+          const guard = setTimeout(resolve, buffer.duration * 1000 + 1500);
+          source.addEventListener("ended", () => {
+            clearTimeout(guard);
+            resolve();
+          }, { once: true });
+          source.start();
+        });
+      },
+      // 嘀一声：戴着耳机时看不见屏幕，必须用声音提示开录
+      async beep() {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.14);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.15);
+        await sleep(220);
+      },
+      close: () => { ctx.close().catch(() => {}); },
+    };
+  }
+
+  // 手机不让出声时（没有点击，iPhone 会把声音挂起），让人点一下：点击里再解锁一次
+  const tapToContinue = (label, onTap) => new Promise((resolve) => {
+    const button = el("button", "primary", label);
+    button.addEventListener("click", () => {
+      onTap();
+      button.remove();
+      resolve();
+    }, { once: true });
+    document.querySelector("#step-record .live-row").append(button);
   });
 
-  // 嘀一声：戴着耳机时看不见屏幕，必须用声音提示开录
-  const beep = async () => {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.14);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.15);
-    await sleep(220);
-    ctx.close();
+  // 声音被挂起了就先叫醒；叫不醒（没有点击不放行）才请人点一下
+  const awake = async (speaker) => {
+    if (speaker.running()) return;
+    speaker.wake();
+    for (let i = 0; i < 10 && !speaker.running(); i += 1) await sleep(50);
+    if (speaker.running()) return;
+    status.classList.remove("live");
+    status.textContent = "手机把声音停了，点一下按钮接着放。";
+    await tapToContinue("接着放", speaker.wake);
   };
 
   const recordOne = (stream) => new Promise((resolve) => {
@@ -427,6 +481,7 @@ if (root) {
 
   startButton?.addEventListener("click", async () => {
     stopLoops();                // 连播还开着的话会录进去
+    const speaker = createSpeaker();     // 趁这一下点击解锁声音，原声同时开始下载
     const takes = Math.max(1, Number(document.getElementById("takes").value) || 1);
     const pre = Math.max(0, Number(document.getElementById("prelisten").value) || 0);
     startButton.disabled = true;
@@ -442,7 +497,25 @@ if (root) {
       });
     } catch (err) {
       status.textContent = "拿不到麦克风权限。浏览器地址栏左侧可以重新允许。";
+      speaker.close();
       startButton.disabled = false;
+      return;
+    }
+    const wrapUp = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      speaker.close();
+      status.classList.remove("live");
+      startButton.disabled = false;
+    };
+
+    status.textContent = "正在准备原声 …";
+    const outcome = await Promise.race([
+      speaker.ready().then(() => "ok", (err) => err.message || "原声解不开"),
+      sleep(20000).then(() => "原声 20 秒还没下载完"),
+    ]);
+    if (outcome !== "ok") {
+      status.textContent = `${outcome}。检查一下网络，再点「开始」。`;
+      wrapUp();
       return;
     }
 
@@ -451,12 +524,14 @@ if (root) {
     for (let take = 1; take <= takes; ) {
       status.classList.remove("live");
       for (let i = 1; i <= pre; i += 1) {
+        await awake(speaker);
         status.textContent = `第 ${take}/${takes} 遍 —— 先听 ${i}/${pre}`;
-        await playOnce();
+        await speaker.play();
         await sleep(400);
       }
+      await awake(speaker);
       status.textContent = `第 ${take}/${takes} 遍 —— 嘀一声之后开始说`;
-      await beep();
+      await speaker.beep();
       status.textContent = `第 ${take}/${takes} 遍 —— 录音中，说完点「说完了」`;
       status.classList.add("live");
       const clip = await recordOne(stream);
