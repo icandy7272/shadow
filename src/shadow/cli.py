@@ -436,20 +436,42 @@ def _reload_dirs() -> list[str]:
     return [str(Path(__file__).parent)]
 
 
+def _start_tunnel(port: int):
+    """配了隧道就顺带连上：电脑、手机都用同一个 HTTPS 网址。配置写错了不耽误本机用。"""
+    from . import tunnel
+
+    try:
+        settings = tunnel.load()
+    except tunnel.TunnelError as exc:
+        print(f"隧道没开：{exc}", file=sys.stderr)
+        return None
+    if settings is None:
+        return None
+    link = tunnel.Tunnel(settings, port)
+    link.start()
+    print(f"电脑、手机都打开 {settings.url}")
+    return link
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
     _open_db()      # 确保库和目录就绪
     host = "0.0.0.0" if args.lan else args.host      # noqa: S104
-    print(f"打开 http://{'127.0.0.1' if args.lan else host}:{args.port}")
+    link = _start_tunnel(args.port) if args.tunnel else None
+    print(f"本机打开 http://{'127.0.0.1' if args.lan else host}:{args.port}")
     if args.lan:
         address = _lan_address()
         if address:
             print(f"手机同一个 Wi-Fi 下打开 http://{address}:{args.port}")
         print("注意：手机上录不了音——浏览器只在 HTTPS 或 localhost 下给"
               "麦克风权限。盲听和默写照常。")
-    uvicorn.run("shadow.web.app:app", host=host, port=args.port,
-                reload=args.reload, reload_dirs=_reload_dirs(), log_level="warning")
+    try:
+        uvicorn.run("shadow.web.app:app", host=host, port=args.port,
+                    reload=args.reload, reload_dirs=_reload_dirs(), log_level="warning")
+    finally:
+        if link is not None:
+            link.stop()
     return 0
 
 
@@ -620,6 +642,8 @@ def build_parser() -> argparse.ArgumentParser:
     # 改了代码而页面还跑着旧进程，给出的反馈会是错的，而且看不出来。
     p_serve.add_argument("--no-reload", dest="reload", action="store_false",
                          help="关掉改代码自动重载")
+    p_serve.add_argument("--no-tunnel", dest="tunnel", action="store_false",
+                         help="这一次不连 ~/.shadow/tunnel.toml 里配的隧道")
     p_serve.set_defaults(reload=True)
     p_serve.set_defaults(func=cmd_serve)
 

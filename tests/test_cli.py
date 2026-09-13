@@ -288,3 +288,84 @@ def test_progress_shows_dictation_scores(capsys):
     assert "2/4" in out
     assert "不会 1" in out
     assert "一遍过" in out
+
+
+class FakeTunnel:
+    made = []
+
+    def __init__(self, settings, local_port):
+        self.settings, self.local_port = settings, local_port
+        self.events = []
+        FakeTunnel.made.append(self)
+
+    def start(self):
+        self.events.append("start")
+
+    def stop(self):
+        self.events.append("stop")
+
+
+def _serve_with_fakes(monkeypatch, *, tunnel_config=None, crash=False):
+    from shadow import tunnel
+
+    if tunnel_config is not None:
+        path = tunnel.config_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(tunnel_config, encoding="utf-8")
+    FakeTunnel.made = []
+    monkeypatch.setattr(tunnel, "Tunnel", FakeTunnel)
+    seen = {}
+
+    class FakeUvicorn:
+        @staticmethod
+        def run(app, **kwargs):
+            seen.update(kwargs)
+            if crash:
+                raise RuntimeError("address already in use")
+
+    monkeypatch.setitem(sys.modules, "uvicorn", FakeUvicorn)
+    return seen
+
+
+TUNNEL_CONFIG = ('ssh_host = "cloud"\nremote_port = 18000\n'
+                 'url = "https://shadow.example.com"\n')
+
+
+def test_serve_brings_up_the_tunnel_when_configured(monkeypatch, capsys):
+    """网址记不住，手机上又录不了音：配了隧道，就用同一个 HTTPS 网址打开。"""
+    _serve_with_fakes(monkeypatch, tunnel_config=TUNNEL_CONFIG)
+
+    assert cli.main(["serve", "--port", "8123"]) == 0
+
+    [link] = FakeTunnel.made
+    assert (link.settings.ssh_host, link.local_port) == ("cloud", 8123)
+    assert link.events == ["start", "stop"]
+    assert "https://shadow.example.com" in capsys.readouterr().out
+
+
+def test_serve_closes_the_tunnel_even_when_the_server_fails(monkeypatch):
+    _serve_with_fakes(monkeypatch, tunnel_config=TUNNEL_CONFIG, crash=True)
+
+    with pytest.raises(RuntimeError):
+        cli.main(["serve"])
+
+    assert FakeTunnel.made[0].events == ["start", "stop"]
+
+
+def test_serve_can_skip_the_tunnel(monkeypatch):
+    seen = _serve_with_fakes(monkeypatch, tunnel_config=TUNNEL_CONFIG)
+
+    assert cli.main(["serve", "--no-tunnel"]) == 0
+
+    assert FakeTunnel.made == []
+    assert seen["host"] == "127.0.0.1"
+
+
+def test_a_broken_tunnel_config_still_serves_locally(monkeypatch, capsys):
+    seen = _serve_with_fakes(monkeypatch, tunnel_config="remote_port = 80\n")
+
+    assert cli.main(["serve"]) == 0
+
+    assert FakeTunnel.made == []
+    assert seen["host"] == "127.0.0.1"
+    assert "tunnel.toml" in capsys.readouterr().err

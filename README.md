@@ -34,6 +34,24 @@ uv run shadow serve           # 打开 http://127.0.0.1:8000
   所以手机上盲听和默写照常，跟读要用电脑。
 - 服务在终端里跑，关掉终端就停了；页面顶上的指示灯会提示，并给出重新启动的命令。
 
+### 挂到自己的域名上（可选）
+
+局域网 IP 记不住，手机上又得是 HTTPS 才给麦克风——可以借一台有公网 IP 的服务器中转：
+浏览器 → 服务器 nginx（HTTPS + 访问密码）→ SSH 反向隧道 → 本机。活全在本机干，服务器只转发。
+
+1. 域名加一条 A 记录指向服务器；服务器上照 [`deploy/nginx.conf.example`](deploy/nginx.conf.example)
+   配 nginx、签证书、设访问密码，离线页用 [`deploy/offline.html`](deploy/offline.html)。
+2. 确认本机能用密钥 `ssh <主机名>` 登上服务器，然后写 `~/.shadow/tunnel.toml`：
+
+   ```toml
+   ssh_host = "cloud"                   # ~/.ssh/config 里的主机名
+   remote_port = 18000                  # 和 nginx 里 proxy_pass 的端口一致
+   url = "https://shadow.example.com"
+   ```
+
+3. 照常 `uv run shadow serve`，隧道会一起连上，断了自动重连，Ctrl+C 一起停。
+   这一次不想开隧道就加 `--no-tunnel`。
+
 ## 一句怎么练
 
 1. **盲听。** 不看文字，连播几遍，给自己打分（1 几乎没听懂 … 5 每个词都清楚）。

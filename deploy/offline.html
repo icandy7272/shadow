@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 服务一起来，这一页刷新就回到原来的页面 -->
+<meta http-equiv="refresh" content="10">
+<title>Shadow 没开</title>
+<style>
+  :root { --bg: #fbfbfa; --fg: #1a1a1a; --muted: #6b6b6b; --line: #e2e0dc;
+          --card: #ffffff; --warn: #d62728; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16171a; --fg: #e8e6e3; --muted: #9a9a9a; --line: #2c2e33;
+            --card: #1d1f23; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.6 -apple-system, "PingFang SC", system-ui, sans-serif; }
+  main { max-width: 520px; margin: 12vh auto 0; padding: 0 20px; }
+  h1 { font-size: 20px; margin: 0 0 10px; display: flex; align-items: center; gap: 10px; }
+  h1 i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
+  p { margin: 0 0 14px; color: var(--muted); }
+  code { display: block; margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--line);
+         border-radius: 7px; background: var(--card); color: var(--fg); font-size: 14px;
+         overflow-wrap: anywhere; user-select: all; }
+</style>
+</head>
+<body>
+<main>
+  <h1><i></i>家里电脑上的 Shadow 没开</h1>
+  <p>网址没问题，是电脑上的服务没在跑，或者电脑没联网。在电脑的终端里运行：</p>
+  <code>uv run shadow serve</code>
+  <p>开好之后这一页会自己刷新，不用管它。</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,68 @@
+# 把本机的 shadow 挂到自己的域名上：
+#   浏览器 → 这台服务器（HTTPS + 访问密码）→ SSH 反向隧道 → 本机的 shadow serve
+# 活全在本机干，服务器只转发。
+#
+# 把 shadow.example.com 换成你的子域名，18000 换成 ~/.shadow/tunnel.toml 里的 remote_port。
+#
+# 1. 域名加一条 A 记录指向这台服务器。
+# 2. 本文件放到 /etc/nginx/sites-available/，软链到 sites-enabled/。
+#    先把第二个 server（443）注释掉，nginx -t && systemctl reload nginx
+# 3. certbot certonly --nginx -d shadow.example.com
+# 4. 设访问密码。在自己的终端里输，别写进脚本或命令历史：
+#      read -rsp "访问密码：" pw; echo
+#      printf "shadow:%s\n" "$(printf %s "$pw" | openssl passwd -apr1 -stdin)" > /etc/nginx/shadow.htpasswd
+#      chown root:www-data /etc/nginx/shadow.htpasswd && chmod 640 /etc/nginx/shadow.htpasswd
+# 5. 仓库里的 deploy/offline.html 放到 /var/www/shadow-offline/index.html
+# 6. 放开第二个 server，nginx -t && systemctl reload nginx
+
+server {
+    listen 80;
+    server_name shadow.example.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name shadow.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/shadow.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/shadow.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    auth_basic "Shadow";
+    auth_basic_user_file /etc/nginx/shadow.htpasswd;
+
+    # 几遍录音一起上传，默认的 1m 不够
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:18000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # 跟读比对的进度是一行一行流式返回的，缓冲住就看不到进度条
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 5s;
+    }
+
+    # 隧道没连上（电脑上的服务没开）时给个说明，而不是 nginx 的默认报错页。
+    # 状态码仍是 502，页面顶上的服务指示灯照常变红。
+    error_page 502 504 /shadow-offline.html;
+    location = /shadow-offline.html {
+        root /var/www/shadow-offline;
+        try_files /index.html =404;
+        add_header Cache-Control "no-store" always;
+        auth_basic off;
+        internal;
+    }
+}
