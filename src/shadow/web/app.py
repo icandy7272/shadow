@@ -155,32 +155,61 @@ def _unit_words(connection, segment_id: int, unit: int):
     return segment, units[unit - 1]
 
 
+def _all_units(connection, source_id: int) -> list[dict]:
+    """一份素材切出来的每一句，按先后排成一条，练得了的和练不了的都在。"""
+    source = db.get_source(connection, source_id)
+    if source is None or source["status"] != db.STATUS_READY:
+        return []
+    out = []
+    for segment in db.list_segments(connection, source_id):
+        full = db.get_segment(connection, segment["id"])
+        for number, words in enumerate(split_into_units(full["words"]), 1):
+            out.append({
+                "segment": segment["id"],
+                "unit": number,
+                "source": source["title"],
+                "text": " ".join(w.text for w in words),
+                "seconds": words[-1].end - words[0].start,
+                "words": len(words),
+                "usable": media.unit_problem(source["audio_path"], words) is None,
+            })
+    return out
+
+
+def _numbered(units: list[dict]) -> list[dict]:
+    """能练的句子连着编号。练不了的（音频里没有这句、时间戳挤坏了）不列、不计数、不占编号。"""
+    usable = [item for item in units if item["usable"]]
+    return [{**item, "number": order} for order, item in enumerate(usable, 1)]
+
+
 def _place(connection, segment_id: int, unit: int) -> dict:
     """这一句在它那份素材里排第几，以及前后能练的是哪一句。
 
     翻页按句子走，不在片段边界上断掉——那个边界是切素材时的实现细节。
-    但不跨素材：两份素材各练各的。
+    但不跨素材：两份素材各练各的。练不了的句子没有编号；直接打开这种句子
+    （旧链接、生词本里的出处）时，前后照样指到最近的能练的那句。
     """
     source_id = db.get_segment(connection, segment_id)["source_id"]
-    sentences = _sentences(connection, source_id)
-    here = next((i for i, item in enumerate(sentences)
-                 if item["segment"] == segment_id and item["unit"] == unit), None)
-    if here is None:
+    units = _all_units(connection, source_id)
+    sentences = _numbered(units)
+    position = next((i for i, item in enumerate(units)
+                     if item["segment"] == segment_id and item["unit"] == unit), None)
+    if position is None:
         return {"number": unit, "total_units": len(sentences),
                 "prev_unit": None, "next_unit": None, "source": "",
                 "source_id": source_id}
+    by_key = {(item["segment"], item["unit"]): item for item in sentences}
 
-    def hunt(step: int):
-        index = here + step
-        while 0 <= index < len(sentences):
-            if sentences[index]["usable"]:
-                return sentences[index]
-            index += step
-        return None
+    def numbered(item):
+        return None if item is None else by_key[(item["segment"], item["unit"])]
 
-    return {"number": here + 1, "total_units": len(sentences),
-            "source": sentences[here]["source"], "source_id": source_id,
-            "prev_unit": hunt(-1), "next_unit": hunt(1)}
+    before = next((item for item in reversed(units[:position]) if item["usable"]), None)
+    after = next((item for item in units[position + 1:] if item["usable"]), None)
+    here = by_key.get((segment_id, unit))
+    return {"number": here["number"] if here else None,
+            "total_units": len(sentences),
+            "source": units[position]["source"], "source_id": source_id,
+            "prev_unit": numbered(before), "next_unit": numbered(after)}
 
 
 def _unit_reference(connection, segment_id: int, unit: int):
@@ -221,32 +250,12 @@ def _recurring(metrics: list[dict]) -> int:
 
 
 def _sentences(connection, source_id: int) -> list[dict]:
-    """一份素材的全部句子，按先后排成一条。
+    """一份素材里能练的句子，按先后排成一条、连着编号。
 
     「片段」只是切素材时为了保住语义块用的中间层，练的是句子。
     所以对外只有句子和它的序号，翻页也是一句接一句，不在段边界上断掉。
     """
-    source = db.get_source(connection, source_id)
-    if source is None or source["status"] != db.STATUS_READY:
-        return []
-    out = []
-    for segment in db.list_segments(connection, source_id):
-        full = db.get_segment(connection, segment["id"])
-        for number, words in enumerate(split_into_units(full["words"]), 1):
-            problem = media.unit_problem(source["audio_path"], words)
-            out.append({
-                "segment": segment["id"],
-                "unit": number,
-                "source": source["title"],
-                "text": " ".join(w.text for w in words),
-                "seconds": words[-1].end - words[0].start,
-                "words": len(words),
-                "usable": problem is None,
-                "problem": problem,
-            })
-    for order, item in enumerate(out, 1):
-        item["number"] = order
-    return out
+    return _numbered(_all_units(connection, source_id))
 
 
 @app.get("/")

@@ -48,15 +48,11 @@
         data-rating="{{ item.rating if item.rating is not none else '' }}">
       <td class="num">{{ item.number }}</td>
       <td>
-        {% if not item.usable %}
-          <span class="broken">{{ '音频里没有这句' if item.problem == 'silent' else '时间戳异常' }}，无法练习</span>
-        {% else %}
         <a href="/practice/{{ item.segment }}/{{ item.unit }}">
           {% if item.runs %}{{ item.text }}
           {% else %}<span class="masked" data-text="{{ item.text }}">未练过 · {{ item.words }} 个词</span>
           {% endif %}
         </a>
-        {% endif %}
       </td>
       <td class="num">{{ '%.1f'|format(item.seconds) }}s</td>
       <td class="num">{{ item.words }}</td>

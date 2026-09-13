@@ -100,22 +100,29 @@ ENERGY_BLOCK_SEC = 60.0         # 整段素材分块读，一小时的也不会�
 
 
 @lru_cache(maxsize=8)
-def _source_energy(path: str, mtime: float) -> tuple[float, np.ndarray, float]:
+def _source_energy(path: str, mtime: float) -> tuple[float, np.ndarray, float] | None:
     """整段素材的逐帧能量，以及它「在说话」时的典型响度。
 
     一份素材每个进程只算一次；mtime 只用来进缓存键，素材文件换了就重算。
     返回 (帧移秒数, 逐帧能量, 典型响度)。帧长、帧移与 _frame_energy_db 一致。
+    文件读不出来返回 None，也缓存住：免得一页里每一句都去重读一遍坏文件。
     """
-    info = sf.info(path)
-    win, hop = int(0.025 * info.samplerate), int(0.01 * info.samplerate)
-    block = hop * int(ENERGY_BLOCK_SEC / 0.01)      # 块长取帧移的整数倍，前后块的帧才接得上
-    parts = []
-    for begin in range(0, info.frames, block):
-        samples, sr = sf.read(path, start=begin, stop=min(info.frames, begin + block + win),
-                              dtype="float32", always_2d=False)
-        if samples.ndim > 1:
-            samples = samples.mean(axis=1)
-        parts.append(_frame_energy_db(samples, sr, 0.0)[1][:block // hop])
+    try:
+        info = sf.info(path)
+        win, hop = int(0.025 * info.samplerate), int(0.01 * info.samplerate)
+        block = hop * int(ENERGY_BLOCK_SEC / 0.01)      # 块长取帧移的整数倍，前后块的帧才接得上
+        parts = []
+        for begin in range(0, info.frames, block):
+            samples, sr = sf.read(path, start=begin, stop=min(info.frames, begin + block + win),
+                                  dtype="float32", always_2d=False)
+            if samples.ndim > 1:
+                samples = samples.mean(axis=1)
+            parts.append(_frame_energy_db(samples, sr, 0.0)[1][:block // hop])
+    except (RuntimeError, OSError) as exc:     # soundfile 的 LibsndfileError 是 RuntimeError
+        import logging
+
+        logging.getLogger(__name__).warning("素材读不出来，没法查静音：%s（%s）", path, exc)
+        return None
     energy = np.concatenate(parts) if parts else np.empty(0)
     return hop / info.samplerate, energy, loud_level(energy)
 
@@ -125,14 +132,17 @@ def silent(source: Path | str | None, words) -> bool:
 
     转写偶尔会凭空编出一句，常落在掌声、长停顿上。强制对齐会把它摊到那段
     静音上，词速看着正常，切出来却什么都听不见。
-    素材文件不在就判断不了——判不了就不算没声音，拦错了那句就再也练不到。
+    素材文件不在或读不出来就判断不了——判不了就不算没声音，拦错了那句就再也练不到。
     """
     if not source or not words:
         return False
     path = Path(source)
     if not path.exists():
         return False
-    step, energy, loud = _source_energy(str(path), path.stat().st_mtime)
+    profile = _source_energy(str(path), path.stat().st_mtime)
+    if profile is None:
+        return False
+    step, energy, loud = profile
     first = max(0, int(words[0].start / step))
     last = max(first, math.ceil(words[-1].end / step))
     return voiced_fraction(energy[first:last], loud_db=loud) < config.MIN_VOICED_FRACTION

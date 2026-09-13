@@ -79,6 +79,21 @@ def test_cards_show_progress_and_import_steps(conn):
     assert cards[0].id == busy          # 新导入的在前
 
 
+def test_practised_only_counts_sentences_still_in_the_list(conn):
+    """练过、后来又从列表里消失的句子（比如查出音频里没有它），不该还算进「练过几句」——
+    否则卡片上写练过 37 句，点进去列表里只数得出 35 句。"""
+    source_id = _ready(conn, "A", practised=True)
+    segment_id = db.list_segments(conn, source_id)[0]["id"]
+    run_id = db.start_run(conn, segment_id=segment_id, unit_index=3,
+                          unit_text="A sentence that is gone.")
+    db.set_blind_rating(conn, run_id, 3)
+    db.finish_run(conn, run_id)
+
+    [card] = library.cards(conn)
+
+    assert (card.sentences, card.practised, card.rounds) == (2, 1, 2)
+
+
 def test_remove_deletes_rows_and_files_but_keeps_the_streak(conn):
     doomed = _ready(conn, "A", practised=True)
     kept = _ready(conn, "B")

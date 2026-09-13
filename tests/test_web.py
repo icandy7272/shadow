@@ -782,20 +782,27 @@ def _seed_with_a_phantom_sentence(tmp_path):
 
 def test_a_sentence_the_audio_does_not_contain_is_not_offered(client, tmp_path):
     """转写偶尔凭空编一句。强制对齐把它摊到停顿上，词速正常，老的检查拦不住，
-    切出来却是静音——盲听时一点声音都没有。"""
+    切出来却是静音——盲听时一点声音都没有。练不了的句子不该占着列表、句数和编号。"""
     segment_id = _seed_with_a_phantom_sentence(tmp_path)
 
+    # 直接打开（旧链接、生词本里的出处）还是给个说明和出口
     response = client.get(f"/practice/{segment_id}/2")
     assert response.status_code == 409
     assert "找不到声音" in response.text
     assert f"/practice/{segment_id}/3" in response.text
+    assert "第 None" not in response.text
 
-    # 翻页跳过它，列表里标出来、不给链接
+    # 翻页跳过它，后面的句子接着编号
     assert f'href="/practice/{segment_id}/2"' not in client.get(
         f"/practice/{segment_id}/1").text
+    assert "第 2 句 / 共 2 句" in client.get(f"/practice/{segment_id}/3").text
+
+    # 列表里干脆不列，也不算进句数
     index = client.get("/").text
-    assert "音频里没有这句" in index
+    assert "音频里没有这句" not in index
     assert f'href="/practice/{segment_id}/2"' not in index
+    assert "练过 0 / 2 句" in index
+    assert "练过 0 / 2 句" in client.get("/sources").text
 
 
 def test_a_failed_submit_can_be_sent_again(client, tmp_path):

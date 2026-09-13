@@ -79,8 +79,6 @@ tr.fresh .masked { color: var(--muted); font-style: italic; }
 button.stop { border-color: var(--warn); color: var(--warn); }
 button:disabled { opacity: .5; cursor: default; }
 
-.broken { color: var(--warn); font-size: 13px; opacity: .7; }
-
 .status { color: var(--muted); font-size: 14px; min-height: 1.4em; margin: 8px 0; }
 .status.live { color: var(--warn); font-weight: 500; }
 #stop-take { border-color: var(--warn); color: var(--warn); font-size: 16px;

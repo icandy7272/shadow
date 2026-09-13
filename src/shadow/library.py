@@ -68,9 +68,15 @@ def select(conn, source_id: int) -> None:
     db.set_setting(conn, CURRENT, str(source_id))
 
 
-def _sentence_count(conn, source_id: int) -> int:
-    return sum(len(split_into_units(db.get_segment(conn, row["id"])["words"]))
-               for row in db.list_segments(conn, source_id))
+def _usable_texts(conn, source_id: int) -> list[str]:
+    """能练的句子原文，按先后排。音频里没有这句、时间戳挤坏了的不算——列表里也不列它们。"""
+    from . import media
+
+    audio = db.get_source(conn, source_id)["audio_path"]
+    return [" ".join(word.text for word in words)
+            for row in db.list_segments(conn, source_id)
+            for words in split_into_units(db.get_segment(conn, row["id"])["words"])
+            if media.unit_problem(audio, words) is None]
 
 
 def _local_day(stamp: str | None) -> str | None:
@@ -88,13 +94,15 @@ def cards(conn) -> list[Card]:
     out = []
     for row in reversed(db.list_sources(conn)):
         runs = db.source_runs(conn, row["id"])
+        texts = _usable_texts(conn, row["id"]) if row["status"] == db.STATUS_READY else []
+        # 和列表对得上：练过、后来又不列了的句子不算进「练过几句」
+        done = {run["unit_text"] for run in runs if run["unit_text"]}
         out.append(Card(
             id=row["id"], title=row["title"], status=row["status"],
             step=STEPS.get(row["status"]), error=row["error"],
             minutes=row["duration_sec"] / 60,
-            sentences=(_sentence_count(conn, row["id"])
-                       if row["status"] == db.STATUS_READY else 0),
-            practised=len({run["unit_text"] for run in runs if run["unit_text"]}),
+            sentences=len(texts),
+            practised=sum(1 for text in texts if text in done),
             rounds=len(runs), takes=db.count_takes(conn, row["id"]),
             last_practised=_local_day(_last_practised(runs)),
             current=row["id"] == chosen,

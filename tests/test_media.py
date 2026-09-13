@@ -254,6 +254,18 @@ def test_a_missing_source_is_not_called_silent(tmp_path):
     assert not media.silent(None, words)
 
 
+def test_an_unreadable_source_is_not_called_silent(tmp_path):
+    """文件在、却读不出来（下到一半、坏了）也是判断不了，照样别拦——
+    素材库页面也要数能练几句，不能因为一个坏文件整页报错。"""
+    from shadow.models import Word
+
+    broken = tmp_path / "broken.wav"
+    broken.write_bytes(b"RIFF")
+    words = (Word(text="a", start=0.1, end=0.5),)
+
+    assert not media.silent(broken, words)
+
+
 def test_silence_is_rechecked_when_the_source_changes(tmp_path):
     """一份素材的能量只算一次——但文件换了，缓存得跟着失效。"""
     import os
