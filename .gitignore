@@ -4,3 +4,12 @@ __pycache__/
 node_modules/
 dist/
 .DS_Store
+.pytest_cache/
+
+# 个人数据：练习库、录音、词典都在 ~/.shadow，别误提交进仓库
+*.db
+*.db-*
+*.sqlite
+*.wav
+*.webm
+.env
