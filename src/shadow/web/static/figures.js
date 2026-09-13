@@ -497,19 +497,63 @@ function playback(rhythm, audio, onFrame, onStopped) {
   [ref, usr].forEach((media) => { media.preload = "auto"; speed.follow(media); });
   const offsets = new Map([[ref, audio.refOffset], [usr, audio.usrOffset]]);
   const panners = new Map();
+  const primed = new WeakSet();
+  const LOAD_WAIT_MS = 8000;      // 元数据等这么久还没来，就当加载失败
+  const SEEK_WAIT_MS = 1500;
+  const RESUME_WAIT_MS = 1000;
   let context = null;
   let timer = null;
   let session = 0;
 
-  // 元数据没到位时 currentTime 定位会被忽略，两条音轨就会各从头播，听着一前一后
+  const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+  // iPhone 不会自己去加载音频，也不让「不是点出来的」播放出声：preload 被无视，
+  // 等 loadedmetadata 会一直等下去（实测原声只发了个 2 字节的试探请求），
+  // 隔了几个 await 再 play() 也会被拒。所以在点击里、任何 await 之前，
+  // 先让要用的那条起播一下再立刻停：它从此开始加载，之后再 play 也放行。
+  function prime(media) {
+    if (primed.has(media)) return;
+    primed.add(media);
+    const attempt = media.play();
+    media.pause();
+    if (attempt) attempt.catch(() => {});   // 立刻暂停会报「被打断」，是预期内的
+  }
+
+  // 元数据没到位时 currentTime 定位会被忽略，两条音轨就会各从头播，听着一前一后。
+  // 等不来返回 false：宁可这次不放，也别让按钮一直停在「停」上
   const ready = (media) => (media.readyState >= 1
-    ? Promise.resolve()
-    : new Promise((done) => media.addEventListener("loadedmetadata", done,
-                                                   { once: true })));
+    ? Promise.resolve(true)
+    : new Promise((done) => {
+      const giveUp = setTimeout(() => done(false), LOAD_WAIT_MS);
+      media.addEventListener("loadedmetadata", () => {
+        clearTimeout(giveUp);
+        done(true);
+      }, { once: true });
+    }));
 
   // 定位没落定就 play，会从旧位置开始放然后跳一下
   const settled = (media) => (media.seeking
-    ? new Promise((done) => media.addEventListener("seeked", done, { once: true }))
+    ? new Promise((done) => {
+      const giveUp = setTimeout(done, SEEK_WAIT_MS);
+      media.addEventListener("seeked", () => {
+        clearTimeout(giveUp);
+        done();
+      }, { once: true });
+    })
+    : Promise.resolve());
+
+  // 起播；被拒（没有点击时 iPhone 会拒）返回 false
+  const begin = (media) => {
+    const attempt = media.play();
+    return attempt ? attempt.then(() => true, () => false) : Promise.resolve(true);
+  };
+
+  // 放不出来时按时长兜底：这一段放完再多等两秒
+  const limit = (seconds) => (seconds / (speed.rate || 1)) * 1000 + 2000;
+
+  // 叫醒声音。Safari 没有点击时 resume() 可能一直不给结果，最多等一会儿
+  const wake = () => (context.state === "suspended"
+    ? Promise.race([context.resume().catch(() => {}), sleep(RESUME_WAIT_MS)])
     : Promise.resolve());
 
   function graph() {
@@ -544,10 +588,15 @@ function playback(rhythm, audio, onFrame, onStopped) {
   async function play(tracks, spread) {
     halt();
     const mine = session;
+    tracks.forEach(prime);                 // 必须在第一个 await 之前
     graph();
-    if (context.state === "suspended") await context.resume();
-    await Promise.all(tracks.map(ready));
+    await wake();
+    const loaded = await Promise.all(tracks.map(ready));
     if (mine !== session) return;          // 加载期间被叫停了
+    if (!loaded.every(Boolean)) {
+      stop();
+      return;
+    }
 
     tracks.forEach((media) => {
       const panner = panners.get(media);
@@ -556,11 +605,19 @@ function playback(rhythm, audio, onFrame, onStopped) {
     });
     await Promise.all(tracks.map(settled));
     if (mine !== session) return;
-    tracks.forEach((media) => media.play());
+    const started = await Promise.all(tracks.map(begin));
+    if (mine !== session) return;
+    if (!started.every(Boolean)) {
+      stop();
+      return;
+    }
 
     // 跟音频自己的时钟走，不用墙上时间：起播有几十毫秒延迟，缓冲还可能再顿一下。
     // 计时用 setInterval 而不是 requestAnimationFrame：切到别的标签页 rAF 会整个
     // 停掉，声音还在放而播放头卡住，按钮永远停在「停」上。
+    // 墙上时间只用来兜底：音频要是一直不走，到点也收掉。
+    const since = performance.now();
+    const cap = limit(rhythm.seconds);
     timer = setInterval(() => {
       const elapsed = Math.max(...tracks.map((m) => m.currentTime - offsets.get(m)));
       onFrame({
@@ -568,26 +625,32 @@ function playback(rhythm, audio, onFrame, onStopped) {
         ref: tracks.includes(ref) ? ref.currentTime : null,
         usr: tracks.includes(usr) ? usr.currentTime : null,
       });
-      if (tracks.every((media) => media.ended) || elapsed > rhythm.seconds + 0.6) {
+      if (tracks.every((media) => media.ended) || elapsed > rhythm.seconds + 0.6
+          || performance.now() - since > cap) {
         stop();
       }
     }, 16);
   }
 
-  const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
-
   function clip(media, from, to, mine) {
     return new Promise((done) => {
       media.currentTime = Math.max(0, from);
-      media.play();
-      const watch = setInterval(() => {
-        if (mine !== session || media.currentTime >= to || media.ended) {
-          clearInterval(watch);
-          media.pause();
-          done();
+      const since = performance.now();
+      const cap = limit(to - from);
+      let watch = null;
+      const finish = () => {
+        clearInterval(watch);
+        media.pause();
+        done();
+      };
+      watch = setInterval(() => {
+        if (mine !== session || media.currentTime >= to || media.ended
+            || performance.now() - since > cap) {
+          finish();
         }
       }, 10);
       timer = watch;
+      begin(media).then((ok) => { if (!ok) finish(); });   // 放不出来就当这段放完了
     });
   }
 
@@ -596,10 +659,15 @@ function playback(rhythm, audio, onFrame, onStopped) {
   async function compare(slot, onSide) {
     halt();
     const mine = session;
+    [ref, usr].forEach(prime);             // 必须在第一个 await 之前
     graph();
-    if (context.state === "suspended") await context.resume();
-    await Promise.all([ready(ref), ready(usr)]);
+    await wake();
+    const loaded = await Promise.all([ready(ref), ready(usr)]);
     if (mine !== session) return;
+    if (!loaded.every(Boolean)) {
+      stop();
+      return;
+    }
 
     const parts = [[ref, slot.refAt, "ref"], [usr, slot.usrAt, "usr"]]
       .filter(([, at]) => at);
@@ -622,11 +690,16 @@ function playback(rhythm, audio, onFrame, onStopped) {
   async function playOne(side, at, onSide) {
     halt();
     const mine = session;
-    graph();
-    if (context.state === "suspended") await context.resume();
     const media = side === "ref" ? ref : usr;
-    await ready(media);
+    prime(media);                          // 必须在第一个 await 之前
+    graph();
+    await wake();
+    const loaded = await ready(media);
     if (mine !== session) return;
+    if (!loaded) {
+      stop();
+      return;
+    }
     const panner = panners.get(media);
     if (panner) panner.pan.value = 0;
 
