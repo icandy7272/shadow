@@ -453,13 +453,44 @@ def _start_tunnel(port: int):
     return link
 
 
+def _exit_cleanly(signum, frame) -> None:
+    raise SystemExit(128 + signum)
+
+
+def _hangup_as_term(signum, frame) -> None:
+    """关终端窗口来的是 SIGHUP，当成 SIGTERM：让 uvicorn 照常体面地停。"""
+    import signal
+
+    signal.raise_signal(signal.SIGTERM)
+
+
+def _catch_exit_signals() -> dict:
+    """隧道开着时，被杀或关终端也得走到 finally，把连着服务器的 ssh 收掉。
+
+    uvicorn 收到 SIGTERM 体面停完，会恢复原来的处理再把信号抛一次；关终端窗口来的是 SIGHUP。
+    两者默认都直接杀进程，finally 来不及跑——实测留下一个占着服务器端口的 ssh。
+    """
+    import signal
+
+    return {signal.SIGTERM: signal.signal(signal.SIGTERM, _exit_cleanly),
+            signal.SIGHUP: signal.signal(signal.SIGHUP, _hangup_as_term)}
+
+
+def _restore_signals(previous: dict) -> None:
+    import signal
+
+    for sig, handler in previous.items():
+        signal.signal(sig, handler)
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
     _open_db()      # 确保库和目录就绪
     host = "0.0.0.0" if args.lan else args.host      # noqa: S104
     link = _start_tunnel(args.port) if args.tunnel else None
-    print(f"本机打开 http://{'127.0.0.1' if args.lan else host}:{args.port}")
+    previous = _catch_exit_signals() if link is not None else {}
+    print(f"本机打开 http://{'127.0.0.1' if args.lan else host}:{args.port}", flush=True)
     if args.lan:
         address = _lan_address()
         if address:
@@ -470,8 +501,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
         uvicorn.run("shadow.web.app:app", host=host, port=args.port,
                     reload=args.reload, reload_dirs=_reload_dirs(), log_level="warning")
     finally:
-        if link is not None:
-            link.stop()
+        try:
+            if link is not None:
+                link.stop()
+        finally:
+            _restore_signals(previous)
     return 0
 
 

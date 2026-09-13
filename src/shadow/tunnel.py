@@ -105,13 +105,17 @@ def _reason(stderr: str | None) -> str:
     return lines[-1] if lines else "ssh 退出了"
 
 
+def _say(note: str) -> None:
+    print(note, flush=True)     # 从后台线程打印，输出重定向到文件时也要马上看得到
+
+
 class Tunnel:
     """后台线程守着 ssh：断了就重连，stop() 时一起收掉。"""
 
     def __init__(self, settings: TunnelConfig, local_port: int, *,
                  spawn: Callable[..., subprocess.Popen] = subprocess.Popen,
                  run: Callable[..., object] = subprocess.run,
-                 report: Callable[[str], None] = print,
+                 report: Callable[[str], None] = _say,
                  retry_delays: Sequence[float] = RETRY_SEC,
                  grace: float = CONNECT_GRACE_SEC) -> None:
         self._settings = settings

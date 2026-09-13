@@ -352,6 +352,31 @@ def test_serve_closes_the_tunnel_even_when_the_server_fails(monkeypatch):
     assert FakeTunnel.made[0].events == ["start", "stop"]
 
 
+def test_serve_closes_the_tunnel_when_killed_or_the_terminal_closes(monkeypatch):
+    """uvicorn 收到 SIGTERM 体面停完，会把信号原样再抛一次；关终端窗口来的是 SIGHUP。
+    两者默认都直接杀进程，finally 来不及跑——实测留下一个连着服务器、占着端口的 ssh。"""
+    import signal
+
+    _serve_with_fakes(monkeypatch, tunnel_config=TUNNEL_CONFIG)
+    before = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    during = {}
+
+    class KilledUvicorn:
+        @staticmethod
+        def run(app, **kwargs):
+            during.update({sig: signal.getsignal(sig) for sig in before})
+            during[signal.SIGTERM](signal.SIGTERM, None)
+
+    monkeypatch.setitem(sys.modules, "uvicorn", KilledUvicorn)
+
+    with pytest.raises(SystemExit):
+        cli.main(["serve"])
+
+    assert FakeTunnel.made[0].events == ["start", "stop"]
+    assert callable(during[signal.SIGHUP])
+    assert {sig: signal.getsignal(sig) for sig in before} == before
+
+
 def test_serve_can_skip_the_tunnel(monkeypatch):
     seen = _serve_with_fakes(monkeypatch, tunnel_config=TUNNEL_CONFIG)
 
