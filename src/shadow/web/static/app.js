@@ -50,6 +50,12 @@ if (filters) {
 }
 
 // ---------- 练习页 ----------
+// 点了打分、对答案、开始，还在连播的原声就停：听两遍就懂了，不必等十遍放完
+const loops = new Set();
+function stopLoops() {
+  loops.forEach((stop) => stop());
+}
+
 const root = document.getElementById("practice");
 if (root) {
   const segment = root.dataset.segment;
@@ -65,13 +71,16 @@ if (root) {
     counts.set(button, 0);
     let audio = null;
     let left = 0;
+    let gap = null;
 
     const finish = () => {
+      clearTimeout(gap);        // 两遍之间有半秒空档，这时停也不能再冒出一遍
       if (audio) { audio.pause(); audio = null; }
       left = 0;
       button.disabled = false;
       if (stop) stop.hidden = true;
     };
+    loops.add(finish);
 
     const playOnce = () => {
       audio = speed.apply(new Audio(button.dataset.src));
@@ -79,13 +88,15 @@ if (root) {
         counts.set(button, counts.get(button) + 1);
         if (label) label.textContent = `听了 ${counts.get(button)} 遍`;
         left -= 1;
-        if (left > 0) setTimeout(playOnce, 500);
+        if (left > 0) gap = setTimeout(playOnce, 500);
         else finish();
       });
-      audio.play();
+      // 刚开播就被停掉，play() 会报「被 pause 打断」，那是预期内的
+      audio.play().catch((err) => { if (err.name !== "AbortError") throw err; });
     };
 
     button.addEventListener("click", () => {
+      stopLoops();              // 另一段还在放就先停，两段叠在一起什么都听不清
       left = Math.max(1, Number(timesInput ? timesInput.value : 1) || 1);
       button.disabled = true;
       if (stop) stop.hidden = false;
@@ -99,6 +110,7 @@ if (root) {
   const listenStep = document.getElementById("step-listen");
   listenStep.querySelectorAll(".rating button").forEach((button) => {
     button.addEventListener("click", async () => {
+      stopLoops();
       listenStep.querySelectorAll(".rating button")
         .forEach((b) => b.classList.remove("chosen"));
       button.classList.add("chosen");
@@ -145,6 +157,7 @@ if (root) {
   });
 
   submitDrill.addEventListener("click", async () => {
+    stopLoops();
     const replayButton = drillStep.querySelector("button.play");
     const box = drillStep.querySelector(".result");
     submitDrill.disabled = true;
@@ -413,6 +426,7 @@ if (root) {
   const minTake = Number(root.dataset.minTake || 1) + 0.3;
 
   startButton?.addEventListener("click", async () => {
+    stopLoops();                // 连播还开着的话会录进去
     const takes = Math.max(1, Number(document.getElementById("takes").value) || 1);
     const pre = Math.max(0, Number(document.getElementById("prelisten").value) || 0);
     startButton.disabled = true;
