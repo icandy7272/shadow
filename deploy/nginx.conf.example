@@ -12,7 +12,8 @@
 #      read -rsp "访问密码：" pw; echo
 #      printf "shadow:%s\n" "$(printf %s "$pw" | openssl passwd -apr1 -stdin)" > /etc/nginx/shadow.htpasswd
 #      chown root:www-data /etc/nginx/shadow.htpasswd && chmod 640 /etc/nginx/shadow.htpasswd
-# 5. 仓库里的 deploy/offline.html 放到 /var/www/shadow-offline/index.html
+# 5. 仓库里的 deploy/offline.html 放到 /var/www/shadow-offline/index.html，
+#    把里面的 ~/path/to/shadow 换成电脑上项目的实际目录（不带 cd 的话，在别的目录里跑会报找不到 shadow）
 # 6. 放开第二个 server，nginx -t && systemctl reload nginx
 
 server {

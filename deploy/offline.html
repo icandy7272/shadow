@@ -27,8 +27,9 @@
 <body>
 <main>
   <h1><i></i>家里电脑上的 Shadow 没开</h1>
-  <p>网址没问题，是电脑上的服务没在跑，或者电脑没联网。在电脑的终端里运行：</p>
-  <code>uv run shadow serve</code>
+  <p>网址没问题，是电脑上的服务没在跑，或者电脑没联网。在电脑的终端里运行（uv run 要在项目目录里跑，所以先 cd 过去）：</p>
+  <!-- 部署时把 ~/path/to/shadow 换成电脑上 shadow 项目的实际目录 -->
+  <code>cd ~/path/to/shadow &amp;&amp; uv run shadow serve</code>
   <p>开好之后这一页会自己刷新，不用管它。</p>
 </main>
 </body>
