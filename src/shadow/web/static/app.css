@@ -540,3 +540,8 @@ a.button:hover { border-color: var(--accent); }
 .step.foldable.done h2::after { content: "已完成 · 点开看默写"; }
 .step.foldable:not(.done) h2::after { content: "收起"; margin-left: auto; font-size: 12px;
   font-weight: 400; color: var(--muted); }
+
+/* 从筛选点进来的：下一句在同一个筛选里找 */
+.pager-note { margin: 10px 2px 0; color: var(--muted); font-size: 13px; text-align: right; }
+.pager-note a { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+.pager-note a:hover { color: var(--accent); }

@@ -17,7 +17,7 @@ from pathlib import Path
 from datetime import date, datetime
 from typing import Annotated
 
-from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
                                RedirectResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
@@ -25,7 +25,8 @@ from fastapi.templating import Jinja2Templates
 
 from collections import Counter
 
-from .. import config, db, dictionary, history, library, media, plan, progress
+from .. import (config, db, dictionary, filters, history, library, media, plan,
+                progress)
 from ..report.takes import recurrence_threshold
 from ..analysis.diff import accuracy as _accuracy
 from ..drill import dictation
@@ -182,12 +183,41 @@ def _numbered(units: list[dict]) -> list[dict]:
     return [{**item, "number": order} for order, item in enumerate(usable, 1)]
 
 
-def _place(connection, segment_id: int, unit: int) -> dict:
+def _practice_states(connection, source_id: int) -> dict[str, filters.State]:
+    """这份素材上每句话练到了什么程度：练过几轮、上次的问题、自评、最后哪天练的。
+
+    只看这份素材上的记录：两份素材里文字相同的句子不能串在一起。
+    """
+    runs, issues, ratings, last = {}, {}, {}, {}
+    for run in db.source_runs(connection, source_id):
+        text = run["unit_text"]
+        metrics = db.run_metrics(connection, run["id"])
+        # 中途取消留下的空记录不算练过
+        if not text or not (run["blind_rating"] is not None
+                            or run["gapfill_total"] is not None or metrics):
+            continue
+        runs[text] = runs.get(text, 0) + 1
+        if run["blind_rating"] is not None:
+            ratings[text] = run["blind_rating"]
+        if metrics:
+            issues[text] = _recurring(metrics)
+        when = _local_day(run["finished_at"] or run["started_at"])
+        if when is not None and (text not in last or when > last[text]):
+            last[text] = when
+    return {text: filters.State(runs=count, issues=issues.get(text, 0),
+                                rating=ratings.get(text), last_day=last.get(text))
+            for text, count in runs.items()}
+
+
+def _place(connection, segment_id: int, unit: int, queue: str | None = None) -> dict:
     """这一句在它那份素材里排第几，以及前后能练的是哪一句。
 
     翻页按句子走，不在片段边界上断掉——那个边界是切素材时的实现细节。
     但不跨素材：两份素材各练各的。练不了的句子没有编号；直接打开这种句子
     （旧链接、生词本里的出处）时，前后照样指到最近的能练的那句。
+
+    从列表的筛选点进来时（queue），前后只在符合这个筛选的句子里找：
+    挑着练过的话，原文的下一句可能根本不用复习，甚至还没练过。
     """
     source_id = db.get_segment(connection, segment_id)["source_id"]
     units = _all_units(connection, source_id)
@@ -197,19 +227,31 @@ def _place(connection, segment_id: int, unit: int) -> dict:
     if position is None:
         return {"number": unit, "total_units": len(sentences),
                 "prev_unit": None, "next_unit": None, "source": "",
-                "source_id": source_id}
+                "source_id": source_id, "queue": None}
     by_key = {(item["segment"], item["unit"]): item for item in sentences}
 
-    def numbered(item):
-        return None if item is None else by_key[(item["segment"], item["unit"])]
+    def numbered(index):
+        return None if index is None else by_key[(units[index]["segment"], units[index]["unit"])]
 
-    before = next((item for item in reversed(units[:position]) if item["usable"]), None)
-    after = next((item for item in units[position + 1:] if item["usable"]), None)
+    if queue is None:
+        usable = [item["usable"] for item in units]
+        before = filters.before(usable, position)
+        after = next((i for i in range(position + 1, len(units)) if usable[i]), None)
+        view = None
+    else:
+        states = _practice_states(connection, source_id)
+        today = _today()
+        flags = [item["usable"] and filters.matches(
+                     queue, states.get(item["text"], filters.NEVER), today)
+                 for item in units]
+        before = filters.before(flags, position)
+        after = filters.after(flags, position)
+        view = filters.view(queue, remaining=filters.remaining(flags, position))
     here = by_key.get((segment_id, unit))
     return {"number": here["number"] if here else None,
             "total_units": len(sentences),
             "source": units[position]["source"], "source_id": source_id,
-            "prev_unit": numbered(before), "next_unit": numbered(after)}
+            "prev_unit": numbered(before), "next_unit": numbered(after), "queue": view}
 
 
 def _unit_reference(connection, segment_id: int, unit: int):
@@ -319,31 +361,14 @@ def source_page(request: Request, source_id: int):
         return RedirectResponse("/sources", status_code=303)
     library.select(connection, source_id)     # 打开哪份，哪份就是当前
     catalogue = _sentences(connection, source_id)
-    done, issues, ratings, last = {}, {}, {}, {}
-    # 只看这份素材上的记录：两份素材里文字相同的句子不能串在一起
-    for run in db.source_runs(connection, source_id):
-        text = run["unit_text"]
-        metrics = db.run_metrics(connection, run["id"])
-        # 中途取消留下的空记录不算练过
-        if not text or not (run["blind_rating"] is not None
-                            or run["gapfill_total"] is not None or metrics):
-            continue
-        done.setdefault(text, []).append(run)
-        if run["blind_rating"] is not None:
-            ratings[text] = run["blind_rating"]
-        if metrics:
-            issues[text] = _recurring(metrics)
-        when = _local_day(run["finished_at"] or run["started_at"])
-        if when is not None and (text not in last or when > last[text]):
-            last[text] = when
+    states = _practice_states(connection, source_id)
     today = _today()
     for item in catalogue:
-        text = item["text"]
-        item["runs"] = len(done.get(text, ()))
-        item["issues"] = issues.get(text, 0)
-        item["rating"] = ratings.get(text)
-        item["review"] = plan.needs_review(last.get(text), today,
-                                           issues=item["issues"], rating=item["rating"])
+        state = states.get(item["text"], filters.NEVER)
+        item["runs"] = state.runs
+        item["issues"] = state.issues
+        item["rating"] = state.rating
+        item["review"] = filters.matches(filters.REVIEW, state, today)
     # 没练过的第一句：有个直达入口就不用浏览列表，也就不会被剧透
     next_unit = next((i for i in catalogue if not i["runs"] and i["usable"]), None)
     return templates.TemplateResponse(
@@ -357,10 +382,12 @@ def source_page(request: Request, source_id: int):
 
 
 @app.get("/practice/{segment_id}/{unit}", response_class=HTMLResponse)
-def practice(request: Request, segment_id: int, unit: int):
+def practice(request: Request, segment_id: int, unit: int,
+             from_: Annotated[str | None, Query(alias="from")] = None):
+    """from 是列表上点进来时用的筛选：下一句在同一个筛选里找。"""
     connection = _db()
     segment, words = _unit_words(connection, segment_id, unit)
-    step = _place(connection, segment_id, unit)
+    step = _place(connection, segment_id, unit, filters.parse(from_))
     source = db.get_source(connection, segment["source_id"])
     problem = media.unit_problem(source["audio_path"] if source else None, words)
     if problem:

@@ -95,13 +95,21 @@
 
   <nav class="pager">
     {% if prev_unit %}
-    <a href="/practice/{{ prev_unit.segment }}/{{ prev_unit.unit }}">← 上一句</a>
+    <a href="/practice/{{ prev_unit.segment }}/{{ prev_unit.unit }}{{ queue.query if queue else '' }}">← 上一句</a>
     {% else %}<span></span>{% endif %}
-    {% if next_unit %}
+    {% if next_unit and queue %}
+    <a class="next" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}{{ queue.query }}"
+       >{{ queue.label }}（第 {{ next_unit.number }} 句 · 还剩 {{ queue.remaining }} 句）→</a>
+    {% elif next_unit %}
     <a class="next" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}"
        >练下一句（第 {{ next_unit.number }}/{{ total_units }} 句）→</a>
+    {% elif queue %}
+    <a class="next" href="/sources/{{ source_id }}">{{ queue.done }}，回列表 →</a>
     {% endif %}
   </nav>
+  {% if queue %}
+  <p class="pager-note">正在按「{{ queue.title }}」往下练 · <a href="/practice/{{ segment }}/{{ unit }}">改回原文顺序</a></p>
+  {% endif %}
 
 </div>
 {% endblock %}

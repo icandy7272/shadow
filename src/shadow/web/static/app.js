@@ -39,14 +39,22 @@ if (filters) {
     if (!button) return;
     filters.querySelectorAll("button").forEach(
       (one) => one.classList.toggle("chosen", one === button));
-    const test = keep[button.dataset.filter];
+    const name = button.dataset.filter;
+    const test = keep[name];
     let shown = 0;
     rows.forEach((row) => {
       const ok = test(row);
       row.hidden = !ok;
       if (ok) shown += 1;
+      // 从筛选点进去的句子，练习页的「下一句」也在同一个筛选里找
+      const link = row.querySelector('a[href^="/practice/"]');
+      if (link) {
+        link.dataset.base ??= link.getAttribute("href");
+        link.setAttribute("href",
+          name === "all" ? link.dataset.base : `${link.dataset.base}?from=${name}`);
+      }
     });
-    count.textContent = button.dataset.filter === "all" ? "" : `${shown} 句`;
+    count.textContent = name === "all" ? "" : `${shown} 句`;
   });
 }
 
