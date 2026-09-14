@@ -267,9 +267,11 @@ def _unit_reference(connection, segment_id: int, unit: int):
     if source is None or not source["audio_path"]:
         raise HTTPException(404, "素材音频缺失")
     dest = config.segment_audio_dir() / f"{segment_id}-u{unit}.wav"
-    start, end = media.unit_bounds(Path(source["audio_path"]), words,
-                                   low=segment["start_sec"], high=segment["end_sec"])
-    if not dest.exists():
+    # 边界是前后相邻片段，不是本段自己的起止——那样每段最后一句的词尾会被切掉
+    low, high = db.segment_edges(connection, segment_id)
+    start, end = media.unit_bounds(Path(source["audio_path"]), words, low=low, high=high)
+    # 缓存按时长认：切法改过的旧文件（比如切掉了词尾的）自动重切
+    if not media.cut_matches(dest, end - start):
         media.cut_segment(Path(source["audio_path"]), dest, start=start, end=end)
     # 裁剪点贴到停顿上之后可能晚于转写给的首词起点，钳到 0
     rebased = tuple(

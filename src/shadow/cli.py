@@ -117,9 +117,10 @@ def _segment_reference(connection, segment_id: int, dest: Path, *,
                 f"片段 {segment_id} 只有 {len(units)} 个练习单元，没有第 {unit} 个"
             )
         words = units[unit - 1]
+        # 边界是前后相邻片段，不是本段自己的起止——那样每段最后一句的词尾会被切掉
+        low, high = db.segment_edges(connection, segment_id)
         start, end = media.unit_bounds(Path(source["audio_path"]), words,
-                                       low=segment["start_sec"],
-                                       high=segment["end_sec"])
+                                       low=low, high=high)
 
     media.cut_segment(Path(source["audio_path"]), dest, start=start, end=end)
     # 裁剪点贴到停顿上之后可能晚于转写给的首词起点，钳到 0

@@ -85,13 +85,27 @@ def snap_to_silence(path: Path, at: float, *, fallback: float,
 def unit_bounds(source: Path, words, *, low: float, high: float):
     """一个练习单元在素材里的裁剪区间，尽量落在真正的停顿上。
 
+    low、high 是最远能切到的地方：前一段的结尾、后一段的开头（db.segment_edges）。
     命令行与网页共用，免得两边各裁各的。
     """
     start = snap_to_silence(source, words[0].start,
                             fallback=words[0].start - config.UNIT_PAD_SEC)
     end = snap_to_silence(source, words[-1].end,
                           fallback=words[-1].end + config.UNIT_PAD_SEC)
-    return max(low, start), min(high, end)
+    # 最后一段往后不设限，但不能超出文件：超出的话切出来比算的短，缓存每次都对不上
+    high = min(high, sf.info(str(source)).duration)
+    return max(low, 0.0, start), min(high, end)
+
+
+CUT_TOLERANCE_SEC = 0.02
+
+
+def cut_matches(path: Path, seconds: float) -> bool:
+    """缓存里的句子音频还是按现在的切法切出来的吗。切法改过，旧文件就得重切。"""
+    try:
+        return abs(sf.info(str(path)).duration - seconds) <= CUT_TOLERANCE_SEC
+    except (RuntimeError, OSError):      # 文件不存在或读不出来
+        return False
 
 
 PROBLEM_CRUSHED = "crushed"     # 词级时间戳挤成一团

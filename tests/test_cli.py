@@ -92,9 +92,9 @@ def test_export_unit_cuts_only_that_unit(tmp_path):
     connection.close()
     dest = tmp_path / "u1.wav"
     assert cli.main(["export", str(segment_id), "--unit", "1", "-o", str(dest)]) == 0
-    # 单元含 4 个词（2.0-3.9s）。尾部留 0.1s 余量到 4.0，
-    # 但头部余量被片段起点 2.0 截掉了，所以是 2.0s 而不是 2.1s。
-    assert media.probe_duration(dest) == pytest.approx(2.0, abs=0.05)
+    # 单元含 4 个词（2.0-3.9s），首尾各留 0.1s 余量：1.9-4.0。
+    # 以前头部余量会被片段起点 2.0 截掉——片段起点就是第一个词的开头，截掉的正是词头。
+    assert media.probe_duration(dest) == pytest.approx(2.1, abs=0.05)
 
 
 def test_export_rejects_out_of_range_unit(capsys):

@@ -251,6 +251,26 @@ def get_segment(conn: sqlite3.Connection, segment_id: int) -> dict[str, Any] | N
     return data
 
 
+def segment_edges(conn: sqlite3.Connection, segment_id: int) -> tuple[float, float]:
+    """这个片段里的句子，音频最远能往前、往后切到哪儿：前一段的结尾、后一段的开头。
+
+    片段自己的起止只是第一个词的开头、最后一个词的结尾——词尾的余音、词头的爆破音
+    都在线外。拿它当边界，每段最后一句的词尾都会被切掉。第一段往前、最后一段往后不设限。
+    """
+    row = conn.execute("SELECT source_id, idx FROM segments WHERE id = ?",
+                       (segment_id,)).fetchone()
+    if row is None:
+        raise KeyError(f"片段 {segment_id} 不存在")
+    before = conn.execute(
+        "SELECT end_sec FROM segments WHERE source_id = ? AND idx < ?"
+        " ORDER BY idx DESC LIMIT 1", (row["source_id"], row["idx"])).fetchone()
+    after = conn.execute(
+        "SELECT start_sec FROM segments WHERE source_id = ? AND idx > ?"
+        " ORDER BY idx LIMIT 1", (row["source_id"], row["idx"])).fetchone()
+    return (before["end_sec"] if before else 0.0,
+            after["start_sec"] if after else float("inf"))
+
+
 # --- 练习记录 ---------------------------------------------------------------
 
 
