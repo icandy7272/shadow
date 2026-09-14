@@ -8,10 +8,10 @@
 <title>Shadow 没开</title>
 <style>
   :root { --bg: #fbfbfa; --fg: #1a1a1a; --muted: #6b6b6b; --line: #e2e0dc;
-          --card: #ffffff; --warn: #d62728; }
+          --card: #ffffff; --warn: #d62728; --accent: #1f77b4; }
   @media (prefers-color-scheme: dark) {
     :root { --bg: #16171a; --fg: #e8e6e3; --muted: #9a9a9a; --line: #2c2e33;
-            --card: #1d1f23; }
+            --card: #1d1f23; --accent: #5aa3d8; }
   }
   body { margin: 0; background: var(--bg); color: var(--fg);
          font: 15px/1.6 -apple-system, "PingFang SC", system-ui, sans-serif; }
@@ -19,18 +19,48 @@
   h1 { font-size: 20px; margin: 0 0 10px; display: flex; align-items: center; gap: 10px; }
   h1 i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
   p { margin: 0 0 14px; color: var(--muted); }
-  code { display: block; margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--line);
-         border-radius: 7px; background: var(--card); color: var(--fg); font-size: 14px;
-         overflow-wrap: anywhere; user-select: all; }
+  .command { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 14px;
+             padding: 10px 10px 10px 12px; border: 1px solid var(--line); border-radius: 7px;
+             background: var(--card); }
+  .command code { flex: 1; min-width: 0; color: var(--fg); font-size: 14px; line-height: 1.6;
+                  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+                  overflow-wrap: anywhere; user-select: all; }
+  .command button { flex: none; font: inherit; font-size: 13px; padding: 3px 12px;
+                    border: 1px solid var(--line); border-radius: 6px; background: var(--bg);
+                    color: var(--fg); cursor: pointer; }
+  .command button:hover { border-color: var(--accent); }
+  .command button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .command button.done { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
 <main>
   <h1><i></i>家里电脑上的 Shadow 没开</h1>
   <p>网址没问题，是电脑上的服务没在跑，或者电脑没联网。在电脑的终端里运行（uv run 要在项目目录里跑，所以先 cd 过去）：</p>
-  <!-- 部署时把 ~/path/to/shadow 换成电脑上 shadow 项目的实际目录 -->
-  <code>cd ~/path/to/shadow &amp;&amp; uv run shadow serve</code>
+  <div class="command">
+    <!-- 部署时把 ~/path/to/shadow 换成电脑上 shadow 项目的实际目录 -->
+    <code id="command">cd ~/path/to/shadow &amp;&amp; uv run shadow serve</code>
+    <button type="button" id="copy">复制</button>
+  </div>
   <p>开好之后这一页会自己刷新，不用管它。</p>
 </main>
+<script>
+  // 页面走 HTTPS，剪贴板接口一般能用；不行就把命令整个选中，手动复制
+  const copy = document.getElementById("copy");
+  const command = document.getElementById("command");
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(command.textContent.trim());
+      copy.textContent = "已复制";
+    } catch (err) {
+      const range = document.createRange();
+      range.selectNodeContents(command);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+      copy.textContent = "已选中，手动复制";
+    }
+    copy.classList.add("done");
+  });
+</script>
 </body>
 </html>
