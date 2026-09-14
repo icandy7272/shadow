@@ -203,26 +203,38 @@ if (root) {
     });
   });
 
-  // 第二步：整句默写。每个词一个框，回车跳到下一个；不会的勾「不会」
+  // 第二步：整句默写。一整句写在一个框里，漏了词挪光标补上；不会的词写一个 ?
   const drillStep = document.getElementById("step-drill");
   const submitDrill = document.getElementById("submit-drill");
-  const slots = [...drillStep.querySelectorAll(".slot")].map((slot) => ({
-    input: slot.querySelector("input[type=text]"),
-    unknown: slot.querySelector("input[type=checkbox]"),
-  }));
+  const typed = document.getElementById("dictation-text");
+  const counter = document.getElementById("dictation-count");
+  const wordTotal = Number(counter.dataset.total);
+  const PLACEHOLDER = /^[?？]+$/;
+  const HAS_WORD = /[a-z0-9]/i;        // 和服务端判分的拆法一致：纯标点不算词
 
-  slots.forEach(({ input, unknown }, i) => {
-    unknown.addEventListener("change", () => {
-      input.disabled = unknown.checked;
-      if (unknown.checked) input.value = "";
-    });
-    input.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || event.isComposing) return;   // 输入法选词的回车不算
-      event.preventDefault();
-      const next = slots.slice(i + 1).find((slot) => !slot.input.disabled);
-      if (next) next.input.focus();
-      else submitDrill.click();
-    });
+  const refreshCount = () => {
+    const written = typed.value.split(/\s+/)
+      .filter((token) => PLACEHOLDER.test(token) || HAS_WORD.test(token)).length;
+    counter.textContent = `已写 ${written} / ${wordTotal} 个词`;
+    counter.classList.toggle("over", written > wordTotal);
+  };
+  typed.addEventListener("input", refreshCount);
+  typed.addEventListener("keydown", (event) => {
+    // 回车就是对答案；输入法选词的回车不算
+    if (event.key !== "Enter" || event.isComposing || event.shiftKey) return;
+    event.preventDefault();
+    submitDrill.click();
+  });
+  // 在光标处插一个 ?，前后补空格，光标停在它后面接着写
+  document.getElementById("dictation-unknown").addEventListener("click", () => {
+    const { selectionStart: from, selectionEnd: to, value } = typed;
+    const before = value.slice(0, from).replace(/\s+$/, "");
+    const after = value.slice(to).replace(/^\s+/, "");
+    const head = `${before ? `${before} ` : ""}? `;
+    typed.value = head + after;
+    typed.focus();
+    typed.setSelectionRange(head.length, head.length);
+    refreshCount();
   });
 
   submitDrill.addEventListener("click", async () => {
@@ -238,11 +250,7 @@ if (root) {
         body: JSON.stringify({
           segment: Number(segment), unit: Number(unit),
           replays: counts.get(replayButton) || 0,
-          answers: slots.map(({ input, unknown }) => ({
-            index: Number(input.dataset.index),
-            guess: input.value.trim(),
-            unknown: unknown.checked,
-          })),
+          text: typed.value,
         }),
       });
     } catch (err) {
@@ -294,24 +302,21 @@ if (root) {
     window.scrollBy(0, anchor.getBoundingClientRect().top - before);
   });
 
-  // 整句逐词着色：标点照原样放在词的前后
-  function gradedLine(items) {
-    const byIndex = new Map(items.map((item) => [item.index, item]));
-    const line = el("p", "graded-line");
-    drillStep.querySelectorAll(".dictation > span").forEach((span) => {
-      const input = span.querySelector("input[type=text]");
-      if (!input) {
-        line.append(span.textContent, " ");
+  // 整句逐词着色：标点照原文放在词的前后。原文由对答案的结果带回来，页面上事先没有
+  function gradedLine(line, items) {
+    const guesses = new Map(items.map((item) => [item.index, item.guess]));
+    const out = el("p", "graded-line");
+    line.forEach((token) => {
+      if (!token.status) {
+        out.append(`${token.lead}${token.core}${token.trail} `);
         return;
       }
-      const item = byIndex.get(Number(input.dataset.index));
-      const [lead, trail] = [input.previousSibling, input.nextSibling].map(
-        (node) => (node && node.nodeType === Node.TEXT_NODE ? node.textContent : ""));
-      const mark = el("span", `mark mark-${item.status}`, item.answer);
-      if (item.status === "wrong") mark.title = item.guess ? `你写了 ${item.guess}` : "没写";
-      line.append(lead, mark, trail, " ");
+      const mark = el("span", `mark mark-${token.status}`, token.core);
+      if (token.status === "wrong") mark.title = `你写了 ${guesses.get(token.index)}`;
+      if (token.status === "missing") mark.title = "没写";
+      out.append(token.lead, mark, `${token.trail} `);
     });
-    return line;
+    return out;
   }
 
   function vocabButton(item, sentence) {
@@ -369,9 +374,16 @@ if (root) {
     const summary = el("p", "tally");
     summary.append(el("b", "tally-ok", `写对 ${data.correct}`), " · ",
                    el("b", "tally-wrong", `写错 ${data.wrong}`), " · ",
-                   el("b", "tally-unknown", `不会 ${data.unknown}`),
-                   data.replays ? `，重听 ${data.replays} 遍` : "，一遍过");
-    const nodes = [summary, gradedLine(data.items)];
+                   el("b", "tally-missing", `漏写 ${data.missing}`), " · ",
+                   el("b", "tally-unknown", `不会 ${data.unknown}`));
+    if (data.extras.length) {
+      summary.append(" · ", el("b", "tally-extra", `多写 ${data.extras.length}`));
+    }
+    summary.append(data.replays ? `，重听 ${data.replays} 遍` : "，一遍过");
+    const nodes = [summary, gradedLine(data.line, data.items)];
+    if (data.extras.length) {
+      nodes.push(el("p", "extras", `多写了：${data.extras.join("、")}`));
+    }
     const misses = data.items.filter((item) => item.status !== "ok");
     if (misses.length && !data.dictionary) {
       nodes.push(el("p", "hint", "词典还没装：在终端运行 uv run shadow dict install"));

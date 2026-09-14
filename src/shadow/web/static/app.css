@@ -367,27 +367,34 @@ a.button:hover { border-color: var(--accent); }
 }
 
 /* ---------- 默写 ----------
-   框一样宽，不泄露单词长短；标点留在框外 */
+   一整句写在一个框里，按词和原文对齐判分 */
 :root { --unknown: #a8650a; }
 @media (prefers-color-scheme: dark) {
   :root { --unknown: #e0a449; }
 }
-/* 排成一格格：沿用 .sentence 的大行高的话，框和「不会」叠起来后每行会空出一大截 */
-.sentence.dictation { display: flex; flex-wrap: wrap; align-items: flex-start;
-  gap: 12px 6px; line-height: 1.5; }
-.dictation .box { display: inline-flex; align-items: baseline; }
-.dictation input[type=text] { width: 6.5em; }
-.dictation input[type=text]:disabled { border-bottom: 2px dashed var(--line); }
-.step.graded > .hint, .step.graded .dictation, .step.graded #submit-drill { display: none; }
+.dictation { display: grid; gap: 8px; margin: 4px 0 14px; }
+/* 字号不小于 16px：再小的话 iPhone 点进去会把整页放大 */
+.dictation textarea { width: 100%; min-height: 3.6em; resize: vertical; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg);
+  font: 17px/1.6 -apple-system, "PingFang SC", system-ui, sans-serif; }
+.dictation textarea:focus { border-color: var(--accent); outline: 1px solid var(--accent); }
+.dictation-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.dictation-count { margin-right: auto; color: var(--muted); font-size: 13px;
+  font-variant-numeric: tabular-nums; }
+.dictation-count.over { color: var(--warn); }
+.step.graded > .hint, .step.graded .dictation { display: none; }
 .tally { margin: 0 0 4px; font-variant-numeric: tabular-nums; }
 .tally b { font-weight: 600; }
 .tally-ok { color: var(--ok); }
-.tally-wrong { color: var(--warn); }
+.tally-wrong, .tally-missing { color: var(--warn); }
 .tally-unknown { color: var(--unknown); }
+.tally-extra { color: var(--muted); }
 .graded-line { font-size: 17px; line-height: 1.9; margin: 0 0 12px; }
 .mark { text-underline-offset: 4px; }
 .mark-wrong { color: var(--warn); text-decoration: underline wavy; }
+.mark-missing { color: var(--warn); text-decoration: underline dotted; }
 .mark-unknown { color: var(--unknown); text-decoration: underline dashed; }
+.extras { margin: -6px 0 12px; color: var(--muted); font-size: 14px; }
 .misses { display: grid; gap: 12px; }
 .miss { border-left: 3px solid var(--warn); padding: 2px 0 2px 12px; }
 .miss-unknown { border-left-color: var(--unknown); }
@@ -401,7 +408,6 @@ a.button:hover { border-color: var(--accent); }
 .meanings li { margin: 1px 0; }
 .lemma { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 @media (max-width: 640px) {
-  .dictation input[type=text] { width: 5.2em; }
   .add-vocab { padding: 6px 12px; }
 }
 

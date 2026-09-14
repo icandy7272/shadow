@@ -25,7 +25,7 @@
 
   <section class="step locked" id="step-drill">
     <h2><span class="n">2</span> 默写</h2>
-    <p class="hint">每个词写进一个框，回车跳到下一个。不会的勾「不会」——
+    <p class="hint">听到什么写什么，一整句写在下面。漏了词就把光标挪过去补上；不会的词写一个 ?——
       对完答案会给出释义，并记进生词本。</p>
     <div class="row">
       <button class="play" data-src="/audio/{{ segment }}/{{ unit }}">▶ 重听</button>
@@ -33,18 +33,16 @@
       <button class="stop" hidden>■ 停</button>
       <span class="plays"></span>
     </div>
-    <p class="sentence dictation">
-      {%- for t in tokens -%}
-        {%- if t.box -%}
-          <span class="slot"><span class="box">{{ t.lead }}<input type="text" autocomplete="off"
-            autocapitalize="off" autocorrect="off" spellcheck="false" data-index="{{ loop.index0 }}">{{ t.trail }}</span><label><input type="checkbox"> 不会</label></span>
-        {%- else -%}
-          <span class="w">{{ t.lead }}{{ t.core }}{{ t.trail }}</span>
-        {%- endif -%}
-        {{ ' ' }}
-      {%- endfor -%}
-    </p>
-    <button class="primary" id="submit-drill">对答案</button>
+    <div class="dictation">
+      <textarea id="dictation-text" rows="2" autocomplete="off" autocapitalize="off"
+                autocorrect="off" spellcheck="false" enterkeyhint="done"
+                aria-label="把这一句写下来" placeholder="听到什么写什么"></textarea>
+      <div class="dictation-bar">
+        <span class="dictation-count" id="dictation-count" data-total="{{ word_total }}">已写 0 / {{ word_total }} 个词</span>
+        <button type="button" id="dictation-unknown" title="在光标处插一个 ?">不会 ?</button>
+        <button class="primary" id="submit-drill">对答案</button>
+      </div>
+    </div>
     <div class="result" hidden></div>
   </section>
 

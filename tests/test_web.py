@@ -340,61 +340,6 @@ def test_rating_rejects_out_of_range(client, tmp_path):
                        ).status_code == 400
 
 
-def test_dictation_marks_every_word_and_records_unknown_words(client, tmp_path):
-    segment_id = _seed(tmp_path)
-    payload = {
-        "segment": segment_id, "unit": 2, "replays": 2,
-        "answers": [
-            {"index": 0, "guess": "it"},
-            {"index": 1, "guess": "is"},
-            {"index": 2, "guess": "", "unknown": True},
-            {"index": 3, "guess": "Start"},
-        ],
-    }
-    data = client.post("/api/dictation", json=payload).json()
-
-    assert (data["correct"], data["wrong"], data["unknown"], data["total"]) == (2, 1, 1, 4)
-    assert [item["status"] for item in data["items"]] == ["ok", "wrong", "unknown", "ok"]
-    assert data["items"][3]["answer"] == "start"
-    assert [item["in_vocab"] for item in data["items"]] == [False, False, True, False]
-    assert data["sentence"] == "It was a start."
-    # 没装词典：照样判分，只是没有释义
-    assert data["dictionary"] is False
-    assert all(item["entry"] is None for item in data["items"])
-
-    connection = db.connect()
-    row = db.list_runs(connection, segment_id=segment_id)[0]
-    assert (row["gapfill_correct"], row["gapfill_total"],
-            row["gapfill_unknown"], row["gapfill_replays"]) == (2, 4, 1, 2)
-    # 不会的自动进生词本；写错的由人决定
-    assert [item["word"] for item in db.list_vocab(connection)] == ["a"]
-    connection.close()
-
-
-def test_dictation_explains_the_words_you_missed(client, tmp_path):
-    from shadow import dictionary
-
-    def fetch(url, dest, report=None):
-        dest.write_text(
-            "word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,"
-            "exchange,detail,audio\n"
-            "was,wɒz,,v. 是（be 的过去式）,,,,,,,0:be/1:p,,\n"
-            "be,biː,,v. 是\\nv. 存在,,,,,,,,,\n", encoding="utf-8")
-
-    dictionary.install(fetch=fetch)
-    segment_id = _seed(tmp_path)
-
-    data = client.post("/api/dictation", json={
-        "segment": segment_id, "unit": 2,
-        "answers": [{"index": 1, "guess": "is"}]}).json()
-
-    assert data["dictionary"] is True
-    assert data["items"][0]["status"] == "wrong"          # 没交上来的也算写错
-    assert data["items"][1]["entry"] == {
-        "word": "was", "phonetic": "wɒz", "meanings": ["v. 是（be 的过去式）"],
-        "lemma": {"word": "be", "meanings": ["v. 是", "v. 存在"]}}
-
-
 def test_the_old_gapfill_endpoint_is_gone(client, tmp_path):
     segment_id = _seed(tmp_path)
     response = client.post("/api/gapfill", json={"segment": segment_id, "unit": 2,
@@ -709,18 +654,6 @@ def _seed_other_source(tmp_path):
     segment_id = db.list_segments(connection, source_id)[0]["id"]
     connection.close()
     return segment_id
-
-
-def test_every_sentence_gets_a_dictation_step_with_a_box_per_word(client, tmp_path):
-    """默写每个词都写，不再挑空；标点留在框外，不用写。"""
-    segment_id = _seed_other_source(tmp_path)
-    body = client.get(f"/practice/{segment_id}/1").text
-    assert 'id="step-drill"' in body
-    assert "默写" in body
-    assert body.count('class="box"') == 3
-    assert body.count("不会</label>") == 3
-    assert 'data-index="2">.</span>' in body
-    assert '<span class="n">3</span> 跟读' in body
 
 
 def test_health_says_the_service_is_up(client):

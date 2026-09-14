@@ -406,7 +406,8 @@ def practice(request: Request, segment_id: int, unit: int,
             "unit": unit,
             **step,
             "words": words,
-            "tokens": [_token(w.text) for w in words],
+            # 默写这一步只给要写几个词，不给原文——着色用的原文等对完答案再带回来
+            "word_total": sum(1 for w in words if dictation.needs_box(w.text)),
             "seconds": round(words[-1].end - words[0].start, 1),
             "min_take_sec": config.MIN_ATTEMPT_SEC,
             # 只传给第三步。里面带着句子原文的片段，提前露出来盲听就废了。
@@ -444,11 +445,18 @@ def save_rating(segment: int = Form(...), unit: int = Form(...),
     return {"ok": True, "run_id": run_id}
 
 
-def _token(text: str) -> dict:
-    """默写框的三段：框前的标点、要写的词、框后的标点。"""
-    token = dictation.split(text)
-    return {"lead": token.lead, "core": token.core, "trail": token.trail,
-            "box": dictation.needs_box(text)}
+MAX_DICTATION_CHARS = 2000
+
+
+def _line(words, marks) -> list[dict]:
+    """整句逐词：标点照原文放，要写的词带上判定。前端着色全靠它，页面上不先放原文。"""
+    status_of = {mark.index: mark.status for mark in marks}
+    line = []
+    for index, word in enumerate(words):
+        token = dictation.split(word.text)
+        line.append({"lead": token.lead, "core": token.core, "trail": token.trail,
+                     "index": index, "status": status_of.get(index)})
+    return line
 
 
 def _entry_json(entry) -> dict | None:
@@ -463,18 +471,20 @@ def _entry_json(entry) -> dict | None:
 
 @app.post("/api/dictation")
 def save_dictation(payload: dict = Body(...)):
+    """一整句写的内容，和原文按词对齐后判分：漏一个词只算这一个漏写。"""
     try:
         segment, unit = int(payload["segment"]), int(payload["unit"])
-        answers = {int(item["index"]): dictation.Answer(
-                       guess=str(item.get("guess") or ""), unknown=bool(item.get("unknown")))
-                   for item in payload.get("answers", [])}
         replays = int(payload.get("replays") or 0)
-    except (KeyError, TypeError, ValueError, AttributeError):
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(400, "默写提交的格式不对。")
+    text = payload.get("text")
+    if not isinstance(text, str) or len(text) > MAX_DICTATION_CHARS:
         raise HTTPException(400, "默写提交的格式不对。")
     connection = _db()
     _, words = _unit_words(connection, segment, unit)
-    marks = dictation.grade(words, answers)
-    correct, wrong, unknown = dictation.tally(marks)
+    graded = dictation.grade(words, text)
+    marks = graded.marks
+    correct, wrong, unknown, missing = dictation.tally(marks)
     sentence = " ".join(w.text for w in words)
     run_id = _run_for(connection, segment, unit, payload.get("run_id"), words)
     db.set_dictation(connection, run_id, correct=correct, total=len(marks),
@@ -489,7 +499,8 @@ def save_dictation(payload: dict = Body(...)):
     entries = dictionary.lookup_many(
         dictation.key(mark.answer) for mark in marks if mark.status != dictation.OK)
     return {
-        "correct": correct, "wrong": wrong, "unknown": unknown, "total": len(marks),
+        "correct": correct, "wrong": wrong, "missing": missing, "unknown": unknown,
+        "total": len(marks), "extras": list(graded.extras),
         "replays": replays, "run_id": run_id, "sentence": sentence,
         "dictionary": dictionary.installed(),
         "items": [{
@@ -498,6 +509,7 @@ def save_dictation(payload: dict = Body(...)):
             "entry": (None if mark.status == dictation.OK
                       else _entry_json(entries.get(dictation.key(mark.answer)))),
         } for mark in marks],
+        "line": _line(words, marks),
     }
 
 
