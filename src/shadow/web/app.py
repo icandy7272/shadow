@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -25,7 +25,7 @@ from fastapi.templating import Jinja2Templates
 
 from collections import Counter
 
-from .. import config, db, dictionary, history, library, media, progress
+from .. import config, db, dictionary, history, library, media, plan, progress
 from ..report.takes import recurrence_threshold
 from ..analysis.diff import accuracy as _accuracy
 from ..drill import dictation
@@ -266,6 +266,51 @@ def home():
                             status_code=303)
 
 
+def _today() -> date:
+    """本地日期。日课按这台电脑上的日子算；测试里会换掉它。"""
+    return datetime.now().astimezone().date()
+
+
+def _local_day(stamp: str | None) -> date | None:
+    try:
+        return datetime.fromisoformat(stamp).astimezone().date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _plan_view(connection, today: date, review_count: int) -> dict:
+    """首页日课卡片要的东西：今天是星期几、哪几步、勾了哪些、该复习几句。"""
+    weekday = today.weekday()
+    ticked = db.plan_checks(connection, today.isoformat())
+    steps = [{"key": step.key, "title": step.title, "detail": step.detail,
+              "link": step.link, "done": step.key in ticked}
+             for step in plan.steps_for(weekday)]
+    return {"heading": plan.heading(weekday), "steps": steps,
+            "all_done": all(step["done"] for step in steps),
+            "review_count": review_count}
+
+
+@app.get("/plan", response_class=HTMLResponse)
+def plan_page(request: Request):
+    return templates.TemplateResponse(request, "plan.html", {})
+
+
+@app.post("/api/plan")
+def save_plan_check(payload: dict = Body(...)):
+    """勾上或取消今天日课里的一步。周六的「自由说」不能在周一勾。"""
+    today = _today()
+    step, done = payload.get("step"), payload.get("done")
+    if not isinstance(done, bool):
+        raise HTTPException(400, "要说明是勾上还是取消。")
+    if not isinstance(step, str) or not plan.is_step(today.weekday(), step):
+        raise HTTPException(400, "今天的日课里没有这一步。")
+    connection = _db()
+    db.set_plan_check(connection, today.isoformat(), step, done)
+    ticked = db.plan_checks(connection, today.isoformat())
+    all_done = all(item.key in ticked for item in plan.steps_for(today.weekday()))
+    return {"step": step, "done": done, "all_done": all_done}
+
+
 @app.get("/sources/{source_id}", response_class=HTMLResponse)
 def source_page(request: Request, source_id: int):
     connection = _db()
@@ -274,7 +319,7 @@ def source_page(request: Request, source_id: int):
         return RedirectResponse("/sources", status_code=303)
     library.select(connection, source_id)     # 打开哪份，哪份就是当前
     catalogue = _sentences(connection, source_id)
-    done, issues, ratings = {}, {}, {}
+    done, issues, ratings, last = {}, {}, {}, {}
     # 只看这份素材上的记录：两份素材里文字相同的句子不能串在一起
     for run in db.source_runs(connection, source_id):
         text = run["unit_text"]
@@ -288,17 +333,26 @@ def source_page(request: Request, source_id: int):
             ratings[text] = run["blind_rating"]
         if metrics:
             issues[text] = _recurring(metrics)
+        when = _local_day(run["finished_at"] or run["started_at"])
+        if when is not None and (text not in last or when > last[text]):
+            last[text] = when
+    today = _today()
     for item in catalogue:
-        item["runs"] = len(done.get(item["text"], ()))
-        item["issues"] = issues.get(item["text"], 0)
-        item["rating"] = ratings.get(item["text"])
+        text = item["text"]
+        item["runs"] = len(done.get(text, ()))
+        item["issues"] = issues.get(text, 0)
+        item["rating"] = ratings.get(text)
+        item["review"] = plan.needs_review(last.get(text), today,
+                                           issues=item["issues"], rating=item["rating"])
     # 没练过的第一句：有个直达入口就不用浏览列表，也就不会被剧透
     next_unit = next((i for i in catalogue if not i["runs"] and i["usable"]), None)
     return templates.TemplateResponse(
         request, "index.html",
         {"catalogue": catalogue, "source": source, "next_unit": next_unit,
          "practised": sum(1 for item in catalogue if item["runs"]),
-         "days": progress.calendar(connection)},
+         "days": progress.calendar(connection),
+         "plan": _plan_view(connection, today,
+                            sum(1 for item in catalogue if item["review"]))},
     )
 
 

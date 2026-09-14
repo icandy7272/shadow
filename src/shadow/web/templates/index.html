@@ -11,6 +11,39 @@
   {% endif %}
 </div>
 
+<details class="plan" id="plan" open>
+  <summary>
+    <span class="plan-title">今天的日课 · {{ plan.heading }}</span>
+    <span class="plan-progress">{% if days.today %}今天练了 {{ days.today }} 句{% else %}今天还没练{% endif %}{% if days.streak %} · 连续 {{ days.streak }} 天{% endif %}</span>
+    {% if plan.all_done %}<span class="plan-done">做完了</span>{% endif %}
+    <span class="plan-toggle" aria-hidden="true"></span>
+  </summary>
+  <ul class="plan-steps">
+    {% for step in plan.steps %}
+    <li class="plan-step{{ ' done' if step.done }}">
+      <input type="checkbox" class="plan-check" data-step="{{ step.key }}"{% if step.done %} checked{% endif %} id="plan-{{ step.key }}">
+      <div class="plan-body">
+        <label for="plan-{{ step.key }}"><b>{{ step.title }}</b><span>{{ step.detail }}</span></label>
+        {% if step.link == 'review' %}
+          {% if plan.review_count %}
+          <a class="plan-link" href="#units" data-filter-link="review">筛出该复习的 {{ plan.review_count }} 句 →</a>
+          {% else %}
+          <span class="plan-none">没有要复习的</span>
+          {% endif %}
+        {% elif step.link == 'next' %}
+          {% if next_unit %}
+          <a class="plan-link" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}">开始下一句（第 {{ next_unit.number }} 句）→</a>
+          {% else %}
+          <a class="plan-link" href="/sources">这份素材练完了，去素材库换一份 →</a>
+          {% endif %}
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="plan-foot"><a href="/plan">为什么这样排、时间不够时 → 完整日课</a></p>
+</details>
+
 <section class="streak">
   <p class="streak-head">
     {% if days.today %}<b>今天 {{ days.today }} 句</b>{% else %}<b>今天还没练</b>{% endif %}
@@ -34,18 +67,20 @@
 </p>
 <div class="filters" id="filters">
   <button class="chosen" data-filter="all">全部</button>
+  <button data-filter="review">该复习</button>
   <button data-filter="fresh">没练过</button>
   <button data-filter="issues">问题没解决</button>
   <button data-filter="unheard">没听懂</button>
   <span class="filters-hint" id="filter-count"></span>
 </div>
-<table class="units">
+<table class="units" id="units">
   <thead><tr><th>#</th><th>句子</th><th>时长</th><th>词</th><th>练过</th></tr></thead>
   <tbody>
   {% for item in catalogue %}
     <tr class="{{ 'done' if item.runs else 'fresh' }}"
         data-runs="{{ item.runs }}" data-issues="{{ item.issues }}"
-        data-rating="{{ item.rating if item.rating is not none else '' }}">
+        data-rating="{{ item.rating if item.rating is not none else '' }}"
+        data-review="{{ 1 if item.review else 0 }}">
       <td class="num">{{ item.number }}</td>
       <td>
         <a href="/practice/{{ item.segment }}/{{ item.unit }}">
@@ -56,7 +91,6 @@
       </td>
       <td class="num">{{ '%.1f'|format(item.seconds) }}s</td>
       <td class="num">{{ item.words }}</td>
-      <td class="num">{{ item.blanks or '' }}</td>
       <td class="num">{{ item.runs or '' }}{% if item.issues %}
         <span class="left" title="上次还有 {{ item.issues }} 处没解决"
           >·{{ item.issues }}</span>{% endif %}</td>

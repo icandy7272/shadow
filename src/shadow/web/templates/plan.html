@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}日课 · Shadow{% endblock %}
+{% block content %}
+<article class="plan-doc">
+  <header class="pd-header">
+    <p class="pd-eyebrow">配合 Shadow 使用</p>
+    <h1>影子跟读日课</h1>
+    <p class="pd-lede">每天专注 30 分钟：先复习昨天，再精练几句新的，最后合上材料自己开口说。另外抽 10–20 分钟碎片时间泛听。</p>
+    <p class="pd-note">跟读练的是「听清」和「说得像」，练不出「自己组织语言说出来」。所以每天都给复述留出时间，泛听负责把耳朵泡在大量能听懂的英语里。</p>
+  </header>
+
+  <section aria-labelledby="pd-day">
+    <h2 id="pd-day">一天的 30 分钟</h2>
+    <div class="pd-bar" role="img" aria-label="30 分钟里：复习 5 分钟，盲听和默写 6 分钟，跟读新句子 9 分钟，串起来 5 分钟，复述 5 分钟">
+      <div class="pd-seg listen"><b>复习</b><span>5′</span></div>
+      <div class="pd-seg listen"><b>盲听·默写</b><span>6′</span></div>
+      <div class="pd-seg speak"><b>跟读新句子</b><span>9′</span></div>
+      <div class="pd-seg speak"><b>串起来</b><span>5′</span></div>
+      <div class="pd-seg speak"><b>复述</b><span>5′</span></div>
+    </div>
+    <p class="pd-legend">
+      <span><i class="pd-swatch listen"></i>听为主 · 专注 11 分钟 + 泛听 10–20 分钟</span>
+      <span><i class="pd-swatch speak"></i>说为主 · 19 分钟</span>
+    </p>
+    <p class="pd-note pd-small">颜色沿用练习页图里的约定：原声是蓝色虚线，你是红色实线。</p>
+  </section>
+
+  <section aria-labelledby="pd-flow">
+    <h2 id="pd-flow">每天怎么练</h2>
+    <ol class="pd-steps">
+      <li>
+        <span class="pd-when">0–5′</span>
+        <div>
+          <h3>复习昨天<span class="pd-tag">Shadow 首页</span></h3>
+          <ul>
+            <li>在首页的日课卡片里点「筛出该复习的句子」：昨天练过的、问题没解决的、盲听没听懂的，挑 3–5 句。</li>
+            <li>每句先盲听一遍，不看字。跟得上就过；跟不上的，完整走一遍跟读。</li>
+            <li>复习的句子不用再默写。</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <span class="pd-when">5–20′</span>
+        <div>
+          <h3>精练新句子，3–5 句<span class="pd-tag">Shadow 练习页</span></h3>
+          <ol class="pd-four">
+            <li><b>盲听</b>：不看字听 3–5 遍，诚实打分。</li>
+            <li><b>默写</b>：每个词都写出来。写不出的，就是耳朵还切不开的连读；不会的词勾「不会」，会记进生词本。</li>
+            <li><b>看字跟读</b>：边看原文边小声跟，先把节奏对上。</li>
+            <li><b>不看字跟读</b>：连录 3 遍，看反馈，只改最严重的那一条，再录一轮。</li>
+          </ol>
+          <p class="pd-rule">停手规则：同一个问题录到第 3 轮还在，就先放下，明天复习时再来。硬磨下去进步很小，还消耗耐心。</p>
+        </div>
+      </li>
+      <li>
+        <span class="pd-when">20–25′</span>
+        <div>
+          <h3>把今天的句子串起来<span class="pd-tag">不录音</span></h3>
+          <ul>
+            <li>今天练过的几句连着从头跟到尾，跟 2 遍，中间不停下来改。</li>
+            <li>单句练的是「像」，连起来练的是「不断」。</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <span class="pd-when">25–30′</span>
+        <div>
+          <h3>合上材料复述<span class="pd-tag">手机录音</span></h3>
+          <ul>
+            <li>不看原文，用自己的话把这一段讲一遍，录下来。</li>
+            <li>回听一遍，把「想说却说不出」的地方记下来，第二天去原句里找人家怎么说的。</li>
+            <li>这是一天里唯一一次自己组织语言，别跳过。</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <span class="pd-when">碎片时间</span>
+        <div>
+          <h3>泛听 10–20 分钟<span class="pd-tag">通勤、做饭时</span></h3>
+          <ul>
+            <li>同一个讲者或同类话题的其他内容，原速，不查词，不暂停，听懂大意就行。</li>
+            <li>要选轻松能听懂的，太难就换，不算失败。</li>
+          </ul>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="pd-why">
+    <h2 id="pd-why">为什么这样排</h2>
+    <div class="pd-whys">
+      <div class="pd-why">
+        <div>
+          <p>影子跟读的研究，测到的主要是听力理解和语音辨认的提升；对口语流利度的证据少得多。</p>
+          <p class="pd-cite">Hamada 2016；Kadota 2019</p>
+        </div>
+        <p class="pd-so">跟读之外，每天加复述，每周加一次自由说。</p>
+      </div>
+      <div class="pd-why">
+        <div>
+          <p>总练习时间相同时，分散到多天、隔一段时间再复习，比一次练完记得久。</p>
+          <p class="pd-cite">Cepeda et al. 2006；Suzuki, Nakata &amp; DeKeyser 2019</p>
+        </div>
+        <p class="pd-so">每天先复习昨天，周六回顾一整周。</p>
+      </div>
+      <div class="pd-why">
+        <div>
+          <p>自己先回想、再对答案，比反复看原文学得更牢。</p>
+          <p class="pd-cite">Roediger &amp; Karpicke 2006</p>
+        </div>
+        <p class="pd-so">盲听和默写放在看字之前，复述放在对照原文之前。</p>
+      </div>
+      <div class="pd-why">
+        <div>
+          <p>口音重不等于难懂。别人好不好懂你，很大程度取决于重音、节奏、语调和停顿，而不只是个别音发得像不像。</p>
+          <p class="pd-cite">Derwing &amp; Munro 2015</p>
+        </div>
+        <p class="pd-so">跟读时先模仿停顿位置、句子重音和句尾下沉，这正是练习页图 1、图 2 在比的。</p>
+      </div>
+      <div class="pd-why">
+        <div>
+          <p>有效的练习盯住一个具体弱点，马上得到反馈，再试一次。</p>
+          <p class="pd-cite">Ericsson, Krampe &amp; Tesch-Römer 1993</p>
+        </div>
+        <p class="pd-so">每句只改反馈里最严重的一条。</p>
+      </div>
+      <div class="pd-why">
+        <div>
+          <p>听懂大意，大约需要认识其中 95% 左右的词。说出口才会发现自己缺哪些表达。</p>
+          <p class="pd-cite">van Zeeland &amp; Schmitt 2013；Swain 1985</p>
+        </div>
+        <p class="pd-so">泛听选简单的；复述时记下说不出的地方，第二天补。</p>
+      </div>
+    </div>
+    <p class="pd-note pd-small">这些研究多数在课堂里、以其他母语的英语学习者为对象做的。搬到你身上是合理推断，不是保证，所以要按自己的数据每两到四周调整一次。</p>
+  </section>
+
+  <section aria-labelledby="pd-week">
+    <h2 id="pd-week">一周的节奏</h2>
+    <div class="pd-week">
+      <div><b>一</b>日课</div>
+      <div><b>二</b>日课</div>
+      <div><b>三</b>日课</div>
+      <div><b>四</b>日课</div>
+      <div><b>五</b>日课</div>
+      <div class="review"><b>六</b>回顾</div>
+      <div class="light"><b>日</b>5′ 复习</div>
+    </div>
+    <dl class="pd-pairs">
+      <dt>周六回顾</dt>
+      <dd>本周练过的句子全部盲听一遍，筛出「没听懂」和「问题没解决」的重练；再把整段从头跟到尾，不中断。</dd>
+      <dt>周六自由说</dt>
+      <dd>挑本周学到的 3–5 个表达，就一个话题连着说 2 分钟，录音和上周那段对比。</dd>
+      <dt>周日</dt>
+      <dd>只做 5 分钟复习，保住连续天数。其余时间泛听或休息。</dd>
+    </dl>
+  </section>
+
+  <section aria-labelledby="pd-short">
+    <h2 id="pd-short">时间不够时</h2>
+    <p class="pd-note">连续比时长重要：每天 15 分钟，胜过周末补两小时。</p>
+    <div class="pd-tiers">
+      <div class="pd-tier">
+        <strong>15<small>分钟</small></strong>
+        <p>复习 5 分钟 + 精练 2 句。只保证今天练过。</p>
+      </div>
+      <div class="pd-tier main">
+        <strong>30<small>分钟</small></strong>
+        <p>完整日课，外加碎片时间泛听。</p>
+      </div>
+      <div class="pd-tier">
+        <strong>60<small>分钟</small></strong>
+        <p>新句子加到 6–8 句，泛听加到 20 分钟，复述换成就同一话题自由说 3 分钟。</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="pd-material">
+    <h2 id="pd-material">素材怎么选、何时换</h2>
+    <dl class="pd-pairs">
+      <dt>难度</dt>
+      <dd>跟读材料不看字能听懂七八成（经验值）。太难的话注意力全被「听清」占掉，没有余力模仿声音。</dd>
+      <dt>长度</dt>
+      <dd>一份 5–20 分钟。</dd>
+      <dt>顺序</dt>
+      <dd>演讲（语速稳、发音清楚）→ 访谈、播客（自然口语、连读多）→ 影视对话（快、省略多）。</dd>
+      <dt>何时换</dt>
+      <dd>这份练过七八成的句子，并且复习时大部分句子第一遍盲听就跟得上，就去素材库换下一份同类型、稍难一点的。</dd>
+      <dt>话题</dt>
+      <dd>选你真感兴趣、以后真会聊到的。</dd>
+    </dl>
+  </section>
+
+  <section aria-labelledby="pd-progress">
+    <h2 id="pd-progress">怎么看出进步</h2>
+    <p class="pd-note">每两到四周看一次。这些数都有噪声，看走势，别盯单次。</p>
+    <dl class="pd-pairs">
+      <dt>听清</dt>
+      <dd>新素材第一次盲听的自评分有没有往上走；「没听懂」的句子占比有没有下降；默写里「不会」的词有没有变少。</dd>
+      <dt>说得像</dt>
+      <dd>「多停了一下」「收尾没沉下去」这类提示出现得少了没有；同一句隔一周再录，对比两次的图。</dd>
+      <dt>说得出</dt>
+      <dd>复述录音里卡住的次数、每分钟能说出的词数。</dd>
+    </dl>
+  </section>
+
+  <section aria-labelledby="pd-missing">
+    <h2 id="pd-missing">Shadow 还缺的两样</h2>
+    <dl class="pd-pairs">
+      <dt>复习队列</dt>
+      <dd>首页已经能筛出该复习的句子，但还不会按「昨天、3 天前、7 天前」自动排队、一键从头练下去。</dd>
+      <dt>整段跟读</dt>
+      <dd>把当天练过的几句连起来播放，一口气跟下来。</dd>
+    </dl>
+  </section>
+
+  <section aria-labelledby="pd-refs">
+    <h2 id="pd-refs">依据</h2>
+    <ul class="pd-sources">
+      <li><b>Hamada 2016</b> · Shadowing: Who benefits and how? Uncovering a booming EFL teaching technique for listening comprehension. <i>Language Teaching Research</i>.</li>
+      <li><b>Kadota 2019</b> · <i>Shadowing as a Practice in Second Language Acquisition</i>. Routledge.</li>
+      <li><b>Cepeda et al. 2006</b> · Distributed practice in verbal recall tasks: A review and quantitative synthesis. <i>Psychological Bulletin</i>.</li>
+      <li><b>Suzuki, Nakata &amp; DeKeyser 2019</b> · The desirable difficulty framework as a theoretical foundation for optimizing and researching second language practice. <i>The Modern Language Journal</i>.</li>
+      <li><b>Roediger &amp; Karpicke 2006</b> · Test-enhanced learning: Taking memory tests improves long-term retention. <i>Psychological Science</i>.</li>
+      <li><b>Derwing &amp; Munro 2015</b> · <i>Pronunciation Fundamentals</i>. John Benjamins.</li>
+      <li><b>Ericsson, Krampe &amp; Tesch-Römer 1993</b> · The role of deliberate practice in the acquisition of expert performance. <i>Psychological Review</i>.</li>
+      <li><b>van Zeeland &amp; Schmitt 2013</b> · Lexical coverage in L1 and L2 listening comprehension. <i>Applied Linguistics</i>.</li>
+      <li><b>Swain 1985</b> · Communicative competence: Some roles of comprehensible input and comprehensible output in its development. In <i>Input in Second Language Acquisition</i>.</li>
+    </ul>
+  </section>
+</article>
+{% endblock %}

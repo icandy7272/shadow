@@ -100,6 +100,14 @@ CREATE TABLE IF NOT EXISTS vocab_sources (
     PRIMARY KEY (word, sentence)
 );
 
+-- 日课勾选：哪天、哪一步。按本地日期存，第二天自然是空的
+CREATE TABLE IF NOT EXISTS plan_checks (
+    day        TEXT NOT NULL,
+    step       TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    PRIMARY KEY (day, step)
+);
+
 CREATE INDEX IF NOT EXISTS idx_segments_source ON segments(source_id);
 CREATE INDEX IF NOT EXISTS idx_attempts_run ON attempts(run_id);
 """
@@ -519,3 +527,21 @@ def remove_vocab(conn: sqlite3.Connection, word: str) -> bool:
         conn.execute("DELETE FROM vocab_sources WHERE word = ?", (word,))
         cursor = conn.execute("DELETE FROM vocab WHERE word = ?", (word,))
     return cursor.rowcount > 0
+
+
+# --- 日课 -------------------------------------------------------------------
+
+
+def plan_checks(conn: sqlite3.Connection, day: str) -> set[str]:
+    """这一天勾了哪几步。day 是本地日期 YYYY-MM-DD。"""
+    return {row["step"] for row in conn.execute(
+        "SELECT step FROM plan_checks WHERE day = ?", (day,))}
+
+
+def set_plan_check(conn: sqlite3.Connection, day: str, step: str, done: bool) -> None:
+    if done:
+        conn.execute("INSERT OR IGNORE INTO plan_checks (day, step, checked_at)"
+                     " VALUES (?, ?, ?)", (day, step, _now()))
+    else:
+        conn.execute("DELETE FROM plan_checks WHERE day = ? AND step = ?", (day, step))
+    conn.commit()

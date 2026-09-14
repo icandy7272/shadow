@@ -28,6 +28,7 @@ if (filters) {
   const count = document.getElementById("filter-count");
   const keep = {
     all: () => true,
+    review: (row) => row.dataset.review === "1",     // 服务端按日课的规则算好了
     fresh: (row) => Number(row.dataset.runs) === 0,
     issues: (row) => Number(row.dataset.issues) > 0,
     unheard: (row) => row.dataset.rating !== "" && Number(row.dataset.rating) <= 2,
@@ -46,6 +47,66 @@ if (filters) {
       if (ok) shown += 1;
     });
     count.textContent = button.dataset.filter === "all" ? "" : `${shown} 句`;
+  });
+}
+
+// ---------- 首页：今天的日课 ----------
+// 勾选存在服务里，手机和电脑看到的一样；卡片收起与否只是这台设备上的习惯，存在本机。
+const planCard = document.getElementById("plan");
+if (planCard) {
+  const OPEN_KEY = "shadow.plan-open";
+  try {
+    if (localStorage.getItem(OPEN_KEY) === "0") planCard.open = false;
+  } catch (err) { /* 隐私模式下读不到，默认展开 */ }
+  planCard.addEventListener("toggle", () => {
+    try { localStorage.setItem(OPEN_KEY, planCard.open ? "1" : "0"); } catch (err) { /* 无所谓 */ }
+  });
+
+  const summary = planCard.querySelector("summary");
+  const showDone = (allDone) => {
+    const badge = summary.querySelector(".plan-done");
+    if (allDone && !badge) {
+      summary.insertBefore(el("span", "plan-done", "做完了"), summary.querySelector(".plan-toggle"));
+    }
+    if (!allDone && badge) badge.remove();
+  };
+
+  planCard.querySelectorAll(".plan-check").forEach((box) => {
+    box.addEventListener("change", async () => {
+      const step = box.closest(".plan-step");
+      const wanted = box.checked;
+      step.classList.toggle("done", wanted);
+      step.querySelector(".plan-error")?.remove();
+      try {
+        const response = await fetch("/api/plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ step: box.dataset.step, done: wanted }),
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        showDone((await response.json()).all_done);
+      } catch (err) {
+        // 没存上就退回去，别让人以为勾上了
+        box.checked = !wanted;
+        step.classList.toggle("done", !wanted);
+        step.querySelector(".plan-body").append(el("span", "plan-error", "没存上，服务恢复后再勾一次"));
+        service.check();
+      }
+    });
+  });
+
+  // 「筛出该复习的 N 句」：点中列表上的筛选，再滚到列表
+  planCard.querySelectorAll("[data-filter-link]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const button = document.querySelector(
+        `#filters button[data-filter="${link.dataset.filterLink}"]`);
+      if (!button) return;
+      event.preventDefault();
+      button.click();
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      document.getElementById("units").scrollIntoView(
+        { behavior: still ? "auto" : "smooth", block: "start" });
+    });
   });
 }
 

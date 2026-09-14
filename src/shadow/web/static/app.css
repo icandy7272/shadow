@@ -424,3 +424,111 @@ a.button:hover { border-color: var(--accent); }
 @media (max-width: 640px) {
   .vocab-head button { padding: 6px 12px; }
 }
+
+/* ---------- 今天的日课（首页卡片）---------- */
+.plan { margin: 0 0 20px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card); }
+.plan > summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px;
+  padding: 12px 16px; cursor: pointer; list-style: none; }
+.plan > summary::-webkit-details-marker { display: none; }
+.plan-title { font-weight: 600; }
+.plan-progress { color: var(--muted); font-size: 13px; }
+.plan-done { color: var(--ok); font-size: 13px; font-weight: 600; }
+.plan-toggle { margin-left: auto; color: var(--muted); font-size: 12px; }
+.plan[open] .plan-toggle::after { content: "收起"; }
+.plan:not([open]) .plan-toggle::after { content: "展开"; }
+.plan-steps { list-style: none; margin: 0; padding: 0 16px; }
+.plan-step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px;
+  padding: 10px 0; border-top: 1px solid var(--line); }
+.plan-check { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--accent);
+  cursor: pointer; }
+.plan-body { display: grid; gap: 3px; min-width: 0; }
+.plan-body label { cursor: pointer; }
+.plan-body label b { font-weight: 600; margin-right: 8px; }
+.plan-body label span { color: var(--muted); font-size: 14px; }
+.plan-step.done label b { color: var(--muted); text-decoration: line-through;
+  text-decoration-color: var(--muted); }
+.plan-link { justify-self: start; color: var(--accent); font-size: 14px; text-decoration: none; }
+.plan-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.plan-none { color: var(--muted); font-size: 13px; }
+.plan-error { color: var(--warn); font-size: 13px; }
+.plan-foot { margin: 0; padding: 10px 16px 12px; border-top: 1px solid var(--line);
+  font-size: 13px; }
+.plan-foot a { color: var(--muted); text-decoration: none; }
+.plan-foot a:hover { color: var(--accent); }
+@media (max-width: 640px) {
+  .plan > summary { padding: 10px 12px; }
+  .plan-steps { padding: 0 12px; }
+  .plan-foot { padding: 10px 12px; }
+  .plan-step { grid-template-columns: 26px minmax(0, 1fr); }
+  .plan-check { width: 22px; height: 22px; margin-top: 1px; }   /* 手指够得着 */
+}
+
+/* ---------- 完整日课页 ---------- */
+.plan-doc { display: grid; gap: 44px; max-width: 700px; }
+.plan-doc section { display: grid; gap: 14px; }
+.plan-doc h1 { font-size: 26px; margin: 0; }
+.plan-doc h2 { display: block; font-size: 19px; margin: 0; }
+.plan-doc h3 { font-size: 16px; margin: 0; }
+.plan-doc p, .plan-doc ul, .plan-doc ol, .plan-doc dl { margin: 0; }
+.plan-doc ul { padding-left: 1.2em; display: grid; gap: 4px; }
+.pd-header { display: grid; gap: 10px; }
+.pd-eyebrow { color: var(--muted); font-size: 12px; letter-spacing: .08em; }
+.pd-lede { font-size: 17px; }
+.pd-note { color: var(--muted); }
+.pd-small { font-size: 13px; }
+.pd-bar { display: grid; grid-template-columns: 5fr 6fr 9fr 5fr 5fr; gap: 3px; }
+.pd-seg { min-height: 58px; padding: 6px 8px; border-radius: 6px; display: grid;
+  align-content: center; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+.pd-seg span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pd-seg.listen, .pd-swatch.listen { background: rgba(31, 119, 180, .12);
+  border: 1.5px dashed var(--accent); }
+.pd-seg.speak, .pd-swatch.speak { background: rgba(214, 39, 40, .10);
+  border: 1.5px solid var(--warn); }
+.pd-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 13px; }
+.pd-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pd-swatch { display: inline-block; width: 18px; height: 10px; border-radius: 3px; }
+.pd-steps { list-style: none; padding: 0; border-top: 1px solid var(--line); }
+.pd-steps > li { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 14px;
+  padding: 16px 0; border-bottom: 1px solid var(--line); }
+.pd-steps > li > div { display: grid; gap: 8px; }
+.pd-when { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums;
+  padding-top: 2px; }
+.pd-tag { margin-left: 8px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font-size: 12px; font-weight: 400; white-space: nowrap; }
+.plan-doc .pd-four { padding-left: 1.4em; display: grid; gap: 6px; }
+.pd-rule { padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--card); font-size: 14px; }
+.pd-whys { border-top: 1px solid var(--line); }
+.pd-why { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px;
+  padding: 14px 0; border-bottom: 1px solid var(--line); }
+.plan-doc .pd-cite { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.pd-so::before { content: "所以　"; color: var(--warn); font-weight: 600; }
+.pd-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.pd-week div { display: grid; padding: 8px 2px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--card); text-align: center; font-size: 12px; line-height: 1.4; }
+.pd-week b { font-size: 15px; }
+.pd-week .review { background: rgba(31, 119, 180, .12); border-color: transparent; }
+.pd-week .light { background: transparent; border-style: dashed; }
+.pd-pairs { display: grid; grid-template-columns: 6.5em minmax(0, 1fr); gap: 10px 16px; }
+.pd-pairs dt { color: var(--muted); }
+.pd-pairs dd { margin: 0; }
+.pd-tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.pd-tier { display: grid; gap: 6px; align-content: start; padding-top: 10px;
+  border-top: 1px solid var(--line); }
+.pd-tier.main { padding-top: 8px; border-top: 3px solid var(--fg); }
+.pd-tier strong { font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+.pd-tier strong small { margin-left: 3px; color: var(--muted); font-size: 13px; font-weight: 400; }
+.plan-doc .pd-sources { list-style: none; padding: 0; gap: 6px; color: var(--muted); font-size: 12px; }
+.pd-sources b { color: var(--fg); font-weight: 500; }
+@media (max-width: 640px) {
+  .plan-doc { gap: 34px; }
+  .pd-seg { min-height: 50px; padding: 4px; font-size: 12px; }
+  .pd-seg span { display: none; }
+  .pd-steps > li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .pd-why { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .pd-week div { font-size: 11px; }
+  .pd-tiers { grid-template-columns: minmax(0, 1fr); }
+  .pd-pairs { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .pd-pairs dd { margin-bottom: 8px; }
+}
