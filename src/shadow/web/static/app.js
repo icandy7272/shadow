@@ -757,12 +757,6 @@ if (root) {
         `<p class="bad">第 ${r.index} 遍没收进来：${r.reason}</p>`).join("") +
       data.skipped.map((s) =>
         `<p class="bad">跳过第 ${s.index} 遍：开头有 ${s.drift} 秒的话没进转写，比不了</p>`).join("") +
-      (data.problems.length
-        ? "<p>机器没听对的词：" + data.problems.map((p) =>
-            p.kind === "missing" ? `漏 ${p.ref}`
-            : p.kind === "wrong" ? `${p.ref}→听成 ${p.usr}` : `多 ${p.usr}`
-          ).join("、") + "</p>"
-        : "<p class='ok'>发音层面没问题——每个词机器都听出来了。</p>") +
       (data.issues.length
         ? "<p><b>下一遍改这些：</b></p>" + data.issues.map((i) =>
             `<div class="issue"><b>${i.title}</b>（${i.hits}/${i.total} 次）` +

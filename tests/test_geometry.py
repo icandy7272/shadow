@@ -117,13 +117,45 @@ def test_a_word_read_as_something_else_still_shows_your_pitch(prosody):
                              speech_ratio=1.0, pause_ratio=None)
     take = SimpleNamespace(tokens=diff_words([w.text for w in REF], [w.text for w in usr]),
                            words=usr, rhythm=rhythm, prosody=prosody, advice=())
-    review = SimpleNamespace(ref_words=REF, ref_prosody=prosody, best=take)
+    review = SimpleNamespace(ref_words=REF, ref_prosody=prosody, best=take, shaky=frozenset())
 
     view = _take_view(review, take, 3, {"ref": "r"})
 
     assert view["pitch"][2]["usrTrace"]
     # 图 1 照旧标出这个词没对上
     assert view["rhythm"]["usr"][2]["matched"] is False
+
+
+def test_each_take_lists_the_words_the_machine_misheard_in_that_take(prosody):
+    """实际遇到的：切到第 2、3 遍，可懂度跟着变，「机器没听对的词」却一直是挑出来那一遍的。"""
+    from types import SimpleNamespace
+
+    from shadow.analysis.diff import diff_words
+    from shadow.web.view import feedback_view
+
+    rhythm = SimpleNamespace(lags=(), ref_span=1.4, usr_span=1.8,
+                             speech_ratio=1.0, pause_ratio=None)
+    texts = [w.text for w in REF]
+
+    def take(said, path):
+        usr = _words([(text, i * 0.6, 0.5) for i, text in enumerate(said)])
+        return SimpleNamespace(tokens=diff_words(texts, said), words=usr, rhythm=rhythm,
+                               prosody=prosody, advice=(), path=path)
+
+    takes = (take(["Just", "three", "stories."], "a.wav"),
+             take(["Just", "tree", "stories."], "b.wav"))
+
+    def view(shaky):
+        review = SimpleNamespace(ref_words=REF, ref_prosody=prosody, shaky=frozenset(shaky),
+                                 takes=takes, best=takes[0],
+                                 summary=SimpleNamespace(representative=0))
+        return feedback_view(review, 3, audio={"ref": "r"},
+                             takes={"a.wav": "/take/a", "b.wav": "/take/b"})
+
+    assert [t["problems"] for t in view(())["takes"]] == [
+        [], [{"kind": "wrong", "ref": "three", "usr": "tree"}]]
+    # 原声这一带转写本身就不可信的，不算你读错
+    assert view({1})["takes"][1]["problems"] == []
 
 
 def test_a_slot_carries_the_whole_shape_not_just_its_ends(prosody):

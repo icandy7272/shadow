@@ -677,12 +677,7 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp,
 def _review_payload(result, run_id: int, *, audio: dict, takes: dict,
                     rejected=()) -> dict:
     summary = result.summary
-    best = result.best
-    problems = [
-        {"kind": t.kind, "ref": t.ref_text, "usr": t.usr_text}
-        for t in best.tokens
-        if t.kind != "equal" and t.ref_index not in result.shaky
-    ]
+    # 机器没听对的词放在每一遍自己的视图里（view.takes[].problems），切到哪一遍就显示哪一遍的
     return {
         "run_id": run_id,
         "view": feedback_view(result, MAX_ADVICE, audio=audio, takes=takes),
@@ -694,7 +689,6 @@ def _review_payload(result, run_id: int, *, audio: dict, takes: dict,
         "speech": round(summary.speech_ratio.median, 2),
         "pause": None if summary.pause_ratio is None
                  else round(summary.pause_ratio.median, 2),
-        "problems": problems,
         "issues": [
             {"title": i.advice.title, "detail": i.advice.detail,
              "action": i.advice.action, "hits": i.hits, "total": i.total}

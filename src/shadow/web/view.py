@@ -41,6 +41,10 @@ def _take_view(review, take, limit: int, audio: dict) -> dict:
         "speech": round(take.rhythm.speech_ratio, 2),
         "pause": (None if take.rhythm.pause_ratio is None
                   else round(take.rhythm.pause_ratio, 2)),
+        # 机器在这一遍里没听对的词，跟着这一遍走。原声那一带转写本身就不可信的不算
+        "problems": [{"kind": t.kind, "ref": t.ref_text, "usr": t.usr_text}
+                     for t in take.tokens
+                     if t.kind != "equal" and t.ref_index not in review.shaky],
         # 两条音轨各自第一个词从第几秒开始。同时播放时各自跳到这里，
         # 起点对齐了，图上同一个 x 才是同一刻。
         "audio": {**audio,
