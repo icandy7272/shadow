@@ -532,3 +532,11 @@ a.button:hover { border-color: var(--accent); }
   .pd-pairs { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .pd-pairs dd { margin-bottom: 8px; }
 }
+
+/* 默写收起后点标题能再打开；跟读分析完会自己打开 */
+.step.foldable > h2 { cursor: pointer; }
+.step.foldable > h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px;
+  border-radius: 4px; }
+.step.foldable.done h2::after { content: "已完成 · 点开看默写"; }
+.step.foldable:not(.done) h2::after { content: "收起"; margin-left: auto; font-size: 12px;
+  font-weight: 400; color: var(--muted); }

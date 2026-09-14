@@ -255,7 +255,35 @@ if (root) {
     box.replaceChildren(...dictationResult(await response.json()));
     // 框收起来，只留答案和释义；开始跟读时整步再收起
     drillStep.classList.add("graded");
+    setFolded(false);
     document.getElementById("step-record").classList.remove("locked");
+  });
+
+  // 默写收起后，点标题还能再打开：跟读分析完了，回头看默写错在哪、生词什么意思。
+  // 分析一出来就自动打开——那时已经不怕看到原文了。
+  const drillTitle = drillStep.querySelector("h2");
+  function setFolded(folded) {
+    drillStep.classList.add("foldable");
+    drillStep.classList.toggle("done", folded);
+    drillTitle.tabIndex = 0;
+    drillTitle.setAttribute("role", "button");
+    drillTitle.setAttribute("aria-expanded", String(!folded));
+  }
+  drillTitle.addEventListener("click", () => {
+    if (drillStep.classList.contains("foldable")) setFolded(!drillStep.classList.contains("done"));
+  });
+  drillTitle.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    drillTitle.click();
+  });
+  document.addEventListener("shadow:analysed", () => {
+    if (!drillStep.classList.contains("graded")) return;
+    // 上面多出一段，Safari 不会替你稳住滚动位置：手动补回去，眼前的分析结果不跳走
+    const anchor = document.getElementById("step-record");
+    const before = anchor.getBoundingClientRect().top;
+    setFolded(false);
+    window.scrollBy(0, anchor.getBoundingClientRect().top - before);
   });
 
   // 整句逐词着色：标点照原样放在词的前后
@@ -694,6 +722,8 @@ if (root) {
         `<p class="bad">${(last && last.error) || "比对中断了，重录一遍试试。"}</p>`;
       return;
     }
+    // 分析完了：默写那一步可以重新打开，回头看错在哪
+    document.dispatchEvent(new CustomEvent("shadow:analysed"));
     showResult(last.result, box);
   }
 
