@@ -418,6 +418,9 @@ def practice(request: Request, segment_id: int, unit: int,
             # 默写这一步只给要写几个词，不给原文——着色用的原文等对完答案再带回来
             "word_total": sum(1 for w in words if dictation.needs_box(w.text)),
             "seconds": round(words[-1].end - words[0].start, 1),
+            # 原声里真出声的时长（不含词间停顿）。录音「说完了自己停」拿它当下限：
+            # 按整段时长算的话，跟得比原声快的人永远够不着，只能自己点
+            "spoken": round(sum(word.duration for word in words), 1),
             "min_take_sec": config.MIN_ATTEMPT_SEC,
             # 只传给第三步。里面带着句子原文的片段，提前露出来盲听就废了。
             "history": history.last_practice(connection, segment_id, unit),

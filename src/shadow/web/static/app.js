@@ -546,14 +546,22 @@ if (root) {
   // 说完了自己停：盯着麦克风的实时响度，先出声、后安静一段，就是这一遍说完了。
   //
   // 一直等人点「说完了」，等于每录一遍都要腾出一只手；戴着耳机看不见屏幕时更别扭。
-  // 门限不写死——不同麦克风、不同房间的底噪能差一个数量级。开录后先量一下本底，
-  // 按本底往上取；量到的本底再封顶，免得「嘀」完就开口的人把门限拱得谁也过不去。
-  const HUSH_MS = 1200;        // 静这么久算说完。句中的犹豫一般短得多
+  //
+  // 门限不写死——不同麦克风、不同房间的底噪能差一个数量级。两头各取一个：
+  // 一头是开录后量到的本底，一头是你自己嗓门的一小截。后者要紧：嗓门轻的人
+  // 整条曲线都低，只按绝对值卡，说着说着就会被当成已经不说了。
+  //
+  // 本底取那 300 毫秒里的**最小**值，不是最大值：嘀声一落就开口的人，最大值量到的
+  // 是嗓门而不是底噪，门限会被顶得比说话还高——这一遍从头到尾都算静音，于是说到
+  // 一半就收了。最小值即使在说话中间也仍然接近底噪。
+  const HUSH_MS = 2200;        // 连着静这么久才算说完。头几遍还没顺下来时，句中犹豫能有两秒
   const CALIBRATE_MS = 300;    // 开录后先量本底
   const SPEECH_MS = 200;       // 累计出声这么久，才算开了口
   const WATCH_MS = 50;
-  const FLOOR_CAP = 0.02;      // 本底最高按这个算
-  const GATE_MIN = 0.012;      // 门限的下限，大约 -38 dBFS
+  const FLOOR_CAP = 0.01;      // 本底最高按这个算
+  const OF_PEAK = 0.07;        // 门限也不低于自己嗓门峰值的这一截
+  const PEAK_DECAY = 0.995;    // 峰值慢慢往下掉：一声咳嗽不该把门限顶住整遍
+  const QUIET = 0.005;         // 再低就是数字静音了
 
   // 上下文在 getUserMedia 之后单独开一个：iPhone 上先开上下文、后拿麦克风，
   // 分析器常年读到 0。开不起来（点击的额度已经用掉了）就借放音那个。
@@ -636,16 +644,19 @@ if (root) {
     recorder.start();
     began = performance.now();
     if (!ear) return;
-    let floor = 0;
+    let floor = FLOOR_CAP;
+    let peak = 0;
     let spoke = 0;
     let hushFrom = 0;
     watch = setInterval(() => {
+      const level = ear.level();
       const now = performance.now();
       if (now - began < CALIBRATE_MS) {
-        floor = Math.min(Math.max(floor, ear.level()), FLOOR_CAP);
+        floor = Math.min(floor, level);
         return;
       }
-      if (ear.level() > Math.max(floor * 4, GATE_MIN)) {
+      peak = Math.max(level, peak * PEAK_DECAY);
+      if (level > Math.max(floor * 3, peak * OF_PEAK, QUIET)) {
         spoke += WATCH_MS;
         hushFrom = 0;
         return;
@@ -653,17 +664,37 @@ if (root) {
       if (spoke < SPEECH_MS) return;   // 还没开过口：不猜，等人点「说完了」
       // 安静了多久按时钟算，不按跑了几拍：切到别的标签页时 setInterval 会被压到一秒一次
       hushFrom = hushFrom || now;
-      // 说够了才让它停：开头卡壳停顿一下的，不该被当成说完
-      if (now - hushFrom >= HUSH_MS && hushFrom - began >= minSpoken) finish();
+      if (now - hushFrom < HUSH_MS) return;
+      // 卡在句子中间的停顿不该算说完，所以看的是「真出过声的时长」够不够，
+      // 不是「开录到现在多久」——犹豫再久也攒不出说话时间来
+      if (spoke >= minSpoken && now - began >= Math.max(minTotal, minTake * 1000)) finish();
     }, WATCH_MS);
   });
 
   // 服务端按音频时长卡 config.MIN_ATTEMPT_SEC。这里量的是墙上时间，比实际音频略长，
   // 留一点余量，免得刚过线的又被服务端拒掉。
   const minTake = Number(root.dataset.minTake || 1) + 0.3;
-  // 自动停之前至少要说到这么久：跟读一句，说出来的长度和原声差不多。
-  // 太松的话，开头一犹豫就被当成说完了。
-  const minSpoken = Math.max(minTake, Number(root.dataset.seconds || 0) * 0.6) * 1000;
+  // 自动停之前至少要真出声这么久（不含停顿）。比的是原声里真出声的时长，不是整段
+  // 时长——按整段算的话，跟得比原声快的人永远够不着，只能自己点。
+  // 一半是「大致说完了」的下限：说到一半放弃的够不着，跟得比原声快的够得着。
+  const refSpoken = Number(root.dataset.spoken || 0)
+    || Number(root.dataset.seconds || 0) * 0.7;
+  const minSpoken = refSpoken * 0.5 * 1000;
+  // 再给一条按整段时长算的下限：头几遍还在把句子理顺，说半句、卡两秒、再接上是常事。
+  // 光看「静了多久」分不出这种犹豫和说完，就干脆在原声时长的 1.3 倍之前一律不收。
+  const minTotal = Number(root.dataset.seconds || 0) * 1.3 * 1000;
+
+  // 自动停判错了（嗓门轻、句中停顿长），得有个地方关掉它，而不是每遍都被截一次。
+  // 关掉就是从前那样：一直等人点「说完了」。存在本机，下次进来还是这个选择。
+  const autoBox = document.getElementById("auto-stop");
+  if (autoBox) {
+    try { autoBox.checked = localStorage.getItem("shadow.auto-stop") !== "0"; }
+    catch (err) { /* 隐私模式下读不到，默认开着 */ }
+    autoBox.addEventListener("change", () => {
+      try { localStorage.setItem("shadow.auto-stop", autoBox.checked ? "1" : "0"); }
+      catch (err) { /* 无所谓 */ }
+    });
+  }
 
   startButton?.addEventListener("click", async () => {
     stopLoops();                // 连播还开着的话会录进去
@@ -687,12 +718,15 @@ if (root) {
       startButton.disabled = false;
       return;
     }
-    // 读不到实时响度（浏览器不给、上下文开不起来）就退回纯手动，不拦着人练
+    // 读不到实时响度（浏览器不给、上下文开不起来），或者人把自动停关了，
+    // 就退回纯手动，不拦着人练
     let ear = null;
-    try {
-      ear = await listenTo(stream, speaker.context);
-    } catch (err) {
-      ear = null;
+    if (autoBox?.checked !== false) {
+      try {
+        ear = await listenTo(stream, speaker.context);
+      } catch (err) {
+        ear = null;
+      }
     }
     const wrapUp = () => {
       stream.getTracks().forEach((t) => t.stop());

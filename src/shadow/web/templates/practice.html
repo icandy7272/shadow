@@ -2,7 +2,8 @@
 {% block subtitle %}<span class="crumb"><a href="/sources/{{ source_id }}">{{ source }}</a> · 第 {{ number }} 句 / 共 {{ total_units }} 句</span>{% endblock %}
 {% block content %}
 <div id="practice" data-segment="{{ segment }}" data-unit="{{ unit }}"
-     data-min-take="{{ min_take_sec }}" data-seconds="{{ seconds }}">
+     data-min-take="{{ min_take_sec }}" data-seconds="{{ seconds }}"
+     data-spoken="{{ spoken }}">
 
   <section class="step" id="step-listen">
     <h2><span class="n">1</span> 盲听</h2>
@@ -58,6 +59,7 @@
     <div class="row">
       <label class="repeat">录 <input type="number" id="takes" value="3" min="1" max="6"> 遍</label>
       <label class="repeat">每遍前听 <input type="number" id="prelisten" value="4" min="0" max="20"> 次</label>
+      <label class="repeat"><input type="checkbox" id="auto-stop" checked> 说完自动停</label>
       <button class="primary" id="start-record">开始</button>
     </div>
     <div class="peek">
