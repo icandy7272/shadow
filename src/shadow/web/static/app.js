@@ -539,6 +539,49 @@ if (root) {
         await sleep(220);
       },
       close: () => { ctx.close().catch(() => {}); },
+      context: ctx,
+    };
+  }
+
+  // 说完了自己停：盯着麦克风的实时响度，先出声、后安静一段，就是这一遍说完了。
+  //
+  // 一直等人点「说完了」，等于每录一遍都要腾出一只手；戴着耳机看不见屏幕时更别扭。
+  // 门限不写死——不同麦克风、不同房间的底噪能差一个数量级。开录后先量一下本底，
+  // 按本底往上取；量到的本底再封顶，免得「嘀」完就开口的人把门限拱得谁也过不去。
+  const HUSH_MS = 1200;        // 静这么久算说完。句中的犹豫一般短得多
+  const CALIBRATE_MS = 300;    // 开录后先量本底
+  const SPEECH_MS = 200;       // 累计出声这么久，才算开了口
+  const WATCH_MS = 50;
+  const FLOOR_CAP = 0.02;      // 本底最高按这个算
+  const GATE_MIN = 0.012;      // 门限的下限，大约 -38 dBFS
+
+  // 上下文在 getUserMedia 之后单独开一个：iPhone 上先开上下文、后拿麦克风，
+  // 分析器常年读到 0。开不起来（点击的额度已经用掉了）就借放音那个。
+  async function listenTo(stream, spare) {
+    const Context = window.AudioContext || window.webkitAudioContext;
+    let own = new Context();
+    await own.resume().catch(() => {});
+    if (own.state !== "running") {
+      own.close().catch(() => {});
+      own = null;
+    }
+    const ctx = own || spare;
+    const analyser = ctx.createAnalyser();
+    if (typeof analyser.getFloatTimeDomainData !== "function") {
+      if (own) own.close().catch(() => {});
+      throw new Error("这个浏览器读不到实时响度");   // 老 Safari：退回手动
+    }
+    analyser.fftSize = 1024;
+    ctx.createMediaStreamSource(stream).connect(analyser);   // 不接 destination：接了会啸叫
+    const frame = new Float32Array(analyser.fftSize);
+    return {
+      level() {
+        analyser.getFloatTimeDomainData(frame);
+        let sum = 0;
+        for (const sample of frame) sum += sample * sample;
+        return Math.sqrt(sum / frame.length);
+      },
+      close: () => { if (own) own.close().catch(() => {}); },
     };
   }
 
@@ -564,11 +607,12 @@ if (root) {
     await tapToContinue("接着放", speaker.wake);
   };
 
-  const recordOne = (stream) => new Promise((resolve) => {
+  const recordOne = (stream, ear, minSpoken) => new Promise((resolve) => {
     const chunks = [];
     const recorder = new MediaRecorder(stream);
     let began = 0;
     let dropped = false;
+    let watch = 0;
     recorder.addEventListener("dataavailable", (e) => chunks.push(e.data));
     recorder.addEventListener("stop", () => resolve({
       blob: new Blob(chunks),
@@ -576,6 +620,7 @@ if (root) {
       dropped,
     }));
     const finish = () => {
+      clearInterval(watch);
       stopButton.hidden = true;
       if (redoButton) redoButton.hidden = true;
       recorder.stop();
@@ -590,11 +635,35 @@ if (root) {
     }
     recorder.start();
     began = performance.now();
+    if (!ear) return;
+    let floor = 0;
+    let spoke = 0;
+    let hushFrom = 0;
+    watch = setInterval(() => {
+      const now = performance.now();
+      if (now - began < CALIBRATE_MS) {
+        floor = Math.min(Math.max(floor, ear.level()), FLOOR_CAP);
+        return;
+      }
+      if (ear.level() > Math.max(floor * 4, GATE_MIN)) {
+        spoke += WATCH_MS;
+        hushFrom = 0;
+        return;
+      }
+      if (spoke < SPEECH_MS) return;   // 还没开过口：不猜，等人点「说完了」
+      // 安静了多久按时钟算，不按跑了几拍：切到别的标签页时 setInterval 会被压到一秒一次
+      hushFrom = hushFrom || now;
+      // 说够了才让它停：开头卡壳停顿一下的，不该被当成说完
+      if (now - hushFrom >= HUSH_MS && hushFrom - began >= minSpoken) finish();
+    }, WATCH_MS);
   });
 
   // 服务端按音频时长卡 config.MIN_ATTEMPT_SEC。这里量的是墙上时间，比实际音频略长，
   // 留一点余量，免得刚过线的又被服务端拒掉。
   const minTake = Number(root.dataset.minTake || 1) + 0.3;
+  // 自动停之前至少要说到这么久：跟读一句，说出来的长度和原声差不多。
+  // 太松的话，开头一犹豫就被当成说完了。
+  const minSpoken = Math.max(minTake, Number(root.dataset.seconds || 0) * 0.6) * 1000;
 
   startButton?.addEventListener("click", async () => {
     stopLoops();                // 连播还开着的话会录进去
@@ -618,8 +687,16 @@ if (root) {
       startButton.disabled = false;
       return;
     }
+    // 读不到实时响度（浏览器不给、上下文开不起来）就退回纯手动，不拦着人练
+    let ear = null;
+    try {
+      ear = await listenTo(stream, speaker.context);
+    } catch (err) {
+      ear = null;
+    }
     const wrapUp = () => {
       stream.getTracks().forEach((t) => t.stop());
+      ear?.close();
       speaker.close();
       status.classList.remove("live");
       startButton.disabled = false;
@@ -649,9 +726,11 @@ if (root) {
       await awake(speaker);
       status.textContent = `第 ${take}/${takes} 遍 —— 嘀一声之后开始说`;
       await speaker.beep();
-      status.textContent = `第 ${take}/${takes} 遍 —— 录音中，说完点「说完了」`;
+      status.textContent = ear
+        ? `第 ${take}/${takes} 遍 —— 录音中，说完停一下就自动收`
+        : `第 ${take}/${takes} 遍 —— 录音中，说完点「说完了」`;
       status.classList.add("live");
-      const clip = await recordOne(stream);
+      const clip = await recordOne(stream, ear, minSpoken);
 
       if (clip.dropped) {
         status.classList.remove("live");
@@ -677,9 +756,7 @@ if (root) {
       blobs.push(clip.blob);
       take += 1;
     }
-    stream.getTracks().forEach((t) => t.stop());
-    status.classList.remove("live");
-    startButton.disabled = false;
+    wrapUp();      // 录完也要把上下文关掉：一次点「开始」漏一个，几轮之后浏览器就不再给了
     if (blobs.length) await submit(blobs);
   });
 

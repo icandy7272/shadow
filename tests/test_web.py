@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -512,6 +514,16 @@ def test_takes_endpoint_reports_unusable_recordings_in_the_stream(client, tmp_pa
 def test_practice_page_has_a_progress_bar(client, tmp_path):
     segment_id = _seed(tmp_path)
     assert 'id="rec-progress"' in client.get(f"/practice/{segment_id}/2").text
+
+
+def test_the_recorder_is_told_how_long_the_sentence_is(client, tmp_path):
+    """自动停要拿原声时长当下限：说到六成长才允许收，免得开头一犹豫就被当成说完。"""
+    segment_id = _seed(tmp_path)
+
+    body = client.get(f"/practice/{segment_id}/2").text
+
+    assert re.search(r'id="practice"[^>]*data-seconds="\d+(\.\d+)?"', body)
+    assert 'id="stop-take"' in body      # 手动那条路留着
 
 
 def test_take_audio_is_served_and_stays_inside_its_folder(client, tmp_path):

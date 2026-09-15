@@ -2,7 +2,7 @@
 {% block subtitle %}<span class="crumb"><a href="/sources/{{ source_id }}">{{ source }}</a> · 第 {{ number }} 句 / 共 {{ total_units }} 句</span>{% endblock %}
 {% block content %}
 <div id="practice" data-segment="{{ segment }}" data-unit="{{ unit }}"
-     data-min-take="{{ min_take_sec }}">
+     data-min-take="{{ min_take_sec }}" data-seconds="{{ seconds }}">
 
   <section class="step" id="step-listen">
     <h2><span class="n">1</span> 盲听</h2>
@@ -52,7 +52,7 @@
         {{ history.issues | length }} 处要改{% else %}没有反复出现的问题{% endif %}</em>
       {%- endif %}</h2>
     <p class="hint">每遍录音前会自动放几次原声——听和说之间不能有间隔。
-      听完嘀一声就开始说，说完点「说完了」。</p>
+      听完嘀一声就开始说，说完停一下就自动收，手上不用动；想早点收就点「说完了」。</p>
     <p class="hint insecure" id="no-mic" hidden>这台设备上录不了音——浏览器只在
       HTTPS 或 localhost 下才给麦克风权限。前两步照常，跟读请用电脑。</p>
     <div class="row">
