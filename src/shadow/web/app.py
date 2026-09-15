@@ -184,11 +184,12 @@ def _numbered(units: list[dict]) -> list[dict]:
 
 
 def _practice_states(connection, source_id: int) -> dict[str, filters.State]:
-    """这份素材上每句话练到了什么程度：练过几轮、上次的问题、自评、最后哪天练的。
+    """这份素材上每句话练到了什么程度：练过几轮、上次的问题、自评、最后哪天练的、几号该复习。
 
     只看这份素材上的记录：两份素材里文字相同的句子不能串在一起。
+    到期日是一路算出来的，不存库：评分规则改了，老记录跟着重算，不会留下一批按旧规矩排的队。
     """
-    runs, issues, ratings, last = {}, {}, {}, {}
+    runs, issues, ratings, last, levels = {}, {}, {}, {}, {}
     for run in db.source_runs(connection, source_id):
         text = run["unit_text"]
         metrics = db.run_metrics(connection, run["id"])
@@ -201,11 +202,16 @@ def _practice_states(connection, source_id: int) -> dict[str, filters.State]:
             ratings[text] = run["blind_rating"]
         if metrics:
             issues[text] = _recurring(metrics)
+        levels[text] = plan.next_level(
+            levels.get(text, -1),
+            plan.result_of(rating=run["blind_rating"], issues=issues.get(text, 0)))
         when = _local_day(run["finished_at"] or run["started_at"])
         if when is not None and (text not in last or when > last[text]):
             last[text] = when
-    return {text: filters.State(runs=count, issues=issues.get(text, 0),
-                                rating=ratings.get(text), last_day=last.get(text))
+    return {text: filters.State(
+                runs=count, issues=issues.get(text, 0), rating=ratings.get(text),
+                last_day=last.get(text),
+                due=plan.due_day(last[text], levels[text]) if text in last else None)
             for text, count in runs.items()}
 
 
@@ -233,20 +239,19 @@ def _place(connection, segment_id: int, unit: int, queue: str | None = None) -> 
     def numbered(index):
         return None if index is None else by_key[(units[index]["segment"], units[index]["unit"])]
 
+    usable = [item["usable"] for item in units]
     if queue is None:
-        usable = [item["usable"] for item in units]
-        before = filters.before(usable, position)
-        after = next((i for i in range(position + 1, len(units)) if usable[i]), None)
+        picked = filters.Selection(
+            order=tuple(index for index, ok in enumerate(usable) if ok))
+        after = filters.after(picked, position, wrap=False)
         view = None
     else:
         states = _practice_states(connection, source_id)
-        today = _today()
-        flags = [item["usable"] and filters.matches(
-                     queue, states.get(item["text"], filters.NEVER), today)
-                 for item in units]
-        before = filters.before(flags, position)
-        after = filters.after(flags, position)
-        view = filters.view(queue, remaining=filters.remaining(flags, position))
+        here = [states.get(item["text"], filters.NEVER) for item in units]
+        picked = filters.select(queue, here, _today(), usable=usable)
+        after = filters.after(picked, position)
+        view = filters.view(queue, remaining=filters.remaining(picked, position))
+    before = filters.before(picked, position)
     here = by_key.get((segment_id, unit))
     return {"number": here["number"] if here else None,
             "total_units": len(sentences),
@@ -322,8 +327,8 @@ def _local_day(stamp: str | None) -> date | None:
         return None
 
 
-def _plan_view(connection, today: date, review_count: int) -> dict:
-    """首页日课卡片要的东西：今天是星期几、哪几步、勾了哪些、该复习几句。"""
+def _plan_view(connection, today: date, review: filters.Selection) -> dict:
+    """首页日课卡片要的东西：今天是星期几、哪几步、勾了哪些、该复习几句、顺延几句。"""
     weekday = today.weekday()
     ticked = db.plan_checks(connection, today.isoformat())
     steps = [{"key": step.key, "title": step.title, "detail": step.detail,
@@ -331,7 +336,7 @@ def _plan_view(connection, today: date, review_count: int) -> dict:
              for step in plan.steps_for(weekday)]
     return {"heading": plan.heading(weekday), "steps": steps,
             "all_done": all(step["done"] for step in steps),
-            "review_count": review_count}
+            "review_count": len(review.order), "deferred": len(review.deferred)}
 
 
 @app.get("/plan", response_class=HTMLResponse)
@@ -365,12 +370,17 @@ def source_page(request: Request, source_id: int):
     catalogue = _sentences(connection, source_id)
     states = _practice_states(connection, source_id)
     today = _today()
-    for item in catalogue:
-        state = states.get(item["text"], filters.NEVER)
+    here = [states.get(item["text"], filters.NEVER) for item in catalogue]
+    # 该复习的那几句排过急迫程度，名次带给前端：点「该复习」时列表按它重排
+    review = filters.select(filters.REVIEW, here, today)
+    ranks = {index: rank for rank, index in enumerate(review.order, 1)}
+    for index, item in enumerate(catalogue):
+        state = here[index]
         item["runs"] = state.runs
         item["issues"] = state.issues
         item["rating"] = state.rating
-        item["review"] = filters.matches(filters.REVIEW, state, today)
+        item["review"] = index in ranks
+        item["review_rank"] = ranks.get(index, 0)
     # 没练过的第一句：有个直达入口就不用浏览列表，也就不会被剧透
     next_unit = next((i for i in catalogue if not i["runs"] and i["usable"]), None)
     return templates.TemplateResponse(
@@ -378,8 +388,7 @@ def source_page(request: Request, source_id: int):
         {"catalogue": catalogue, "source": source, "next_unit": next_unit,
          "practised": sum(1 for item in catalogue if item["runs"]),
          "days": progress.calendar(connection),
-         "plan": _plan_view(connection, today,
-                            sum(1 for item in catalogue if item["review"]))},
+         "plan": _plan_view(connection, today, review)},
     )
 
 

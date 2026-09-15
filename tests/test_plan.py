@@ -54,17 +54,55 @@ def test_nothing_still_says_fill_in_the_blanks():
     assert "默写" in text
 
 
-@pytest.mark.parametrize("last_day, issues, rating, due", [
-    (TODAY - timedelta(days=1), 0, 4, True),       # 昨天练过
-    (TODAY - timedelta(days=7), 2, 4, True),       # 上次还有问题没解决
-    (TODAY - timedelta(days=7), 0, 2, True),       # 盲听没听懂
-    (TODAY - timedelta(days=7), 0, 4, False),      # 早就练好了
-    (TODAY - timedelta(days=7), 0, None, False),
-    (TODAY, 3, 1, False),                          # 今天才练，明天再复习
-    (None, 0, None, False),                        # 没练过
+@pytest.mark.parametrize("rating, issues, result", [
+    (5, 0, plan.ONWARD),        # 听懂了，问题也清了
+    (4, 0, plan.ONWARD),
+    (3, 0, plan.HOLD),          # 磕磕绊绊：不推进也不倒退
+    (None, 0, plan.HOLD),       # 跳过盲听：不知道不等于练好了
+    (2, 0, plan.AGAIN),         # 没听懂
+    (5, 1, plan.AGAIN),         # 听懂了，但上次的问题还挂着
 ])
-def test_what_counts_as_due_for_review(last_day, issues, rating, due):
-    assert plan.needs_review(last_day, TODAY, issues=issues, rating=rating) is due
+def test_one_round_pushes_the_interval_out_holds_it_or_sends_it_back(
+        rating, issues, result):
+    assert plan.result_of(rating=rating, issues=issues) == result
+
+
+def test_the_interval_ladder_climbs_one_step_at_a_time():
+    level = -1                                     # 没练过
+    for expected in range(len(plan.INTERVALS)):
+        level = plan.next_level(level, plan.ONWARD)
+        assert level == expected
+    assert plan.next_level(level, plan.ONWARD) == level       # 到顶就不再往后推
+
+    assert plan.next_level(3, plan.HOLD) == 3
+    assert plan.next_level(-1, plan.HOLD) == 0     # 第一次练完，明天再来
+    assert plan.next_level(4, plan.AGAIN) == 0     # 打回 1 天
+
+
+def test_the_first_round_comes_back_tomorrow_and_a_good_one_waits_longer():
+    assert plan.due_day(TODAY, 0) == TODAY + timedelta(days=1)
+    assert plan.due_day(TODAY, 2) == TODAY + timedelta(days=7)
+    assert plan.due_day(TODAY, -1) == TODAY + timedelta(days=1)
+
+
+@pytest.mark.parametrize("due, is_due", [
+    (TODAY - timedelta(days=3), True),             # 逾期了
+    (TODAY, True),
+    (TODAY + timedelta(days=1), False),            # 还没到
+    (None, False),                                 # 没练过
+])
+def test_only_sentences_that_came_due_get_reviewed(due, is_due):
+    assert plan.is_due(due, TODAY) is is_due
+
+
+def test_the_worst_sentences_come_first():
+    def key(*, issues=0, rating=4, overdue=0):
+        return plan.urgency(due=TODAY - timedelta(days=overdue), today=TODAY,
+                            issues=issues, rating=rating)
+
+    assert key(issues=1) < key(rating=1) < key()           # 老问题 > 没听懂 > 单纯到期
+    assert key(overdue=5) < key(overdue=1)                 # 同一档里逾期久的在前
+    assert key(issues=1, overdue=0) < key(rating=1, overdue=9)
 
 
 @pytest.fixture()

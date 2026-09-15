@@ -7,7 +7,7 @@ import pytest
 import soundfile as sf
 from fastapi.testclient import TestClient
 
-from shadow import config, db
+from shadow import config, db, plan
 from shadow.models import Segment, Word
 from tests.test_web import _source_of
 
@@ -75,7 +75,8 @@ def _page(client, segment_id, unit, query=""):
 def test_review_goes_to_the_next_sentence_that_is_due(client, seg):
     """挑着练过的话，原文的下一句可能根本不用复习，甚至没练过——点进去就先看到了原文。"""
     _practised(seg, 1, on=YESTERDAY)
-    _practised(seg, 2, on=LAST_WEEK)             # 早就练好了，不用复习
+    for _ in range(len(plan.INTERVALS)):         # 练对这么多次，间隔推到 30 天
+        _practised(seg, 2, on=LAST_WEEK)         # 早就练熟了，这个月都不用复习
     _practised(seg, 4, on=YESTERDAY)             # 第 3 句没练过
 
     body = _page(client, seg, 1, "?from=review")

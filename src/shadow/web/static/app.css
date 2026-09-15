@@ -516,6 +516,7 @@ a.button:hover { border-color: var(--accent); }
 .pd-week b { font-size: 15px; }
 .pd-week .review { background: rgba(31, 119, 180, .12); border-color: transparent; }
 .pd-week .light { background: transparent; border-style: dashed; }
+.pd-ladder { grid-template-columns: repeat(5, minmax(0, 1fr)); }   /* 复习间隔阶梯 */
 .pd-pairs { display: grid; grid-template-columns: 6.5em minmax(0, 1fr); gap: 10px 16px; }
 .pd-pairs dt { color: var(--muted); }
 .pd-pairs dd { margin: 0; }

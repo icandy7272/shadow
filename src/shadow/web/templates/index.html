@@ -27,6 +27,9 @@
         {% if step.link == 'review' %}
           {% if plan.review_count %}
           <a class="plan-link" href="#units" data-filter-link="review">筛出该复习的 {{ plan.review_count }} 句 →</a>
+          {% if plan.deferred %}<span class="plan-none">还有 {{ plan.deferred }} 句排在后面几天</span>{% endif %}
+          {% elif plan.deferred %}
+          <span class="plan-none">今天的复习做完了 · 还有 {{ plan.deferred }} 句排在后面几天</span>
           {% else %}
           <span class="plan-none">没有要复习的</span>
           {% endif %}
@@ -80,7 +83,8 @@
     <tr class="{{ 'done' if item.runs else 'fresh' }}"
         data-runs="{{ item.runs }}" data-issues="{{ item.issues }}"
         data-rating="{{ item.rating if item.rating is not none else '' }}"
-        data-review="{{ 1 if item.review else 0 }}">
+        data-review="{{ 1 if item.review else 0 }}"
+        data-review-rank="{{ item.review_rank }}">
       <td class="num">{{ item.number }}</td>
       <td>
         <a href="/practice/{{ item.segment }}/{{ item.unit }}">

@@ -24,7 +24,8 @@ if (reveal) {
 // 盲听自评一直存着却没人用过。它正好回答一个问题：哪些句子是真没听懂的。
 const filters = document.getElementById("filters");
 if (filters) {
-  const rows = [...document.querySelectorAll("table.units tbody tr")];
+  const body = document.querySelector("table.units tbody");
+  const rows = [...body.querySelectorAll("tr")];
   const count = document.getElementById("filter-count");
   const keep = {
     all: () => true,
@@ -33,6 +34,7 @@ if (filters) {
     issues: (row) => Number(row.dataset.issues) > 0,
     unheard: (row) => row.dataset.rating !== "" && Number(row.dataset.rating) <= 2,
   };
+  const rank = (row) => Number(row.dataset.reviewRank) || Infinity;
 
   filters.addEventListener("click", (event) => {
     const button = event.target.closest("button");
@@ -54,6 +56,12 @@ if (filters) {
           name === "all" ? link.dataset.base : `${link.dataset.base}?from=${name}`);
       }
     });
+    // 「该复习」按急迫程度重排（名次是服务端算的）：老问题、没听懂、逾期久的排前面。
+    // 别的筛选回到原文顺序。
+    const walk = name === "review"
+      ? [...rows].sort((one, other) => rank(one) - rank(other))
+      : rows;
+    walk.forEach((row) => body.append(row));
     count.textContent = name === "all" ? "" : `${shown} 句`;
   });
 }

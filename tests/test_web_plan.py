@@ -26,6 +26,13 @@ def _home(client, segment_id):
     return client.get(f"/sources/{_source_of(segment_id)}").text
 
 
+def _rows(body):
+    """列表上每一句：第几句 → （该不该复习、在复习队列里排第几）。"""
+    found = re.findall(
+        r'data-review="(\d)"\s+data-review-rank="(\d+)">\s*<td class="num">(\d+)<', body)
+    return {int(number): (due == "1", int(rank)) for due, rank, number in found}
+
+
 def _practised(segment_id, unit, *, on, titles=(), rating=4):
     """某一天练过这句：自评几分、录音里反复出现哪些问题。"""
     connection = db.connect()
@@ -109,6 +116,33 @@ def test_review_picks_yesterdays_sentences_and_unfinished_ones(client, tmp_path)
     assert body.count('data-review="1"') == 2
     assert 'data-filter="review"' in body
     assert "筛出该复习的 2 句" in body
+
+
+def test_a_sentence_practised_well_is_not_due_again_the_next_day(client, tmp_path):
+    """练对一次就往后推一级：昨天练的第二句这次轮不到，隔了三天的第一句才到期。"""
+    segment_id = _seed(tmp_path)
+    _practised(segment_id, 1, on=MONDAY - timedelta(days=6))
+    _practised(segment_id, 1, on=MONDAY - timedelta(days=3))   # 两次都听懂了 → 3 天后
+    _practised(segment_id, 2, on=MONDAY - timedelta(days=1))
+    _practised(segment_id, 2, on=MONDAY - timedelta(days=1))
+
+    body = _home(client, segment_id)
+
+    assert "筛出该复习的 1 句" in body
+    assert _rows(body) == {1: (True, 1), 2: (False, 0)}
+
+
+def test_the_most_urgent_sentence_is_first_in_the_queue(client, tmp_path):
+    """老问题没解决的排在单纯到期的前面，复习页的「下一句」也按这个顺序走。"""
+    segment_id = _seed(tmp_path)
+    _practised(segment_id, 1, on=MONDAY - timedelta(days=1))
+    _practised(segment_id, 2, on=MONDAY - timedelta(days=1), titles=["“was” 该降没降"])
+
+    body = _home(client, segment_id)
+
+    assert _rows(body) == {1: (True, 2), 2: (True, 1)}
+    onwards = client.get(f"/practice/{segment_id}/2?from=review").text
+    assert f'href="/practice/{segment_id}/1?from=review"' in onwards
 
 
 def test_a_sentence_practised_today_is_not_due_yet(client, tmp_path):
