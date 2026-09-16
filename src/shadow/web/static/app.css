@@ -443,6 +443,18 @@ button.miss-word:hover { color: var(--accent); }
   .add-vocab { padding: 6px 12px; }
 }
 
+/* ---------- 串起来 ----------
+   单句练得再准，接成一段话时节奏还是断的 */
+.chain-list { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
+.chain-item { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px;
+  padding: 10px 14px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; cursor: pointer; }
+.chain-item.now { border-color: var(--accent); }
+.chain-text { flex: 1; min-width: 0; }
+.chain-go { margin-left: auto; color: var(--muted); font-size: 13px; text-decoration: none;
+  white-space: nowrap; }
+.chain-go:hover { color: var(--accent); }
+
 /* ---------- 生词本 ---------- */
 .count { color: var(--muted); font-size: 14px; font-weight: 400; margin-left: 10px; }
 /* 词多了以后，固定按最近加入就不好找了 */

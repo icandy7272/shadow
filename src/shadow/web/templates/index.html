@@ -37,6 +37,8 @@
           {% else %}
           <span class="plan-none">没有要复习的</span>
           {% endif %}
+        {% elif step.link == 'chain' %}
+          <a class="plan-link" href="/chain">把今天练过的连起来跟 →</a>
         {% elif step.link == 'next' %}
           {% if next_unit %}
           <a class="plan-link" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}">开始下一句（第 {{ next_unit.number }} 句）→</a>

@@ -10,6 +10,8 @@ from datetime import date, timedelta
 
 REVIEW = "review"      # 链接：筛出该复习的句子
 NEXT = "next"          # 链接：开始下一句没练过的
+CHAIN = "chain"        # 链接：把今天练过的几句连起来跟
+CHAIN_ROUNDS = 2       # 串起来跟几遍
 LOW_RATING = 2         # 盲听自评不超过这个分，算没听懂
 GOOD_RATING = 4        # 到这个分，算听懂了
 SATURDAY, SUNDAY = 5, 6
@@ -29,7 +31,7 @@ _EXTENSIVE = Step("extensive", "泛听", "碎片时间 10–20 分钟，原速�
 _WEEKDAY = (
     Step("review", "复习到期的", "从上往下 3–5 句：先盲听一遍；跟不上的，完整跟读一遍", REVIEW),
     Step("new", "精练新句子", "3–5 句：盲听 → 默写 → 看字跟读 → 不看字跟读", NEXT),
-    Step("chain", "串起来", "今天练过的几句连着跟 2 遍，中间不停下来改"),
+    Step("chain", "串起来", "今天练过的几句连着跟 2 遍，中间不停下来改", CHAIN),
     Step("retell", "复述", "合上材料，用自己的话讲一遍，录下来回听"),
     _EXTENSIVE,
 )

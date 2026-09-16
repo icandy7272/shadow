@@ -34,7 +34,7 @@ def test_links_point_at_review_and_the_next_sentence():
     links = {step.key: step.link for step in plan.steps_for(0)}
     assert links["review"] == plan.REVIEW
     assert links["new"] == plan.NEXT
-    assert links["chain"] is None
+    assert links["chain"] == plan.CHAIN      # 串起来也有了入口
     assert {step.key: step.link for step in plan.steps_for(5)}["redo"] == plan.REVIEW
 
 

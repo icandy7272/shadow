@@ -369,6 +369,25 @@ def _plan_view(connection, today: date, review: filters.Selection,
             "review_count": len(review.order), "deferred": len(review.deferred)}
 
 
+@app.get("/chain", response_class=HTMLResponse)
+def chain_page(request: Request):
+    """今天练过的几句连着跟——日课里的「串起来」。
+
+    单句练得再准，接成一段话时节奏还是断的：这一步只放音，不比对，中间不停。
+    """
+    connection = _db()
+    source_id = library.current(connection)
+    today = _today()
+    sentences = []
+    if source_id is not None:
+        states = _practice_states(connection, source_id)
+        sentences = [item for item in _sentences(connection, source_id)
+                     if states.get(item["text"], filters.NEVER).last_day == today]
+    return templates.TemplateResponse(
+        request, "chain.html",
+        {"sentences": sentences, "rounds": plan.CHAIN_ROUNDS})
+
+
 @app.get("/plan", response_class=HTMLResponse)
 def plan_page(request: Request):
     return templates.TemplateResponse(request, "plan.html", {})
