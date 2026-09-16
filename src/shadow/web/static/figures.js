@@ -815,28 +815,32 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
     `可懂度 ${take.accuracy}% · 发声 ${take.speech.toFixed(2)}x · `
     + `停顿 ${take.pause === null ? "—" : take.pause.toFixed(2) + "x"}`;
 
-  const buttons = view.takes.map((take, index) => {
-    const button = el("button", null, `第 ${index + 1} 遍`);
-    button.addEventListener("click", () => show(index));
-    return button;
-  });
-  const detail = el("span", "takes-detail");
-  // 机器没听对的词跟着这一遍走：切到哪一遍，就说哪一遍
-  const misheard = el("p", "take-problems");
-  const misheardText = (take, index) => {
-    const which = view.takes.length > 1 ? `第 ${index + 1} 遍` : "这一遍";
-    if (!take.problems.length) return `${which}每个词机器都听出来了。`;
-    const words = take.problems.map((p) => (p.kind === "missing" ? `漏 ${p.ref}`
-      : p.kind === "wrong" ? `${p.ref}→听成 ${p.usr}` : `多 ${p.usr}`));
-    return `${which}机器没听对的词：${words.join("、")}`;
+  // 机器在这一遍里没听对的词。每一遍各说各的：切到哪一遍就看哪一遍
+  const misheardText = (take) => {
+    if (!take.problems.length) return "每个词机器都听出来了";
+    return "没听对：" + take.problems.map((problem) => (
+      problem.kind === "missing" ? `漏 ${problem.ref}`
+        : problem.kind === "wrong" ? `${problem.ref}→听成 ${problem.usr}`
+          : `多 ${problem.usr}`)).join("、");
   };
+
+  // 三遍的结果一起列出来：哪一遍有问题一眼看得见，不用一遍遍切过去找。
+  // 点哪一行，下面的两张图和播放条就换成哪一遍。
+  const rows = view.takes.map((take, index) => {
+    const row = el("button", "take-row");
+    row.append(el("b", "take-name", `第 ${index + 1} 遍`),
+               el("span", "take-numbers", numbers(take)),
+               el("span", `take-said${take.problems.length ? "" : " ok"}`, misheardText(take)));
+    if (index === view.chosen && view.takes.length > 1) {
+      row.append(el("span", "take-pick", "代表这轮"));
+    }
+    row.addEventListener("click", () => show(index));
+    return row;
+  });
 
   function show(index) {
     if (current) current.stop();
-    buttons.forEach((button, i) => button.classList.toggle("chosen", i === index));
-    detail.textContent = numbers(view.takes[index]);
-    misheard.textContent = misheardText(view.takes[index], index);
-    misheard.classList.toggle("ok", !view.takes[index].problems.length);
+    rows.forEach((row, i) => row.classList.toggle("chosen", i === index));
     body.textContent = "";
     bar.textContent = "";
     current = renderTake(view.takes[index]);
@@ -844,11 +848,8 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
     body.append(current.node);
   }
 
-  if (view.takes.length > 1) {
-    tabs.append(el("span", "takes-label", "看哪一遍"), ...buttons, detail);
-    controls.append(tabs);
-  }
-  controls.append(misheard, bar);
+  tabs.append(...rows);
+  controls.append(tabs, bar);
   box.append(body);
   show(view.chosen);
   return { controls, figures: box };

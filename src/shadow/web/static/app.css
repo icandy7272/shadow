@@ -265,15 +265,17 @@ button:disabled { opacity: .5; cursor: default; }
   padding: 10px 18px; }
 #redo-take:hover { border-color: var(--warn); color: var(--warn); }
 
-/* 看哪一遍。指标是全部遍数的中位数，图只能画一遍 */
-.takes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  margin: 18px 0 4px; }
-.takes-label { color: var(--muted); font-size: 12px; margin-right: 2px; }
-.takes button { padding: 4px 10px; font-size: 13px; }
-.takes button.chosen { background: var(--accent); color: #fff;
-  border-color: var(--accent); }
-.takes-detail { color: var(--muted); font-size: 12px; margin-left: 8px;
-  font-variant-numeric: tabular-nums; }
+/* 每一遍的结果一起列出来：哪一遍有问题一眼看得见，不用一遍遍切过去找。
+   指标是全部遍数的中位数，图却只能画一遍——点某一行就把图换成那一遍 */
+.takes { display: grid; gap: 6px; margin: 16px 0 10px; }
+.take-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 12px;
+  width: 100%; text-align: left; padding: 8px 12px; font-size: 13px; }
+.take-row.chosen { border-color: var(--accent); }
+.take-name { font-size: 14px; font-weight: 600; }
+.take-numbers { color: var(--muted); font-variant-numeric: tabular-nums; }
+.take-said { color: var(--warn); }
+.take-said.ok { color: var(--ok); }
+.take-pick { margin-left: auto; color: var(--muted); font-size: 12px; }
 
 
 /* ---------- 手机 ----------
@@ -553,8 +555,6 @@ a.button:hover { border-color: var(--accent); }
 .pager-note a { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
 .pager-note a:hover { color: var(--accent); }
 
-/* 这一遍机器没听对的词：跟着「看哪一遍」切 */
-.take-problems { margin: 0 0 10px; font-size: 14px; }
 
 /* ---------- 麦克风：选哪个、现在有多响 ----------
    录音全靠它，平时却完全看不见。实测音量一周内从 -25 掉到 -50 dB，
