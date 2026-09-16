@@ -3,7 +3,7 @@
 <div class="head">
   <div class="source-head">
     <h1>{{ source.title }}</h1>
-    <p class="source-meta">练过 {{ practised }} / {{ catalogue|length }} 句 · {{ '%.0f'|format(source.duration_sec / 60) }} 分钟</p>
+    <p class="source-meta">练过 {{ practised }} / {{ catalogue|length }} 句 · 素材 {{ '%.0f'|format(source.duration_sec / 60) }} 分钟</p>
   </div>
   {% if next_unit %}
     <a class="cta" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}">
@@ -93,7 +93,7 @@
       <td>
         <a href="/practice/{{ item.segment }}/{{ item.unit }}">
           {% if item.runs %}{{ item.text }}
-          {% else %}<span class="masked" data-text="{{ item.text }}">未练过 · {{ item.words }} 个词</span>
+          {% else %}<span class="masked" data-text="{{ item.text }}">{{ item.words }} 个词</span>
           {% endif %}
         </a>
       </td>

@@ -29,7 +29,7 @@
     {% endif %}
     <ul class="vocab-sources">
       {% for source in item.sources if source.sentence %}
-      <li>{% if source.link %}<a href="{{ source.link }}">{{ source.sentence }}</a>{% else %}{{ source.sentence }}{% endif %}</li>
+      <li>{% if source.link %}<a href="{{ source.link }}">{{ source.sentence }}<span class="go">去练这句 →</span></a>{% else %}{{ source.sentence }}{% endif %}</li>
       {% endfor %}
     </ul>
   </li>

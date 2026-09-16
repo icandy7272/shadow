@@ -1039,10 +1039,11 @@ if (root) {
 
   function showResult(data, box) {
     box.innerHTML =
-      `<div class="metrics"><span>可懂度 <b>${data.accuracy}%</b></span>` +
+      // 每一遍自己也有同名的三个数，不写清楚这是几遍的中位就容易混
+      `<div class="metrics"><span class="metrics-label">${data.count} 遍的中位</span>` +
+      `<span>可懂度 <b>${data.accuracy}%</b></span>` +
       `<span>发声 <b>${data.speech}x</b></span>` +
-      `<span>停顿 <b>${data.pause === null ? "—" : data.pause + "x"}</b></span>` +
-      `<span>${data.count} 遍</span></div>` +
+      `<span>停顿 <b>${data.pause === null ? "—" : data.pause + "x"}</b></span></div>` +
       data.rejected.map((r) =>
         `<p class="bad">第 ${r.index} 遍没收进来：${r.reason}</p>`).join("") +
       data.skipped.map((s) =>

@@ -40,7 +40,7 @@ def test_adding_a_word_twice_counts_and_links_back_to_the_sentence(client, tmp_p
 
     assert 'data-word="start"' in body
     assert "记过 2 次" in body
-    assert f'<a href="/practice/{segment_id}/2">It was a start.</a>' in body
+    assert f'<a href="/practice/{segment_id}/2">It was a start.<span class="go">去练这句' in body
     # 没装词典：词和原句照记，提示怎么装
     assert "uv run shadow dict install" in body
 

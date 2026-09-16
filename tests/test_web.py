@@ -357,7 +357,7 @@ def test_index_hides_the_text_of_unpractised_units(client, tmp_path):
     """
     segment_id = _seed(tmp_path)
     body = client.get("/").text
-    assert "未练过" in body
+    assert ">4 个词</span>" in body                     # 只说几个词，不露原文
     assert body.count("It was a start.") == 1          # 只此一处
     assert 'data-text="It was a start."' in body       # 而且是在属性里
 

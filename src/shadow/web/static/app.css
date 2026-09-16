@@ -94,7 +94,8 @@ button:disabled { opacity: .5; cursor: default; }
 .result img { width: 100%; border: 1px solid var(--line); border-radius: 8px;
   margin-top: 14px; }
 .result .metrics { display: flex; gap: 18px; flex-wrap: wrap; margin: 6px 0 12px;
-  font-variant-numeric: tabular-nums; }
+  font-variant-numeric: tabular-nums; align-items: baseline; }
+.metrics-label { color: var(--muted); font-size: 13px; }
 .result .issue { border-left: 3px solid var(--warn); padding: 4px 0 4px 12px;
   margin: 10px 0; }
 .result .issue b { font-weight: 600; }
@@ -247,10 +248,10 @@ button:disabled { opacity: .5; cursor: default; }
 .grid i.d4 { background: var(--accent); }
 .grid i.ahead { background: none; }
 
-/* 锁住时只说有几处要改，不说是哪些词——说了就泄题了 */
-.badge { font-style: normal; font-size: 12px; font-weight: 400; color: var(--muted);
-  border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; }
-.step:not(.locked) .badge { display: none; }
+/* 锁住时只说有几处要改，不说是哪些词——说了就泄题了。
+   不给边框：它长得像按钮，可点不动 */
+.step-badge { font-style: normal; font-size: 12px; font-weight: 400; color: var(--muted); }
+.step:not(.locked) .step-badge { display: none; }
 
 /* 图 1 也能点：点哪行放哪行 */
 .lane { user-select: none; }
@@ -337,6 +338,8 @@ button:disabled { opacity: .5; cursor: default; }
   padding: 10px 18px; }
 @media (max-width: 640px) {
   .service-banner { padding: 10px 12px; }
+  /* 手机上顶栏挤，在线时那盏灯只是占地方；断了才要说话 */
+  .service.up { display: none; }
 }
 
 /* 素材库 */
@@ -440,6 +443,8 @@ button.miss-word:hover { color: var(--accent); }
 .vocab-sources a { color: inherit; text-decoration: underline dotted;
   text-underline-offset: 3px; }
 .vocab-sources a:hover { color: var(--accent); }
+.vocab-sources .go { margin-left: 8px; color: var(--accent); white-space: nowrap;
+  font-size: 13px; }
 @media (max-width: 640px) {
   .vocab-head button { padding: 6px 12px; }
 }
