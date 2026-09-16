@@ -2,7 +2,7 @@
 {% block content %}
 <div class="head">
   <div class="source-head">
-    <h1>{{ source.title }}</h1>
+    <h1 title="{{ source.title }}">{{ source.title }}</h1>
     <p class="source-meta">练过 {{ practised }} / {{ catalogue|length }} 句 · 素材 {{ '%.0f'|format(source.duration_sec / 60) }} 分钟</p>
   </div>
   {% if next_unit %}

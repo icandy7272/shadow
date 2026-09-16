@@ -76,6 +76,11 @@ if (planCard) {
   try {
     if (localStorage.getItem(OPEN_KEY) === "0") planCard.open = false;
   } catch (err) { /* 隐私模式下读不到，默认展开 */ }
+  // 顶栏的「日课」指到这里：收着的话先打开，再滚过去
+  if (window.location.hash === "#plan") {
+    planCard.open = true;
+    planCard.scrollIntoView({ block: "start" });
+  }
   planCard.addEventListener("toggle", () => {
     try { localStorage.setItem(OPEN_KEY, planCard.open ? "1" : "0"); } catch (err) { /* 无所谓 */ }
   });
