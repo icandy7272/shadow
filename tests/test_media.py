@@ -291,3 +291,29 @@ def test_unit_problem_names_why_a_sentence_cannot_be_practised(tmp_path):
     assert media.unit_problem(source, crushed) == media.PROBLEM_CRUSHED
     assert media.unit_problem(source, _phantom()) == media.PROBLEM_SILENT
     assert media.unit_problem(source, spoken) is None
+
+
+def test_validate_attempt_keeps_a_quiet_recording_with_long_pauses(tmp_path):
+    """实测：手机上录的一遍，说话处 -43 dB、整段（含停顿）-51 dB，
+    被「整段平均音量」这条旧规则当成静音扔掉了。"""
+    sr, seconds = 16000, 6.0
+    t = np.arange(int(seconds * sr)) / sr
+    gate = ((t % 2.0) < 0.3).astype(np.float32)          # 每 2 秒说 0.3 秒
+    samples = (0.01 * np.sin(2 * np.pi * 220 * t) * gate).astype(np.float32)
+    source = tmp_path / "quiet.wav"
+    sf.write(source, samples, sr)
+
+    overall = 20 * np.log10(np.sqrt(np.mean(samples.astype(np.float64) ** 2)))
+    assert overall < -50                                  # 旧规则会拒
+    media.validate_attempt(source)                        # 新规则收下
+
+
+def test_validate_attempt_still_rejects_a_microphone_that_caught_nothing(tmp_path):
+    """真没录上是这样：从头到尾都在 -60 dB 上下，最响的一瞬也够不着说话的响度。"""
+    sr = 16000
+    hiss = (0.0007 * np.random.default_rng(0).standard_normal(int(3.0 * sr))).astype(np.float32)
+    source = tmp_path / "hiss.wav"
+    sf.write(source, hiss, sr)
+
+    with pytest.raises(AudioError, match="静音"):
+        media.validate_attempt(source)

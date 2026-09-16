@@ -61,6 +61,19 @@ def loud_level(energy_db: np.ndarray, *,
     return float(np.percentile(energy_db, percentile))
 
 
+def loudest_level(energy_db: np.ndarray, *,
+                  frames: int = config.LOUDEST_FRAMES) -> float:
+    """这段录音里最响的一小段有多响——也就是「说话时的嗓门」。
+
+    不用分位数：说一句、停很久的录音里九成的帧都是停顿，分位数量到的是停顿，
+    于是正常但安静的一遍会被当成静音。取最响的那 0.3 秒再取中位数：不受停顿
+    占多少影响，也不会被一声咳嗽、一下碰麦克风定标准。
+    """
+    if energy_db.size == 0:
+        return SILENT_DB
+    return float(np.median(np.sort(energy_db)[-frames:]))
+
+
 def voiced_fraction(energy_db: np.ndarray, *, loud_db: float,
                     drop_db: float = config.SPEECH_DROP_DB) -> float:
     """这一段里有多少帧够得上人声。

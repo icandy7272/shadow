@@ -3,7 +3,8 @@
 import numpy as np
 import pytest
 
-from shadow.analysis.silence import loud_level, quiet_midpoint, voiced_fraction
+from shadow.analysis.silence import (SILENT_DB, loud_level, loudest_level, quiet_midpoint,
+                                     voiced_fraction)
 
 
 def frames(pattern, hop=0.01):
@@ -68,3 +69,21 @@ def test_voiced_fraction_follows_the_source_not_an_absolute_level():
 def test_voiced_fraction_of_an_empty_span_is_zero():
     """时间范围落在音频之外，一帧都取不到——那就是没声音。"""
     assert voiced_fraction(np.array([]), loud_db=-20.0) == 0.0
+
+
+def test_the_loudest_stretch_does_not_care_how_much_of_it_is_silence():
+    """说一句、停很久的录音：按分位数算会算到停顿上，按最响的一小段算才是嗓门。"""
+    _, db = frames([(3.0, -70.0), (0.5, -20.0), (3.0, -70.0)])
+
+    assert loudest_level(db) == pytest.approx(-20.0)
+    assert loud_level(db) < -60.0        # 分位数落在停顿里
+
+
+def test_one_click_is_not_a_voice():
+    _, db = frames([(2.0, -70.0), (0.05, 0.0), (2.0, -70.0)])
+
+    assert loudest_level(db) < -40.0
+
+
+def test_the_loudest_stretch_of_nothing_is_very_quiet():
+    assert loudest_level(np.empty(0)) == SILENT_DB

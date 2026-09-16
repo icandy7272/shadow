@@ -72,7 +72,10 @@ SPEECH_EDGE_GAP_SEC = 0.06   # 而且要跟主体隔着这么久才敢扔
 
 # --- 录音校验 ---
 MIN_ATTEMPT_SEC = 1.0
-MIN_ATTEMPT_RMS_DB = -50.0
+LOUDEST_FRAMES = 30            # 「最响的一小段」取多少帧：0.3 秒（帧移 10 毫秒）
+# 说话处的响度低于这条线才算没录上。本机 200 遍真实录音里，最轻的一遍是 -43.7 dB；
+# 唯一一次真的没录上是 -62.9 dB。线画在中间，两边各留十几 dB。
+MIN_ATTEMPT_SPEECH_DB = -52.0
 
 # --- 外部命令超时（秒）---
 # 无超时的 subprocess.run 会在网络卡住时永久挂起，状态停在 downloading 且无恢复路径。

@@ -16,7 +16,8 @@ import numpy as np
 import soundfile as sf
 
 from . import config
-from .analysis.silence import loud_level, quiet_midpoint, voiced_fraction
+from .analysis.silence import (loud_level, loudest_level, quiet_midpoint,
+                              voiced_fraction)
 from .drill.units import is_usable
 
 
@@ -178,14 +179,16 @@ def validate_attempt(path: Path) -> None:
         raise AudioError(
             f"录音过短（{duration:.2f}s，至少需要 {config.MIN_ATTEMPT_SEC}s）"
         )
-    samples, _ = sf.read(str(path), dtype="float32", always_2d=False)
+    samples, sr = sf.read(str(path), dtype="float32", always_2d=False)
     if samples.ndim > 1:
         samples = samples.mean(axis=1)
-    rms = float(np.sqrt(np.mean(np.square(samples)))) if samples.size else 0.0
-    rms_db = 20.0 * math.log10(rms + 1e-10)
-    if rms_db < config.MIN_ATTEMPT_RMS_DB:
+    # 看说话处的响度，不看整段平均：句子长、停顿多的一遍，平均下来会低得像静音，
+    # 实测手机上录的正常一遍就这样被扔掉过
+    _times, energy = _frame_energy_db(samples, sr, 0.0)
+    level = loudest_level(energy)
+    if level < config.MIN_ATTEMPT_SPEECH_DB:
         raise AudioError(
-            f"录音接近静音（{rms_db:.1f} dB）。检查麦克风是否被静音或选错设备。"
+            f"录音接近静音（说话处只有 {level:.1f} dB）。检查麦克风是否被静音或选错设备。"
         )
 
 
