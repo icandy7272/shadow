@@ -416,11 +416,6 @@ a.button:hover { border-color: var(--accent); }
 .mark-missing { color: var(--warn); text-decoration: underline dotted; }
 .mark-unknown { color: var(--unknown); text-decoration: underline dashed; }
 .extras { margin: -6px 0 12px; color: var(--muted); font-size: 14px; }
-/* 看完结果直接走下一句，不用滚回页面底部 */
-.result-next { display: inline-block; margin-top: 18px; padding: 10px 18px;
-  border-radius: 8px; background: var(--accent); color: #fff; text-decoration: none;
-  font-size: 15px; font-weight: 500; }
-.result-next:hover { filter: brightness(1.08); }
 .misses { display: grid; gap: 12px; }
 .miss { border-left: 3px solid var(--warn); padding: 2px 0 2px 12px; }
 .miss-unknown { border-left-color: var(--unknown); }

@@ -140,6 +140,17 @@ function stopLoops() {
   loops.forEach((stop) => stop());
 }
 
+// 跟读那一步一开始，原声就由它自己按节奏放。这时别处再放一路，两个原声叠在一起，
+// 跟读全废——所以从「开始」到收工，连播的按钮一律停用（键盘也走同一条路）。
+let recording = false;
+function setRecording(on) {
+  recording = on;
+  stopLoops();
+  document.querySelectorAll("button.play").forEach((button) => {
+    button.disabled = on;
+  });
+}
+
 const root = document.getElementById("practice");
 if (root) {
   const segment = root.dataset.segment;
@@ -241,6 +252,15 @@ if (root) {
     if (event.target.closest("input, textarea, select, [contenteditable]")) return;
 
     if (event.key === " ") {
+      if (recording) {
+        // 正在录这一遍：空格就是「说完了」。别的时候不放音——原声正按节奏走着
+        const done = document.getElementById("stop-take");
+        if (done && !done.hidden) {
+          event.preventDefault();
+          done.click();
+        }
+        return;
+      }
       // 放最后展开的那一步的音：练到第二步了，空格该放的是第二步的重听
       const buttons = [...document.querySelectorAll(".step:not(.locked) button.play")];
       const play = buttons[buttons.length - 1];
@@ -257,6 +277,7 @@ if (root) {
       return;
     }
     if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      if (recording) return;          // 录到一半翻页，刚录的几遍就没了
       const link = document.querySelector(
         event.key === "ArrowRight" ? ".pager a.next" : ".pager a:not(.next)");
       if (!link) return;
@@ -931,7 +952,7 @@ if (root) {
   });
 
   startButton?.addEventListener("click", async () => {
-    stopLoops();                // 连播还开着的话会录进去
+    setRecording(true);         // 连播还开着的话会录进去，别处也不许再放
     const speaker = createSpeaker();     // 趁这一下点击解锁声音，原声同时开始下载
     const takes = Math.max(1, Number(document.getElementById("takes").value) || 1);
     const pre = Math.max(0, Number(document.getElementById("prelisten").value) || 0);
@@ -944,6 +965,7 @@ if (root) {
     } catch (err) {
       status.textContent = "拿不到麦克风权限。浏览器地址栏左侧可以重新允许。";
       speaker.close();
+      setRecording(false);
       startButton.disabled = false;
       return;
     }
@@ -958,6 +980,7 @@ if (root) {
     }
     const meterOff = ear ? watchLevel(ear) : null;
     const wrapUp = () => {
+      setRecording(false);
       meterOff?.();
       stream.getTracks().forEach((t) => t.stop());
       ear?.close();
@@ -1129,12 +1152,5 @@ if (root) {
     const figures = renderFigures(data.view);
     box.prepend(figures.controls);
     box.append(figures.figures);
-    // 看完结果就该走了，可「练下一句」在整页最下面，还得滚回去
-    const pager = document.querySelector(".pager a.next");
-    if (pager) {
-      const again = el("a", "result-next", pager.textContent.trim());
-      again.href = pager.getAttribute("href");
-      box.append(again);
-    }
   }
 }
