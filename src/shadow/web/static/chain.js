@@ -8,6 +8,10 @@
   const rounds = Math.max(1, Number(controls.dataset.rounds) || 1);
   const items = [...list.querySelectorAll(".chain-item")];
   const idle = button.textContent;
+  // 跟读要跟的是真速度，所以这儿自成一档，默认原速：盲听那边调慢了，串起来不跟着慢。
+  // 真想放慢也行，按钮就在旁边，调了下次还记得
+  const chainSpeed = makeSpeed("shadow.chain-speed");
+  controls.append(speedControl(chainSpeed));
   const GAP_MS = 600;            // 两句之间留一口气，但不够停下来改
   let audio = null;
   let timer = null;
@@ -15,7 +19,7 @@
 
   const stop = (note = "") => {
     clearTimeout(timer);
-    if (audio) { audio.pause(); audio = null; }
+    if (audio) { audio.pause(); chainSpeed.forget(audio); audio = null; }
     playing = false;
     button.textContent = idle;
     button.classList.remove("stop");
@@ -34,7 +38,8 @@
     }
     items.forEach((item, i) => item.classList.toggle("now", i === index));
     progress.textContent = `第 ${round}/${rounds} 遍 · 第 ${index + 1}/${items.length} 句`;
-    audio = speed.apply(new Audio(items[index].dataset.src));
+    if (audio) chainSpeed.forget(audio);          // 上一句放完了，别攒在那儿
+    audio = chainSpeed.follow(new Audio(items[index].dataset.src));
     // 某一句的音频取不到就跳过，不能让整串停在这儿
     const next = () => { timer = setTimeout(() => playFrom(round, index + 1), GAP_MS); };
     audio.addEventListener("ended", next, { once: true });
