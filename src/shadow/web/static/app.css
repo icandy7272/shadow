@@ -442,6 +442,11 @@ button.miss-word:hover { color: var(--accent); }
 
 /* ---------- 生词本 ---------- */
 .count { color: var(--muted); font-size: 14px; font-weight: 400; margin-left: 10px; }
+/* 词多了以后，固定按最近加入就不好找了 */
+.vocab-sort { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.vocab-sort a { margin-left: 8px; color: var(--muted); text-decoration: none; }
+.vocab-sort a.chosen { color: var(--accent); font-weight: 600; }
+.vocab-sort a:hover { color: var(--accent); }
 .vocab { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 10px; }
 .vocab-item { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
   padding: 12px 16px; }
@@ -590,13 +595,22 @@ button.miss-word:hover { color: var(--accent); }
 .pager-note a:hover { color: var(--accent); }
 
 
-/* ---------- 麦克风：选哪个、现在有多响 ----------
-   录音全靠它，平时却完全看不见。实测音量一周内从 -25 掉到 -50 dB，
-   掉过判定线才发现，三遍全废。 */
-.mic-row { margin-top: -6px; }
-.mic-row select { font: inherit; font-size: 13px; padding: 4px 6px; max-width: 14em;
+/* ---------- 录音这一块 ----------
+   设置收进「设置」里：六样东西挤成两行时，第一次打开不知道先点哪个。
+   状态、音量、按钮并成一块，录音时眼睛只看一处。 */
+.rec-more { color: var(--muted); font-size: 13px; }
+.rec-more summary { cursor: pointer; list-style: none; }
+.rec-more summary::-webkit-details-marker { display: none; }
+.rec-more summary::after { content: " · 设置 ▾"; }
+.rec-more[open] summary::after { content: " · 收起 ▴"; }
+.rec-settings { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px;
+  margin: 10px 0 0; }
+.recording { display: grid; gap: 6px; margin: 0 0 14px; }
+.recording .status { margin: 0; }
+.recording .live-row { margin-bottom: 0; }
+.rec-settings select { font: inherit; font-size: 13px; padding: 4px 6px; max-width: 14em;
   border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--fg); }
-.mic-row button { padding: 4px 12px; font-size: 13px; }
+.rec-settings button { padding: 4px 12px; font-size: 13px; }
 .meter { flex: none; width: 120px; height: 8px; border-radius: 4px; background: var(--line);
   overflow: hidden; }
 .meter i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
@@ -604,6 +618,6 @@ button.miss-word:hover { color: var(--accent); }
 .mic-note { color: var(--muted); font-size: 13px; }
 .mic-note.low { color: var(--warn); }
 @media (max-width: 640px) {
-  .mic-row select { max-width: 9em; }
-  .mic-row button { padding: 8px 12px; }
+  .rec-settings select { max-width: 9em; }
+  .rec-settings button { padding: 8px 12px; }
 }

@@ -815,8 +815,35 @@ if (root) {
 
   micSelect?.addEventListener("change", () => {
     try { localStorage.setItem(MIC_KEY, micSelect.value); } catch (err) { /* 隐私模式 */ }
+    showSettings();
   });
   fillMics();
+
+  // 录几遍、听几次、自动停、麦克风都收进「设置」里：第一次打开这一步，
+  // 六样东西挤成两行，不知道该先点哪个。收起时标题上写着当前是什么设置
+  const more = document.getElementById("rec-more");
+  const moreSummary = document.getElementById("rec-more-summary");
+  const takesInput = document.getElementById("takes");
+  const preInput = document.getElementById("prelisten");
+  const MORE_KEY = "shadow.rec-more";
+
+  function showSettings() {
+    if (!moreSummary) return;
+    const auto = autoBox?.checked === false ? " · 手动停" : "";
+    moreSummary.textContent =
+      `录 ${takesInput.value} 遍 · 每遍前听 ${preInput.value} 次${auto}`;
+  }
+
+  if (more) {
+    try { more.open = localStorage.getItem(MORE_KEY) === "1"; }
+    catch (err) { /* 隐私模式下读不到，默认收起 */ }
+    more.addEventListener("toggle", () => {
+      try { localStorage.setItem(MORE_KEY, more.open ? "1" : "0"); } catch (err) { /* 无所谓 */ }
+    });
+    [takesInput, preInput, autoBox].forEach(
+      (input) => input?.addEventListener("change", showSettings));
+    showSettings();
+  }
 
   const micWanted = () => {
     const id = micSelect?.value || readMic();

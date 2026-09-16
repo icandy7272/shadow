@@ -532,10 +532,15 @@ def vocab_words(conn: sqlite3.Connection) -> set[str]:
     return {row["word"] for row in conn.execute("SELECT word FROM vocab")}
 
 
-def list_vocab(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """生词本，最近记下的在前；每个词带上全部出处。"""
-    items = [dict(row) for row in conn.execute(
-        "SELECT * FROM vocab ORDER BY last_added DESC, word")]
+def list_vocab(conn: sqlite3.Connection, *, by: str = "recent") -> list[dict[str, Any]]:
+    """生词本，每个词带上全部出处。
+
+    by="recent" 最近记下的在前，by="times" 记得最多的在前。同一秒里记下的几个词
+    按插入顺序倒着排——时间戳只精确到秒，不然同一秒的几个词会按字母排。
+    """
+    order = ("times DESC, last_added DESC, rowid DESC" if by == "times"
+             else "last_added DESC, rowid DESC")
+    items = [dict(row) for row in conn.execute(f"SELECT * FROM vocab ORDER BY {order}")]
     sources: dict[str, list[dict[str, Any]]] = {}
     for row in conn.execute("SELECT * FROM vocab_sources ORDER BY added_at, rowid"):
         sources.setdefault(row["word"], []).append(dict(row))

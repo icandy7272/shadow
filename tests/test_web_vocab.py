@@ -82,3 +82,23 @@ def test_the_book_explains_each_word_once_the_dictionary_is_installed(client):
     assert "a. 毕业了的" in body
     assert "原形 graduate：n. 毕业生；v. 毕业" in body
     assert "shadow dict install" not in body
+
+
+def test_the_vocab_book_can_be_sorted_by_how_often_a_word_came_up(client):
+    """词多了以后，固定按最近加入就不好找了。"""
+    client.post("/api/vocab", json={"word": "adoption", "sentence": "She refused."})
+    client.post("/api/vocab", json={"word": "adoption", "sentence": "Final papers."})
+    client.post("/api/vocab", json={"word": "commencement", "sentence": "I'm honored."})
+
+    recent = client.get("/vocab").text
+    assert recent.index('data-word="commencement"') < recent.index('data-word="adoption"')
+
+    often = client.get("/vocab?sort=times").text
+    assert often.index('data-word="adoption"') < often.index('data-word="commencement"')
+
+    # 两种排法都在页面上，当前用的那种标出来
+    assert 'href="/vocab?sort=times"' in recent
+    assert 'class="chosen">最近' in recent
+    assert 'class="chosen">次数' in often
+    # 认不出的排法当作默认，不报错
+    assert client.get("/vocab?sort=nonsense").status_code == 200

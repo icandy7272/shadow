@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}生词本 · Shadow{% endblock %}
 {% block content %}
-<div class="head"><h1>生词本{% if items %}<span class="count" id="vocab-count">{{ items|length }} 个词</span>{% endif %}</h1></div>
+<div class="head"><h1>生词本{% if items %}<span class="count" id="vocab-count">{{ items|length }} 个词</span>{% endif %}</h1>
+  {% if items %}<span class="vocab-sort">排序<a href="/vocab"{% if sort != 'times' %} class="chosen"{% endif %}>最近</a><a href="/vocab?sort=times"{% if sort == 'times' %} class="chosen"{% endif %}>次数</a></span>{% endif %}
+</div>
 {% if not dictionary %}
 <p class="hint">词典还没装，先只记词和原句。装上就有音标和释义：在终端运行 <code>uv run shadow dict install</code></p>
 {% endif %}

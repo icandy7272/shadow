@@ -569,10 +569,14 @@ def _vocab_link(connection, source: dict) -> str | None:
     return f"/practice/{segment_id}/{unit}"
 
 
+VOCAB_SORTS = ("recent", "times")
+
+
 @app.get("/vocab", response_class=HTMLResponse)
-def vocab_page(request: Request):
+def vocab_page(request: Request, sort: str = Query("recent")):
     connection = _db()
-    items = db.list_vocab(connection)
+    sort = sort if sort in VOCAB_SORTS else "recent"
+    items = db.list_vocab(connection, by=sort)
     entries = dictionary.lookup_many(item["word"] for item in items)
     shown = [{
         **item,
@@ -582,7 +586,8 @@ def vocab_page(request: Request):
                     for source in item["sources"]],
     } for item in items]
     return templates.TemplateResponse(
-        request, "vocab.html", {"items": shown, "dictionary": dictionary.installed()})
+        request, "vocab.html",
+        {"items": shown, "dictionary": dictionary.installed(), "sort": sort})
 
 
 def _optional_int(value) -> int | None:

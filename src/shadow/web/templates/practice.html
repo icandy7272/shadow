@@ -55,16 +55,28 @@
     <p class="hint insecure" id="no-mic" hidden>这台设备上录不了音——浏览器只在
       HTTPS 或 localhost 下才给麦克风权限。前两步照常，跟读请用电脑。</p>
     <div class="row">
-      <label class="repeat">录 <input type="number" id="takes" value="3" min="1" max="6"> 遍</label>
-      <label class="repeat">每遍前听 <input type="number" id="prelisten" value="4" min="0" max="20"> 次</label>
-      <label class="repeat"><input type="checkbox" id="auto-stop" checked> 说完自动停</label>
       <button class="primary" id="start-record">开始</button>
+      <details class="rec-more" id="rec-more">
+        <summary id="rec-more-summary">录 3 遍 · 每遍前听 4 次</summary>
+        <div class="rec-settings">
+          <label class="repeat">录 <input type="number" id="takes" value="3" min="1" max="6"> 遍</label>
+          <label class="repeat">每遍前听 <input type="number" id="prelisten" value="4" min="0" max="20"> 次</label>
+          <label class="repeat"><input type="checkbox" id="auto-stop" checked> 说完自动停</label>
+          <label class="repeat">麦克风 <select id="mic"><option value="">默认</option></select></label>
+          <button type="button" id="mic-test">试音</button>
+        </div>
+      </details>
     </div>
-    <div class="row mic-row">
-      <label class="repeat">麦克风 <select id="mic"><option value="">默认</option></select></label>
-      <button type="button" id="mic-test">试音</button>
-      <span class="meter" id="mic-meter" hidden><i></i></span>
-      <span class="mic-note" id="mic-note"></span>
+    <div class="recording">
+      <p class="status" id="rec-status"></p>
+      <div class="row live-row">
+        <span class="meter" id="mic-meter" hidden><i></i></span>
+        <span class="mic-note" id="mic-note"></span>
+        <button id="stop-take" hidden>说完了</button>
+        <button id="redo-take" hidden>这遍重来</button>
+        <button id="resubmit" hidden>重新提交</button>
+      </div>
+      <div class="bar" id="rec-progress" hidden><i></i></div>
     </div>
     <div class="peek">
       <button id="peek">看一眼原文</button>
@@ -87,13 +99,6 @@
       {% endif %}
     </div>
     {% endif %}
-    <p class="status" id="rec-status"></p>
-    <div class="bar" id="rec-progress" hidden><i></i></div>
-    <div class="row live-row">
-      <button id="stop-take" hidden>说完了</button>
-      <button id="redo-take" hidden>这遍重来</button>
-      <button id="resubmit" hidden>重新提交</button>
-    </div>
     <div class="result" id="rec-result" hidden></div>
   </section>
 
