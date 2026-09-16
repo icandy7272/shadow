@@ -246,12 +246,14 @@ if (root) {
   });
 
   // 电脑上练一句，手要在鼠标和键盘之间来回好几趟。接管几个最常用的键；
-  // 只要光标在输入框里，一律不接管——那时每个键都该是在打字
+  // 只要光标在输入框里，一律不接管——那时每个键都该是在打字。
+  // 认键一律用 physicalKey：中文输入法开着时 event.key 会变成 "Process"
   document.addEventListener("keydown", (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
     if (event.target.closest("input, textarea, select, [contenteditable]")) return;
+    const key = physicalKey(event);
 
-    if (event.key === " ") {
+    if (key === " ") {
       if (recording) {
         // 正在录这一遍：空格就是「说完了」。别的时候不放音——原声正按节奏走着
         const done = document.getElementById("stop-take");
@@ -269,17 +271,17 @@ if (root) {
       play.click();
       return;
     }
-    if (/^[1-5]$/.test(event.key)) {
-      const rating = listenStep.querySelector(`.rating button[data-rating="${event.key}"]`);
+    if (/^[1-5]$/.test(key)) {
+      const rating = listenStep.querySelector(`.rating button[data-rating="${key}"]`);
       if (!rating) return;
       event.preventDefault();
       rating.click();
       return;
     }
-    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+    if (key === "ArrowRight" || key === "ArrowLeft") {
       if (recording) return;          // 录到一半翻页，刚录的几遍就没了
       const link = document.querySelector(
-        event.key === "ArrowRight" ? ".pager a.next" : ".pager a:not(.next)");
+        key === "ArrowRight" ? ".pager a.next" : ".pager a:not(.next)");
       if (!link) return;
       event.preventDefault();
       window.location.assign(link.href);
@@ -304,7 +306,7 @@ if (root) {
   typed.addEventListener("input", refreshCount);
   typed.addEventListener("keydown", (event) => {
     // 回车就是对答案；输入法选词的回车不算
-    if (event.key !== "Enter" || event.isComposing || event.shiftKey) return;
+    if (physicalKey(event) !== "Enter" || event.isComposing || event.shiftKey) return;
     event.preventDefault();
     submitDrill.click();
   });
@@ -372,7 +374,8 @@ if (root) {
     if (drillStep.classList.contains("foldable")) setFolded(!drillStep.classList.contains("done"));
   });
   drillTitle.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
+    const key = physicalKey(event);
+    if (key !== "Enter" && key !== " ") return;
     event.preventDefault();
     drillTitle.click();
   });

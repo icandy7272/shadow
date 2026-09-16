@@ -1,10 +1,23 @@
-// 页面共用的小东西：建元素、统一的播放速度。
+// 页面共用的小东西：建元素、认按键、统一的播放速度。
 
 function el(tag, className, text) {  // eslint-disable-line no-unused-vars
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+// 中文输入法开着的时候，Chrome 先把键交给输入法：event.key 变成 "Process"，
+// 于是所有按键名都对不上，快捷键集体失灵——而页面上还写着「1–5 打分」。
+// event.code 是键盘上那个物理键位，跟输入法、跟键盘布局都无关，按它判断才稳。
+function physicalKey(event) {  // eslint-disable-line no-unused-vars
+  const code = event.code || "";
+  const digit = /^(?:Digit|Numpad)(\d)$/.exec(code);
+  if (digit) return digit[1];
+  if (code === "Space") return " ";
+  if (code === "Enter" || code === "NumpadEnter") return "Enter";
+  if (code === "ArrowLeft" || code === "ArrowRight") return code;
+  return event.key;                     // 合成事件没有 code，退回 key
 }
 
 // 变速只作用于「听」：盲听、重听、图 2 的对比。
