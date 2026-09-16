@@ -660,8 +660,8 @@ if (root) {
     watch = setInterval(() => {
       const level = ear.level();
       const now = performance.now();
-      heard.push(showLevel(level));
-      if (!autoStop) return;          // 只画音量条，不自动收
+      heard.push(levelDb(level));     // 音量条由外面那个循环一直画，这里只记这一遍多响
+      if (!autoStop) return;
       if (now - began < CALIBRATE_MS) {
         floor = Math.min(floor, level);
         return;
@@ -737,14 +737,21 @@ if (root) {
     return `够用（${shown}）`;
   };
 
-  const showLevel = (level) => {
-    const db = 20 * Math.log10(level + 1e-9);
-    if (micMeter) {
-      micMeter.hidden = false;
-      micBar.style.width = `${Math.max(2, Math.min(100, (db + 70) * 100 / 70))}%`;
-      micMeter.classList.toggle("low", db < LOW_DB);
-    }
-    return db;
+  const levelDb = (level) => 20 * Math.log10(level + 1e-9);
+
+  const showLevel = (db) => {
+    if (!micMeter) return;
+    micMeter.hidden = false;
+    micBar.style.width = `${Math.max(2, Math.min(100, (db + 70) * 100 / 70))}%`;
+    micMeter.classList.toggle("low", db < LOW_DB);
+  };
+
+  // 麦克风从点「开始」起就一直开着（Chrome 标签页上那个小红点就是它），
+  // 音量条也就一直动：放原声时也看得见环境多吵、麦克风通不通。
+  // 只有每遍录音那几秒的声音会被存下来，别的时候只是量响度。
+  const watchLevel = (ear) => {
+    const timer = setInterval(() => showLevel(levelDb(ear.level())), 50);
+    return () => clearInterval(timer);
   };
 
   const say = (text, low) => {
@@ -808,7 +815,11 @@ if (root) {
       return;
     }
     const heard = [];
-    const timer = setInterval(() => heard.push(showLevel(ear.level())), 50);
+    const timer = setInterval(() => {
+      const db = levelDb(ear.level());
+      heard.push(db);
+      showLevel(db);
+    }, 50);
     const stopAt = setTimeout(() => testing?.(), 5000);
     testing = () => {
       clearInterval(timer);
@@ -850,7 +861,9 @@ if (root) {
     } catch (err) {
       ear = null;
     }
+    const meterOff = ear ? watchLevel(ear) : null;
     const wrapUp = () => {
+      meterOff?.();
       stream.getTracks().forEach((t) => t.stop());
       ear?.close();
       speaker.close();
