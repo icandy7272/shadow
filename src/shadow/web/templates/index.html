@@ -21,9 +21,13 @@
   <ul class="plan-steps">
     {% for step in plan.steps %}
     <li class="plan-step{{ ' done' if step.done }}">
+      {%- if step.auto %}
+      <span class="plan-tick" data-step="{{ step.key }}" title="做完了，自动划掉">✓</span>
+      {%- else %}
       <input type="checkbox" class="plan-check" data-step="{{ step.key }}"{% if step.done %} checked{% endif %} id="plan-{{ step.key }}">
+      {%- endif %}
       <div class="plan-body">
-        <label for="plan-{{ step.key }}"><b>{{ step.title }}</b><span>{{ step.detail }}</span></label>
+        <label{% if not step.auto %} for="plan-{{ step.key }}"{% endif %}><b>{{ step.title }}</b><span>{{ step.detail }}</span></label>
         {% if step.link == 'review' %}
           {% if plan.review_count %}
           <a class="plan-link" href="#units" data-filter-link="review">筛出该复习的 {{ plan.review_count }} 句 →</a>

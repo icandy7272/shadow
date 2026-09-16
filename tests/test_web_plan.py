@@ -59,7 +59,8 @@ def test_the_home_page_shows_todays_plan(client, tmp_path):
 
     assert 'id="plan"' in body
     assert "今天的日课 · 周一 · 30 分钟" in body
-    assert body.count('class="plan-check"') == 5
+    # 五步里，复习那步系统看得出来做没做完，不给复选框
+    assert body.count('class="plan-check"') == 4
     assert f'<a class="plan-link" href="/practice/{segment_id}/1"' in body
     assert 'href="/plan"' in body
 
@@ -72,7 +73,7 @@ def test_saturday_shows_the_weekly_review(client, tmp_path, monkeypatch):
     body = _home(client, _seed(tmp_path))
 
     assert "今天的日课 · 周六 · 回顾" in body
-    assert body.count('class="plan-check"') == 4
+    assert body.count('class="plan-check"') == 3
 
 
 def test_a_ticked_step_is_remembered_for_the_day(client, tmp_path):
@@ -98,7 +99,7 @@ def test_ticking_every_step_finishes_the_day(client, tmp_path):
     last = client.post("/api/plan", json={"step": "extensive", "done": True}).json()
 
     assert last["all_done"] is True
-    assert "做完了" in _home(client, segment_id)
+    assert 'class="plan-done">做完了' in _home(client, segment_id)
 
 
 def test_a_step_that_is_not_on_today_is_rejected(client):
@@ -171,3 +172,74 @@ def test_every_row_has_as_many_cells_as_the_header(client, tmp_path):
     row = re.search(r"<tbody>\s*<tr.*?>(.*?)</tr>", body, re.S).group(1)
 
     assert head.count("<th>") == row.count("<td")
+
+
+def _practised_text(segment_id, unit, text, *, on, rating=4):
+    """和 _practised 一样，只是句子文本由调用方给（第二个片段里的句子）。"""
+    connection = db.connect()
+    run_id = db.start_run(connection, segment_id=segment_id, unit_index=unit, unit_text=text)
+    db.set_blind_rating(connection, run_id, rating)
+    db.add_attempt(connection, run_id=run_id, audio_path="x.wav", asr_text=text,
+                   metrics={"accuracy": 1.0, "speech_ratio": 1.0,
+                            "pause_ratio": None, "issues": []})
+    db.finish_run(connection, run_id)
+    stamp = datetime(on.year, on.month, on.day, 12).astimezone().isoformat(timespec="seconds")
+    connection.execute("UPDATE practice_runs SET started_at = ?, finished_at = ? WHERE id = ?",
+                       (stamp, stamp, run_id))
+    connection.commit()
+    connection.close()
+
+
+def test_a_step_the_app_can_measure_ticks_itself(client, tmp_path):
+    """卡片上已经写着「今天的复习做完了」，勾还得自己再点一次——同一件事确认两遍。"""
+    segment_id = _seed(tmp_path)                 # 都没练过，没有到期的
+
+    body = _home(client, segment_id)
+
+    assert '<span class="plan-tick" data-step="review"' in body
+    assert 'class="plan-check" data-step="review"' not in body
+    assert 'class="plan-check" data-step="chain"' in body      # 测不出来的还是手动勾
+
+
+def test_the_review_step_stays_open_while_sentences_are_due(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    _practised(segment_id, 1, on=MONDAY - timedelta(days=1))
+
+    body = _home(client, segment_id)
+
+    assert 'class="plan-check" data-step="review"' in body
+    assert '<span class="plan-tick" data-step="review"' not in body
+
+
+def test_the_new_sentence_step_ticks_itself_once_you_have_done_enough(client, tmp_path):
+    from shadow import plan
+    from tests.test_web import _seed_second_segment
+
+    segment_id = _seed(tmp_path)
+    second = _seed_second_segment()
+    _practised(segment_id, 1, on=MONDAY)
+    _practised(segment_id, 2, on=MONDAY)
+
+    assert plan.NEW_SENTENCES == 3
+    assert '<span class="plan-tick" data-step="new"' not in _home(client, segment_id)
+
+    _practised_text(second, 1, "Thank you all.", on=MONDAY)
+
+    assert '<span class="plan-tick" data-step="new"' in _home(client, segment_id)
+
+
+def test_the_day_is_done_when_what_is_left_is_ticked(client, tmp_path):
+    from tests.test_web import _seed_second_segment
+
+    segment_id = _seed(tmp_path)                 # 没有到期的：复习那一步自动划掉
+    second = _seed_second_segment()
+    for step in ("chain", "retell", "extensive"):
+        client.post("/api/plan", json={"step": step, "done": True})
+
+    assert 'class="plan-done">做完了' not in _home(client, segment_id)   # 新句子还没练够
+
+    _practised(segment_id, 1, on=MONDAY)
+    _practised(segment_id, 2, on=MONDAY)
+    _practised_text(second, 1, "Thank you all.", on=MONDAY)
+
+    assert "做完了" in _home(client, segment_id)

@@ -189,7 +189,7 @@ def _practice_states(connection, source_id: int) -> dict[str, filters.State]:
     只看这份素材上的记录：两份素材里文字相同的句子不能串在一起。
     到期日是一路算出来的，不存库：评分规则改了，老记录跟着重算，不会留下一批按旧规矩排的队。
     """
-    runs, issues, ratings, last, levels = {}, {}, {}, {}, {}
+    runs, issues, ratings, last, first, levels = {}, {}, {}, {}, {}, {}
     for run in db.source_runs(connection, source_id):
         text = run["unit_text"]
         metrics = db.run_metrics(connection, run["id"])
@@ -208,9 +208,11 @@ def _practice_states(connection, source_id: int) -> dict[str, filters.State]:
         when = _local_day(run["finished_at"] or run["started_at"])
         if when is not None and (text not in last or when > last[text]):
             last[text] = when
+        if when is not None and (text not in first or when < first[text]):
+            first[text] = when
     return {text: filters.State(
                 runs=count, issues=issues.get(text, 0), rating=ratings.get(text),
-                last_day=last.get(text),
+                last_day=last.get(text), first_day=first.get(text),
                 due=plan.due_day(last[text], levels[text]) if text in last else None)
             for text, count in runs.items()}
 
@@ -327,12 +329,40 @@ def _local_day(stamp: str | None) -> date | None:
         return None
 
 
-def _plan_view(connection, today: date, review: filters.Selection) -> dict:
-    """首页日课卡片要的东西：今天是星期几、哪几步、勾了哪些、该复习几句、顺延几句。"""
+def _plan_finished(review: filters.Selection, new_today: int) -> dict[str, bool]:
+    """练习记录里看得出来的那几步，今天做完了没有。
+
+    卡片本来就写着「今天的复习做完了」，勾还要人自己点一次，等于同一件事确认两遍。
+    """
+    reviewed = not review.order          # 到期的都练完了（或今天本来就没有）
+    return {"review": reviewed, "redo": reviewed,
+            "new": new_today >= plan.NEW_SENTENCES}
+
+
+def _plan_progress(connection, today: date) -> tuple[filters.Selection, int]:
+    """当前素材上：今天还有几句该复习、今天新练了几句。"""
+    source_id = library.current(connection)
+    if source_id is None:
+        return filters.Selection(), 0
+    catalogue = _sentences(connection, source_id)
+    states = _practice_states(connection, source_id)
+    here = [states.get(item["text"], filters.NEVER) for item in catalogue]
+    return (filters.select(filters.REVIEW, here, today),
+            sum(1 for state in here if state.first_day == today))
+
+
+def _plan_view(connection, today: date, review: filters.Selection,
+               new_today: int) -> dict:
+    """首页日课卡片要的东西：今天是星期几、哪几步、做完了哪些、该复习几句、顺延几句。
+
+    能从练习记录里看出来的两步自己划掉；剩下三步测不出来，还是手动勾。
+    """
     weekday = today.weekday()
     ticked = db.plan_checks(connection, today.isoformat())
+    finished = _plan_finished(review, new_today)
     steps = [{"key": step.key, "title": step.title, "detail": step.detail,
-              "link": step.link, "done": step.key in ticked}
+              "link": step.link, "auto": finished.get(step.key, False),
+              "done": finished.get(step.key, False) or step.key in ticked}
              for step in plan.steps_for(weekday)]
     return {"heading": plan.heading(weekday), "steps": steps,
             "all_done": all(step["done"] for step in steps),
@@ -356,7 +386,9 @@ def save_plan_check(payload: dict = Body(...)):
     connection = _db()
     db.set_plan_check(connection, today.isoformat(), step, done)
     ticked = db.plan_checks(connection, today.isoformat())
-    all_done = all(item.key in ticked for item in plan.steps_for(today.weekday()))
+    finished = _plan_finished(*_plan_progress(connection, today))
+    all_done = all(item.key in ticked or finished.get(item.key, False)
+                   for item in plan.steps_for(today.weekday()))
     return {"step": step, "done": done, "all_done": all_done}
 
 
@@ -373,6 +405,7 @@ def source_page(request: Request, source_id: int):
     here = [states.get(item["text"], filters.NEVER) for item in catalogue]
     # 该复习的那几句排过急迫程度，名次带给前端：点「该复习」时列表按它重排
     review = filters.select(filters.REVIEW, here, today)
+    new_today = sum(1 for state in here if state.first_day == today)
     ranks = {index: rank for rank, index in enumerate(review.order, 1)}
     for index, item in enumerate(catalogue):
         state = here[index]
@@ -388,7 +421,7 @@ def source_page(request: Request, source_id: int):
         {"catalogue": catalogue, "source": source, "next_unit": next_unit,
          "practised": sum(1 for item in catalogue if item["runs"]),
          "days": progress.calendar(connection),
-         "plan": _plan_view(connection, today, review)},
+         "plan": _plan_view(connection, today, review, new_today)},
     )
 
 

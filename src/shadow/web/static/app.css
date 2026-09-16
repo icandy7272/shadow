@@ -397,11 +397,22 @@ a.button:hover { border-color: var(--accent); }
 .mark-missing { color: var(--warn); text-decoration: underline dotted; }
 .mark-unknown { color: var(--unknown); text-decoration: underline dashed; }
 .extras { margin: -6px 0 12px; color: var(--muted); font-size: 14px; }
+/* 看完结果直接走下一句，不用滚回页面底部 */
+.result-next { display: inline-block; margin-top: 18px; padding: 10px 18px;
+  border-radius: 8px; background: var(--accent); color: #fff; text-decoration: none;
+  font-size: 15px; font-weight: 500; }
+.result-next:hover { filter: brightness(1.08); }
 .misses { display: grid; gap: 12px; }
 .miss { border-left: 3px solid var(--warn); padding: 2px 0 2px 12px; }
 .miss-unknown { border-left-color: var(--unknown); }
 .miss-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; }
 .miss-word { font-size: 16px; font-weight: 600; }
+/* 点词展开释义：没有释义可展开的词就是普通文字 */
+button.miss-word { padding: 0; border: 0; background: none; color: inherit; cursor: pointer;
+  font: inherit; font-size: 16px; font-weight: 600; text-decoration: underline dotted;
+  text-underline-offset: 4px; }
+button.miss-word:hover { color: var(--accent); }
+.miss:not(.open) .miss-meanings { display: none; }
 .phonetic, .miss-guess { color: var(--muted); font-size: 13px; }
 .miss-head .add-vocab, .miss-head .in-vocab { margin-left: auto; }
 .add-vocab { padding: 3px 10px; font-size: 13px; }
@@ -450,6 +461,10 @@ a.button:hover { border-color: var(--accent); }
   padding: 10px 0; border-top: 1px solid var(--line); }
 .plan-check { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--accent);
   cursor: pointer; }
+/* 系统自己看得出来做完了的那几步：打勾，不给复选框——它不是让人点的 */
+.plan-tick { display: grid; place-items: center; width: 18px; height: 18px;
+  margin: 3px 0 0; border-radius: 4px; background: var(--ok); color: #fff;
+  font-size: 12px; line-height: 1; }
 .plan-body { display: grid; gap: 3px; min-width: 0; }
 .plan-body label { cursor: pointer; }
 .plan-body label b { font-weight: 600; margin-right: 8px; }
@@ -470,6 +485,7 @@ a.button:hover { border-color: var(--accent); }
   .plan-foot { padding: 10px 12px; }
   .plan-step { grid-template-columns: 26px minmax(0, 1fr); }
   .plan-check { width: 22px; height: 22px; margin-top: 1px; }   /* 手指够得着 */
+  .plan-tick { width: 22px; height: 22px; margin-top: 1px; font-size: 14px; }
 }
 
 /* ---------- 完整日课页 ---------- */

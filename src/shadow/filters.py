@@ -31,7 +31,8 @@ class State:
     issues: int
     rating: int | None
     last_day: date | None
-    due: date | None = None     # 下次该复习的日子，由练习记录一路算出来
+    due: date | None = None        # 下次该复习的日子，由练习记录一路算出来
+    first_day: date | None = None  # 第一次练它是哪天：日课要数今天新练了几句
 
 
 NEVER = State(runs=0, issues=0, rating=None, last_day=None)

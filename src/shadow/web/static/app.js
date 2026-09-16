@@ -62,7 +62,9 @@ if (filters) {
       ? [...rows].sort((one, other) => rank(one) - rank(other))
       : rows;
     walk.forEach((row) => body.append(row));
-    count.textContent = name === "all" ? "" : `${shown} 句`;
+    // 「该复习」把列表重排过，不说一句会以为是乱序
+    count.textContent = name === "all" ? ""
+      : name === "review" ? `${shown} 句 · 按急迫程度排` : `${shown} 句`;
   });
 }
 
@@ -207,7 +209,15 @@ if (root) {
         note.classList.add("bad");
         service.check();
       }
-      document.getElementById("step-drill").classList.remove("locked");
+      const drill = document.getElementById("step-drill");
+      drill.classList.remove("locked");
+      // 展开了但页面不动，还得自己找下去。滚过去；电脑上顺手把光标放进输入框，
+      // 手机上不聚焦——弹出的键盘会挡掉半屏
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      drill.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+      if (window.matchMedia("(hover: hover)").matches) {
+        document.getElementById("dictation-text")?.focus({ preventScroll: true });
+      }
     });
   });
 
@@ -352,29 +362,43 @@ if (root) {
   }
 
   function missCard(item, data) {
+    const entry = item.entry;
+    const meanings = el("div", "miss-meanings");
+    if (entry && entry.meanings.length) {
+      const list = el("ul", "meanings");
+      entry.meanings.forEach((meaning) => list.append(el("li", null, meaning)));
+      meanings.append(list);
+    }
+    if (entry && entry.lemma) {
+      meanings.append(el("p", "lemma",
+        `原形 ${entry.lemma.word}：${entry.lemma.meanings.join("；")}`));
+    }
+    if (data.dictionary && !(entry && (entry.meanings.length || entry.lemma))) {
+      meanings.append(el("p", "lemma", "词典里没有"));
+    }
+
     const card = el("div", `miss miss-${item.status}`);
     const head = el("div", "miss-head");
-    head.append(el("b", "miss-word", item.answer));
-    if (item.entry && item.entry.phonetic) {
-      head.append(el("span", "phonetic", `/${item.entry.phonetic}/`));
-    }
+    // 错得多时，每个词都摊开释义就是一整屏。默认收起，点词才展开；
+    // 「不会」的词本来就是要查的，直接展开
+    const foldable = Boolean(meanings.childNodes.length);
+    const word = foldable ? el("button", "miss-word", item.answer)
+                          : el("b", "miss-word", item.answer);
+    head.append(word);
+    if (entry && entry.phonetic) head.append(el("span", "phonetic", `/${entry.phonetic}/`));
     head.append(el("span", "miss-guess", item.status === "unknown" ? "不会"
       : item.guess ? `你写了 ${item.guess}` : "没写"));
     head.append(vocabButton(item, data.sentence));
     card.append(head);
-    const entry = item.entry;
-    if (entry && entry.meanings.length) {
-      const list = el("ul", "meanings");
-      entry.meanings.forEach((meaning) => list.append(el("li", null, meaning)));
-      card.append(list);
-    }
-    if (entry && entry.lemma) {
-      card.append(el("p", "lemma",
-        `原形 ${entry.lemma.word}：${entry.lemma.meanings.join("；")}`));
-    }
-    if (data.dictionary && !(entry && (entry.meanings.length || entry.lemma))) {
-      card.append(el("p", "lemma", "词典里没有"));
-    }
+    if (!foldable) return card;
+
+    card.append(meanings);
+    const fold = (open) => {
+      card.classList.toggle("open", open);
+      word.setAttribute("aria-expanded", String(open));
+    };
+    fold(item.status === "unknown");
+    word.addEventListener("click", () => fold(!card.classList.contains("open")));
     return card;
   }
 
@@ -1033,5 +1057,12 @@ if (root) {
     const figures = renderFigures(data.view);
     box.prepend(figures.controls);
     box.append(figures.figures);
+    // 看完结果就该走了，可「练下一句」在整页最下面，还得滚回去
+    const pager = document.querySelector(".pager a.next");
+    if (pager) {
+      const again = el("a", "result-next", pager.textContent.trim());
+      again.href = pager.getAttribute("href");
+      box.append(again);
+    }
   }
 }
