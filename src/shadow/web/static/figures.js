@@ -21,6 +21,18 @@ const PRE_ROLL = 0.15;    // 两条都提前一点起播：正好切在词头会
                           // 两边削掉的还不一样多，听着就像没对齐
 
 const svgNS = "http://www.w3.org/2000/svg";
+const HELP_KEY = "shadow.fig-help";
+
+// 图的说明第一次有用，之后每次都占地方：收起来，想看再点。展开与否记在本机
+function figHelp(title, text) {
+  const box = el("details", "fig-help");
+  box.append(el("summary", null, title), el("p", null, text));
+  try { box.open = localStorage.getItem(HELP_KEY) === "1"; } catch (err) { /* 无所谓 */ }
+  box.addEventListener("toggle", () => {
+    try { localStorage.setItem(HELP_KEY, box.open ? "1" : "0"); } catch (err) { /* 无所谓 */ }
+  });
+  return box;
+}
 
 function svg(tag, attrs) {
   const node = document.createElementNS(svgNS, tag);
@@ -148,8 +160,8 @@ function lane(role, name, blocks, spans, seconds) {
 function rhythmFigure(rhythm) {
   const seconds = rhythm.seconds || 1;
   const node = el("figure", "fig");
-  node.append(el("figcaption", null,
-    "图 1 · 节奏：横轴是真实秒数，块宽 = 时长，空隙 = 真实停顿，" +
+  node.append(figHelp("图 1 · 节奏",
+    "横轴是真实秒数，块宽 = 时长，空隙 = 真实停顿，" +
     "红线标出你在这个词上已经落后多少。虚线框的词是机器在另一行里没找到的。" +
     "点词只放那一行——点原声放原声，点你的放你的；按住拖可以连着几个词。"));
 
@@ -295,12 +307,13 @@ function wrap(slots, available) {
 
 function pitchFigure(slots) {
   const node = el("figure", "fig");
-  const caption = el("figcaption", null,
-    "图 2 · 音高：一词一格（横轴不是时间），线的高低 = 音高，"
+  const caption = figHelp("图 2 · 音高",
+    "一词一格（横轴不是时间），线的高低 = 音高，"
     + "线的走向 = 这个词从头到尾怎么走的。点一个词：先放原声再放你的，来回两遍；"
     + "按住往旁边拖，可以把连读的几个词连起来听。");
-  caption.append(el("i", "legend-ref", "原声（虚线）"));
-  caption.append(el("i", "legend-usr", "你（实心）"));
+  // 图例是看图的钥匙，留在标题行上，不跟着说明收起来
+  caption.querySelector("summary").append(el("i", "legend-ref", "原声（虚线）"),
+                                          el("i", "legend-usr", "你（实心）"));
   node.append(caption);
 
   const rows = el("div", "pitch-rows");

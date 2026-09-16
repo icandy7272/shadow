@@ -114,6 +114,14 @@ button:disabled { opacity: .5; cursor: default; }
 .fig figcaption { color: var(--muted); font-size: 13px; margin-bottom: 10px;
   line-height: 1.5; }
 .fig figcaption i { font-style: normal; margin-left: 14px; white-space: nowrap; }
+/* 图的说明默认收起：第一次有用，之后每次都占地方 */
+.fig-help { margin-bottom: 10px; color: var(--muted); font-size: 13px; }
+.fig-help summary { cursor: pointer; list-style: none; }
+.fig-help summary::-webkit-details-marker { display: none; }
+.fig-help summary::after { content: " · 怎么看 ▾"; }
+.fig-help[open] summary::after { content: " · 收起 ▴"; }
+.fig-help summary i { font-style: normal; margin-left: 14px; white-space: nowrap; }
+.fig-help p { margin: 6px 0 0; line-height: 1.5; }
 .legend-ref { color: var(--accent); }
 .legend-ref::before { content: "– – "; letter-spacing: -1px; }
 .legend-usr { color: var(--warn); }

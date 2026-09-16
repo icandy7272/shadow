@@ -388,7 +388,9 @@ def test_practice_page_offers_repeat_playback(client, tmp_path):
     segment_id = _seed(tmp_path)
     body = client.get(f"/practice/{segment_id}/2").text
     assert 'class="times" value="10"' in body      # 盲听默认连播 10 遍
-    assert body.count('button class="stop"') == 2  # 每个播放控件都能中途停
+    # 放着的时候播放按钮自己变成「停」，不另起一个按钮——按钮位置不该跳
+    assert body.count('class="play"') == 2
+    assert 'class="stop"' not in body
 
 
 def _wav_bytes(seconds=2.0):

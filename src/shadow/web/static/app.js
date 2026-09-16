@@ -147,22 +147,24 @@ if (root) {
   const counts = new WeakMap();
 
   // 连播：一遍放完接着下一遍，中途可停
-  document.querySelectorAll("button.play").forEach((button) => {
+  document.querySelectorAll("button.play").forEach((button, index) => {
     const row = button.parentElement;
     const label = row.querySelector(".plays");
-    const stop = row.querySelector("button.stop");
     const timesInput = row.querySelector("input.times");
+    const idle = button.textContent;      // 放完要变回「▶ 播放（2.6s）」
     counts.set(button, 0);
     let audio = null;
     let left = 0;
     let gap = null;
+    let playing = false;
 
     const finish = () => {
       clearTimeout(gap);        // 两遍之间有半秒空档，这时停也不能再冒出一遍
       if (audio) { audio.pause(); audio = null; }
       left = 0;
-      button.disabled = false;
-      if (stop) stop.hidden = true;
+      playing = false;
+      button.textContent = idle;
+      button.classList.remove("stop");
     };
     loops.add(finish);
 
@@ -180,14 +182,20 @@ if (root) {
     };
 
     button.addEventListener("click", () => {
+      // 放着的时候，这个按钮就是「停」：另起一个按钮会让它旁边的东西跳位置
+      if (playing) {
+        finish();
+        return;
+      }
       stopLoops();              // 另一段还在放就先停，两段叠在一起什么都听不清
       left = Math.max(1, Number(timesInput ? timesInput.value : 1) || 1);
-      button.disabled = true;
-      if (stop) stop.hidden = false;
+      playing = true;
+      button.textContent = "■ 停";
+      button.classList.add("stop");
       playOnce();
     });
-    if (stop) stop.addEventListener("click", finish);
-    row.append(speedControl());
+    // 速度是全局的，两处播放共用一个设置：只在第一处显示，免得以为各管各的
+    if (index === 0) row.append(speedControl());
   });
 
   // 第一步：盲听打分
