@@ -493,6 +493,11 @@ if (root) {
   //
   // 这里刻意不套变速：这几遍是你马上要模仿的东西，放慢了就不是它了，
   // 而比对仍拿原速的原声当基准，每个词都会显得拖长。
+  // 每遍原声之间空这么久，几遍下来就是一个节奏；提示音卡在空档正中间，
+  // 响完正好是该开口的那一拍，不用先等提示音、再找拍子
+  const GAP_MS = 400;
+  const BEEP_MS = 120;
+
   function createSpeaker() {
     const Context = window.AudioContext || window.webkitAudioContext;
     const ctx = new Context();
@@ -525,18 +530,19 @@ if (root) {
           source.start();
         });
       },
-      // 嘀一声：戴着耳机时看不见屏幕，必须用声音提示开录
-      async beep() {
+      // 嘀一声：戴着耳机时看不见屏幕，必须用声音提示开录。
+      // 时长由调用方给：它要卡进播放之间的空档里，不能自己拖时间
+      async beep(seconds = BEEP_MS / 1000) {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.frequency.value = 880;
         gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.14);
+        gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + seconds);
         osc.connect(gain).connect(ctx.destination);
         osc.start();
-        osc.stop(ctx.currentTime + 0.15);
-        await sleep(220);
+        osc.stop(ctx.currentTime + seconds + 0.02);
+        await sleep(seconds * 1000);
       },
       close: () => { ctx.close().catch(() => {}); },
       context: ctx,
@@ -574,6 +580,7 @@ if (root) {
       own = null;
     }
     const ctx = own || spare;
+    if (!ctx) throw new Error("开不起音频上下文");
     const analyser = ctx.createAnalyser();
     if (typeof analyser.getFloatTimeDomainData !== "function") {
       if (own) own.close().catch(() => {});
@@ -615,17 +622,19 @@ if (root) {
     await tapToContinue("接着放", speaker.wake);
   };
 
-  const recordOne = (stream, ear, minSpoken) => new Promise((resolve) => {
+  const recordOne = (stream, ear, minSpoken, autoStop) => new Promise((resolve) => {
     const chunks = [];
     const recorder = new MediaRecorder(stream);
     let began = 0;
     let dropped = false;
     let watch = 0;
     recorder.addEventListener("dataavailable", (e) => chunks.push(e.data));
+    const heard = [];
     recorder.addEventListener("stop", () => resolve({
       blob: new Blob(chunks),
       seconds: (performance.now() - began) / 1000,
       dropped,
+      loudest: loudestOf(heard),
     }));
     const finish = () => {
       clearInterval(watch);
@@ -651,6 +660,8 @@ if (root) {
     watch = setInterval(() => {
       const level = ear.level();
       const now = performance.now();
+      heard.push(showLevel(level));
+      if (!autoStop) return;          // 只画音量条，不自动收
       if (now - began < CALIBRATE_MS) {
         floor = Math.min(floor, level);
         return;
@@ -696,6 +707,123 @@ if (root) {
     });
   }
 
+  // 麦克风：用的是哪个、现在有多响。录音全靠它，平时却完全看不见——
+  // 实测音量一周里从 -25 dB 一路掉到 -50 dB，掉过判定线、三遍全废了才发现。
+  const micSelect = document.getElementById("mic");
+  const micMeter = document.getElementById("mic-meter");
+  const micBar = micMeter?.querySelector("i");
+  const micNote = document.getElementById("mic-note");
+  const micTest = document.getElementById("mic-test");
+  const MIC_KEY = "shadow.mic";
+  const QUIET_DB = -52;      // 服务端判「没录上」的线，两边保持一致
+  const LOW_DB = -46;        // 还没到线，但已经该往近处挪了
+  const LOUD_FRAMES = 6;     // 「最响的 0.3 秒」：每 50 毫秒读一次，取 6 个
+
+  const readMic = () => {
+    try { return localStorage.getItem(MIC_KEY) || ""; } catch (err) { return ""; }
+  };
+
+  // 和服务端同一种算法：最响那一小段的中位数才是嗓门，不受停顿占多少影响
+  const loudestOf = (levels) => {
+    if (!levels.length) return null;
+    const top = [...levels].sort((a, b) => b - a).slice(0, LOUD_FRAMES);
+    return top[Math.floor(top.length / 2)];
+  };
+
+  const verdict = (db) => {
+    const shown = `${db.toFixed(0)} dB`;
+    if (db < QUIET_DB) return `太轻（${shown}），这样会被当成没录上：换个麦克风，或者凑近说`;
+    if (db < LOW_DB) return `偏轻（${shown}），麦克风再凑近一点更稳`;
+    return `够用（${shown}）`;
+  };
+
+  const showLevel = (level) => {
+    const db = 20 * Math.log10(level + 1e-9);
+    if (micMeter) {
+      micMeter.hidden = false;
+      micBar.style.width = `${Math.max(2, Math.min(100, (db + 70) * 100 / 70))}%`;
+      micMeter.classList.toggle("low", db < LOW_DB);
+    }
+    return db;
+  };
+
+  const say = (text, low) => {
+    if (!micNote) return;
+    micNote.textContent = text;
+    micNote.classList.toggle("low", Boolean(low));
+  };
+
+  async function fillMics() {
+    if (!micSelect || !navigator.mediaDevices?.enumerateDevices) return;
+    let devices;
+    try { devices = await navigator.mediaDevices.enumerateDevices(); } catch (err) { return; }
+    const mics = devices.filter((device) => device.kind === "audioinput");
+    if (!mics.length) return;
+    const chosen = micSelect.value || readMic();
+    micSelect.replaceChildren(...mics.map((mic, index) => {
+      const option = el("option", null,
+                        mic.label || `麦克风 ${index + 1}（点「试音」后显示名字）`);
+      option.value = mic.deviceId;
+      return option;
+    }));
+    if (mics.some((mic) => mic.deviceId === chosen)) micSelect.value = chosen;
+  }
+
+  micSelect?.addEventListener("change", () => {
+    try { localStorage.setItem(MIC_KEY, micSelect.value); } catch (err) { /* 隐私模式 */ }
+  });
+  fillMics();
+
+  const micWanted = () => {
+    const id = micSelect?.value || readMic();
+    return {
+      ...(id ? { deviceId: { exact: id } } : {}),
+      // 开降噪：生活噪音一旦超过门限就会被当成发声起点，整段测量跟着前移。
+      // 但不开自动增益——它会在静音处把底噪顶上来，正好帮倒忙。
+      noiseSuppression: true, echoCancellation: true, autoGainControl: false,
+    };
+  };
+
+  // 试音：五秒，边说边看音量条，完了给一句结论
+  let testing = null;
+  micTest?.addEventListener("click", async () => {
+    if (testing) { testing(); return; }
+    micTest.textContent = "停止试音";
+    say("说句话看看 …");
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: micWanted() });
+    } catch (err) {
+      micTest.textContent = "试音";
+      say("拿不到麦克风权限。浏览器地址栏左侧可以重新允许。", true);
+      return;
+    }
+    await fillMics();          // 给过权限之后才拿得到设备名字
+    let ear = null;
+    try { ear = await listenTo(stream, null); } catch (err) { ear = null; }
+    if (!ear) {
+      stream.getTracks().forEach((track) => track.stop());
+      micTest.textContent = "试音";
+      say("这个浏览器读不到实时音量，直接录一遍看看吧。", true);
+      return;
+    }
+    const heard = [];
+    const timer = setInterval(() => heard.push(showLevel(ear.level())), 50);
+    const stopAt = setTimeout(() => testing?.(), 5000);
+    testing = () => {
+      clearInterval(timer);
+      clearTimeout(stopAt);
+      ear.close();
+      stream.getTracks().forEach((track) => track.stop());
+      if (micMeter) micMeter.hidden = true;
+      micTest.textContent = "试音";
+      testing = null;
+      const loudest = loudestOf(heard);
+      say(loudest === null ? "没量到声音" : `刚才${verdict(loudest)}`,
+          loudest !== null && loudest < LOW_DB);
+    };
+  });
+
   startButton?.addEventListener("click", async () => {
     stopLoops();                // 连播还开着的话会录进去
     const speaker = createSpeaker();     // 趁这一下点击解锁声音，原声同时开始下载
@@ -706,32 +834,27 @@ if (root) {
     document.getElementById("step-drill").classList.add("done");
     let stream;
     try {
-      // 开降噪：生活噪音一旦超过门限就会被当成发声起点，整段测量跟着前移。
-      // 但不开自动增益——它会在静音处把底噪顶上来，正好帮倒忙。
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { noiseSuppression: true, echoCancellation: true,
-                 autoGainControl: false },
-      });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: micWanted() });
     } catch (err) {
       status.textContent = "拿不到麦克风权限。浏览器地址栏左侧可以重新允许。";
       speaker.close();
       startButton.disabled = false;
       return;
     }
-    // 读不到实时响度（浏览器不给、上下文开不起来），或者人把自动停关了，
-    // 就退回纯手动，不拦着人练
+    fillMics();          // 给过权限之后才拿得到设备名字
+    // 读不到实时响度（浏览器不给、上下文开不起来）就退回纯手动，不拦着人练。
+    // 把自动停关了也照样读：音量条得一直看得见
     let ear = null;
-    if (autoBox?.checked !== false) {
-      try {
-        ear = await listenTo(stream, speaker.context);
-      } catch (err) {
-        ear = null;
-      }
+    try {
+      ear = await listenTo(stream, speaker.context);
+    } catch (err) {
+      ear = null;
     }
     const wrapUp = () => {
       stream.getTracks().forEach((t) => t.stop());
       ear?.close();
       speaker.close();
+      if (micMeter) micMeter.hidden = true;
       status.classList.remove("live");
       startButton.disabled = false;
     };
@@ -755,16 +878,23 @@ if (root) {
         await awake(speaker);
         status.textContent = `第 ${take}/${takes} 遍 —— 先听 ${i}/${pre}`;
         await speaker.play();
-        await sleep(400);
+        if (i < pre) await sleep(GAP_MS);      // 最后一遍的空档留给提示音
       }
       await awake(speaker);
-      status.textContent = `第 ${take}/${takes} 遍 —— 嘀一声之后开始说`;
+      status.textContent = pre
+        ? `第 ${take}/${takes} 遍 —— 跟着这个节奏开口`
+        : `第 ${take}/${takes} 遍 —— 嘀一声之后开始说`;
+      // 放完到开口，空得和前面每遍之间一样久，提示音卡在正中间
+      const half = pre ? Math.max(0, (GAP_MS - BEEP_MS) / 2) : 0;
+      await sleep(half);
       await speaker.beep();
-      status.textContent = ear
+      await sleep(half);
+      // 音量条要一直读，所以 ear 一直在；会不会自动收得看那个勾
+      status.textContent = ear && autoBox?.checked !== false
         ? `第 ${take}/${takes} 遍 —— 录音中，说完停一下就自动收`
         : `第 ${take}/${takes} 遍 —— 录音中，说完点「说完了」`;
       status.classList.add("live");
-      const clip = await recordOne(stream, ear, minSpoken);
+      const clip = await recordOne(stream, ear, minSpoken, autoBox?.checked !== false);
 
       if (clip.dropped) {
         status.classList.remove("live");
@@ -788,6 +918,10 @@ if (root) {
       }
       short = 0;
       blobs.push(clip.blob);
+      // 每遍录完就说一句响度：太轻的话当场看见，不用等三遍录完被服务端拒收
+      if (clip.loudest !== null) {
+        say(`第 ${take} 遍${verdict(clip.loudest)}`, clip.loudest < LOW_DB);
+      }
       take += 1;
     }
     wrapUp();      // 录完也要把上下文关掉：一次点「开始」漏一个，几轮之后浏览器就不再给了

@@ -62,6 +62,12 @@
       <label class="repeat"><input type="checkbox" id="auto-stop" checked> 说完自动停</label>
       <button class="primary" id="start-record">开始</button>
     </div>
+    <div class="row mic-row">
+      <label class="repeat">麦克风 <select id="mic"><option value="">默认</option></select></label>
+      <button type="button" id="mic-test">试音</button>
+      <span class="meter" id="mic-meter" hidden><i></i></span>
+      <span class="mic-note" id="mic-note"></span>
+    </div>
     <div class="peek">
       <button id="peek">看一眼原文</button>
       <span class="hint">记不住再看。屏幕上有字，人就会去读它，而不是模仿声音。</span>

@@ -555,3 +555,21 @@ a.button:hover { border-color: var(--accent); }
 
 /* 这一遍机器没听对的词：跟着「看哪一遍」切 */
 .take-problems { margin: 0 0 10px; font-size: 14px; }
+
+/* ---------- 麦克风：选哪个、现在有多响 ----------
+   录音全靠它，平时却完全看不见。实测音量一周内从 -25 掉到 -50 dB，
+   掉过判定线才发现，三遍全废。 */
+.mic-row { margin-top: -6px; }
+.mic-row select { font: inherit; font-size: 13px; padding: 4px 6px; max-width: 14em;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--fg); }
+.mic-row button { padding: 4px 12px; font-size: 13px; }
+.meter { flex: none; width: 120px; height: 8px; border-radius: 4px; background: var(--line);
+  overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
+.meter.low i { background: var(--warn); }
+.mic-note { color: var(--muted); font-size: 13px; }
+.mic-note.low { color: var(--warn); }
+@media (max-width: 640px) {
+  .mic-row select { max-width: 9em; }
+  .mic-row button { padding: 8px 12px; }
+}
