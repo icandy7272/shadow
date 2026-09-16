@@ -234,6 +234,37 @@ if (root) {
     });
   });
 
+  // 电脑上练一句，手要在鼠标和键盘之间来回好几趟。接管几个最常用的键；
+  // 只要光标在输入框里，一律不接管——那时每个键都该是在打字
+  document.addEventListener("keydown", (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
+    if (event.target.closest("input, textarea, select, [contenteditable]")) return;
+
+    if (event.key === " ") {
+      // 放最后展开的那一步的音：练到第二步了，空格该放的是第二步的重听
+      const buttons = [...document.querySelectorAll(".step:not(.locked) button.play")];
+      const play = buttons[buttons.length - 1];
+      if (!play) return;
+      event.preventDefault();
+      play.click();
+      return;
+    }
+    if (/^[1-5]$/.test(event.key)) {
+      const rating = listenStep.querySelector(`.rating button[data-rating="${event.key}"]`);
+      if (!rating) return;
+      event.preventDefault();
+      rating.click();
+      return;
+    }
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      const link = document.querySelector(
+        event.key === "ArrowRight" ? ".pager a.next" : ".pager a:not(.next)");
+      if (!link) return;
+      event.preventDefault();
+      window.location.assign(link.href);
+    }
+  });
+
   // 第二步：整句默写。一整句写在一个框里，漏了词挪光标补上；不会的词写一个 ?
   const drillStep = document.getElementById("step-drill");
   const submitDrill = document.getElementById("submit-drill");

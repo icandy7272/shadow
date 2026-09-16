@@ -314,6 +314,9 @@ button:disabled { opacity: .5; cursor: default; }
 }
 
 .insecure { color: var(--warn); }
+/* 快捷键只对有键盘的设备有意义 */
+.keys { display: none; }
+@media (hover: hover) and (min-width: 641px) { .keys { display: block; margin-top: -8px; } }
 
 .figure-controls { margin-bottom: 14px; }
 .figure-controls .takes { margin-top: 0; }
