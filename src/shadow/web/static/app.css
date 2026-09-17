@@ -220,6 +220,7 @@ button:disabled { opacity: .5; cursor: default; }
 .history-head { display: flex; align-items: center; justify-content: space-between;
   gap: 12px; font-size: 13px; }
 .history-head b { font-weight: 600; color: var(--muted); }
+.history-head .reveal { flex: none; white-space: nowrap; }   /* 窄屏上别挤成「先不 / 看」 */
 .history ul { margin: 8px 0 0; padding-left: 20px; }
 .history li { margin: 3px 0; }
 .history p { margin: 8px 0 0; }
@@ -451,6 +452,8 @@ button.miss-word:hover { color: var(--accent); }
   padding: 10px 14px; background: var(--card); border: 1px solid var(--line);
   border-radius: 10px; cursor: pointer; }
 .chain-item.now { border-color: var(--accent); }
+/* 句号宽度固定：「第 47 句」比「第 2 句」宽，句子的左边会参差不齐 */
+.chain-item .num { flex: none; min-width: 4.6em; }
 .chain-text { flex: 1; min-width: 0; }
 .chain-go { margin-left: auto; color: var(--muted); font-size: 13px; text-decoration: none;
   white-space: nowrap; }

@@ -5,8 +5,7 @@
 {% if not sentences %}
   <p class="empty">今天还没练过句子。先去<a href="/">练几句</a>，再回来把它们连起来跟一遍。</p>
 {% else %}
-<p class="hint">今天练过的 {{ sentences|length }} 句，连着跟 {{ rounds }} 遍。中间不停下来改——
-  这一步练的是把单句接成一段话的节奏，错一两个词没关系。点某一句可以从那句接着放。</p>
+<p class="hint">今天练过的 {{ sentences|length }} 句，连着跟 {{ rounds }} 遍。中间不停下来改——这一步练的是把单句接成一段话的节奏，错一两个词没关系。点某一句可以从那句接着放。</p>
 <div class="row" id="chain-controls" data-rounds="{{ rounds }}">
   <button class="primary" id="chain-play">▶ 连着放 {{ rounds }} 遍</button>
   <span class="plays" id="chain-progress"></span>
