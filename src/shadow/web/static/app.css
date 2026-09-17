@@ -79,15 +79,14 @@ tr.fresh .masked { color: var(--muted); font-style: italic; }
 .repeat input[type=number] { font: inherit; width: 52px; padding: 4px 6px;
   border: 1px solid var(--line); border-radius: 5px; background: var(--bg);
   color: var(--fg); text-align: center; }
-button.stop { border-color: var(--warn); color: var(--warn); }
-/* 主按钮放着的时候：只换字色会成蓝底红字，整块换成红底，和结果页的「同时播放」一样 */
-button.primary.stop { background: var(--warn); border-color: var(--warn); color: #fff; }
+/* 「正在进行，点这里停」全站只有一种样子：红底白字。原来主按钮是红底、普通按钮是红框红字、
+   只听原声 / 只听我的连字都不变、试音干脆不变色——同一个意思四种长相，找「停」得先认一遍 */
+button.stop, #stop-take { background: var(--warn); border-color: var(--warn); color: #fff; }
 button:disabled { opacity: .5; cursor: default; }
 
 .status { color: var(--muted); font-size: 14px; min-height: 1.4em; margin: 8px 0; }
 .status.live { color: var(--warn); font-weight: 500; }
-#stop-take { border-color: var(--warn); color: var(--warn); font-size: 16px;
-  padding: 10px 22px; }
+#stop-take { font-size: 16px; padding: 10px 22px; }
 .bar { height: 6px; border-radius: 3px; background: var(--line);
   overflow: hidden; margin: 2px 0 10px; }
 .bar i { display: block; height: 100%; width: 0; border-radius: 3px;
@@ -135,8 +134,6 @@ button:disabled { opacity: .5; cursor: default; }
 .playbar { display: flex; align-items: center; gap: 8px; margin: 0 0 18px;
   flex-wrap: wrap; }
 .playbar button { padding: 6px 12px; font-size: 14px; }
-.playbar button.playing { border-color: var(--warn); color: var(--warn); }
-.playbar button.primary.playing { background: var(--warn); color: #fff; }
 .playbar-hint { color: var(--muted); font-size: 12px; }
 
 .fig-body { position: relative; }

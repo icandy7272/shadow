@@ -923,15 +923,20 @@ if (root) {
 
   // 试音：五秒，边说边看音量条，完了给一句结论
   let testing = null;
+  // 试音进行中也是一个「停」，和播放键长一样
+  const markTesting = (on) => {
+    micTest.textContent = on ? "■ 停" : "试音";
+    micTest.classList.toggle("stop", on);
+  };
   micTest?.addEventListener("click", async () => {
     if (testing) { testing(); return; }
-    micTest.textContent = "停止试音";
+    markTesting(true);
     say("说句话看看 …");
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: micWanted() });
     } catch (err) {
-      micTest.textContent = "试音";
+      markTesting(false);
       say("拿不到麦克风权限。浏览器地址栏左侧可以重新允许。", true);
       return;
     }
@@ -940,7 +945,7 @@ if (root) {
     try { ear = await listenTo(stream, null); } catch (err) { ear = null; }
     if (!ear) {
       stream.getTracks().forEach((track) => track.stop());
-      micTest.textContent = "试音";
+      markTesting(false);
       say("这个浏览器读不到实时音量，直接录一遍看看吧。", true);
       return;
     }
@@ -957,7 +962,7 @@ if (root) {
       ear.close();
       stream.getTracks().forEach((track) => track.stop());
       if (micMeter) micMeter.hidden = true;
-      micTest.textContent = "试音";
+      markTesting(false);
       testing = null;
       const loudest = loudestOf(heard);
       say(loudest === null ? "没量到声音" : `刚才${verdict(loudest)}`,

@@ -774,10 +774,13 @@ function playbar(rhythm, audio, figures) {
   const one = el("button", null, "只听原声");
   const mine = el("button", null, "只听我的");
   const buttons = [both, one, mine];
+  const labels = new Map(buttons.map((b) => [b, b.textContent]));
 
   const reset = () => {
-    both.textContent = "▶ 同时播放";
-    buttons.forEach((b) => b.classList.remove("playing"));
+    buttons.forEach((b) => {
+      b.textContent = labels.get(b);
+      b.classList.remove("stop");
+    });
     figures.forEach((f) => f.hide());
   };
   const player = playback(rhythm, audio,
@@ -785,11 +788,12 @@ function playbar(rhythm, audio, figures) {
                           reset);
 
   const start = (button, tracks, spread) => {
-    const active = button.classList.contains("playing");
+    const active = button.classList.contains("stop");
     player.stop();
     if (active) return;                 // 正在放这一路，再点一次就是停
-    button.classList.add("playing");
-    if (button === both) both.textContent = "■ 停";
+    // 三个键放着时都变成「■ 停」，和页面上别处的停一个样：原来只有「同时播放」会变字
+    button.classList.add("stop");
+    button.textContent = "■ 停";
     player.play(tracks, spread);
   };
 
