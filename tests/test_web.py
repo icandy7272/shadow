@@ -770,3 +770,19 @@ def test_a_failed_submit_can_be_sent_again(client, tmp_path):
     """服务断掉那一刻最亏的是刚录的几遍。录音还在页面里，恢复后重新提交就行。"""
     segment_id = _seed(tmp_path)
     assert 'id="resubmit"' in client.get(f"/practice/{segment_id}/2").text
+
+
+def test_the_header_marks_the_page_you_are_on(client, tmp_path):
+    """顶栏三个入口长得一模一样，看不出自己在哪一页。"""
+    segment_id = _seed(tmp_path)
+
+    def current(url):
+        body = client.get(url).text
+        return re.findall(r'<a [^>]*aria-current="page"[^>]*>([^<]+)</a>', body)
+
+    assert current("/vocab") == ["生词本"]
+    assert current("/sources") == ["素材库"]
+    assert current(f"/sources/{_source_of(segment_id)}") == ["日课"]
+    assert current("/plan") == ["日课"]
+    assert current("/chain") == ["日课"]
+    assert current(f"/practice/{segment_id}/1") == []      # 练句子不属于哪个入口
