@@ -80,6 +80,8 @@ tr.fresh .masked { color: var(--muted); font-style: italic; }
   border: 1px solid var(--line); border-radius: 5px; background: var(--bg);
   color: var(--fg); text-align: center; }
 button.stop { border-color: var(--warn); color: var(--warn); }
+/* 主按钮放着的时候：只换字色会成蓝底红字，整块换成红底，和结果页的「同时播放」一样 */
+button.primary.stop { background: var(--warn); border-color: var(--warn); color: #fff; }
 button:disabled { opacity: .5; cursor: default; }
 
 .status { color: var(--muted); font-size: 14px; min-height: 1.4em; margin: 8px 0; }
