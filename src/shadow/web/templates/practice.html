@@ -115,6 +115,8 @@
        >练下一句（第 {{ next_unit.number }}/{{ total_units }} 句）→</a>
     {% elif queue %}
     <a class="next" href="/sources/{{ source_id }}">{{ queue.done }}，回列表 →</a>
+    {% else %}
+    <a class="next" href="/sources/{{ source_id }}">这份素材练完了，回列表 →</a>
     {% endif %}
   </nav>
   {% if queue %}

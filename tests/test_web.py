@@ -214,6 +214,16 @@ def test_the_pager_walks_across_segment_boundaries(client, tmp_path):
     assert f'href="/practice/{first}/2"' in body
 
 
+def test_the_last_sentence_still_has_a_way_forward(client, tmp_path):
+    """练到最后一句，页面上只剩「上一句」就成了死路，→ 键也没处去。"""
+    segment_id = _seed(tmp_path)
+
+    body = client.get(f"/practice/{segment_id}/2").text
+
+    assert f'class="next" href="/sources/{_source_of(segment_id)}"' in body
+    assert "这份素材练完了" in body
+
+
 def test_another_source_is_not_mixed_in(client, tmp_path):
     """新导入一份素材，它的句子不该接在上一份后面。"""
     first = _seed(tmp_path)
