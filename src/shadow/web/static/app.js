@@ -489,7 +489,8 @@ if (root) {
     if (data.extras.length) {
       summary.append(" · ", el("b", "tally-extra", `多写 ${data.extras.length}`));
     }
-    summary.append(data.replays ? `，重听 ${data.replays} 遍` : "，一遍过");
+    // 这里只说点没点重听。原来写「一遍过」，配上「写错 1 · 不会 1」读着像全对了
+    summary.append(data.replays ? `，重听 ${data.replays} 遍` : "，没重听");
     const nodes = [summary, gradedLine(data.line, data.items)];
     if (data.extras.length) {
       nodes.push(el("p", "extras", `多写了：${data.extras.join("、")}`));

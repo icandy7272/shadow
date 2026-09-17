@@ -525,7 +525,7 @@ def cmd_progress(args: argparse.Namespace) -> int:
             if row["gapfill_total"]:
                 text = (row["unit_text"] or "")[:40]
                 rep = row["gapfill_replays"]
-                shown = "" if rep is None else (f"重听{rep}" if rep else "一遍过")
+                shown = "" if rep is None else (f"重听{rep}" if rep else "没重听")
                 if row["gapfill_unknown"] is None:
                     # 改成整句默写之前的挖空记录
                     heard = row["gapfill_heard"]

@@ -287,7 +287,9 @@ def test_progress_shows_dictation_scores(capsys):
     assert "默写" in out
     assert "2/4" in out
     assert "不会 1" in out
-    assert "一遍过" in out
+    # 写对一半也叫「一遍过」读着像全对了；这里说的只是没点重听
+    assert "没重听" in out
+    assert "一遍过" not in out
 
 
 class FakeTunnel:
