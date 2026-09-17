@@ -229,6 +229,8 @@ button:disabled { opacity: .5; cursor: default; }
 .step.done h2 .n { background: var(--line); color: var(--muted); }
 .step.done h2::after { content: "已完成"; font-size: 12px; font-weight: 400;
   color: var(--muted); }
+/* 做完的一步亮起来：收起了也一眼看得出是做完，不是没解锁 */
+.step.complete h2 .n { background: var(--ok); color: #fff; font-size: 13px; }
 
 .peek { margin: 2px 0 14px; }
 .peek .hint { margin-left: 10px; }

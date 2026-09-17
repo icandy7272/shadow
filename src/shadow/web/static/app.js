@@ -151,6 +151,14 @@ function setRecording(on) {
   });
 }
 
+// 做完的一步，序号换成绿色对勾。灰色留给「还不能做」——做完了和没解锁不能长一个样
+function markComplete(step) {
+  if (!step || step.classList.contains("complete")) return;
+  step.classList.add("complete");
+  const badge = step.querySelector("h2 .n");
+  if (badge) badge.textContent = "✓";
+}
+
 const root = document.getElementById("practice");
 if (root) {
   const segment = root.dataset.segment;
@@ -235,6 +243,7 @@ if (root) {
       }
       const drill = document.getElementById("step-drill");
       drill.classList.remove("locked");
+      markComplete(listenStep);
       // 展开了但页面不动，还得自己找下去。滚过去；电脑上顺手把光标放进输入框，
       // 手机上不聚焦——弹出的键盘会挡掉半屏
       const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -356,6 +365,7 @@ if (root) {
     box.replaceChildren(...dictationResult(await response.json()));
     // 框收起来，只留答案和释义；开始跟读时整步再收起
     drillStep.classList.add("graded");
+    markComplete(drillStep);
     setFolded(false);
     document.getElementById("step-record").classList.remove("locked");
   });
@@ -1130,6 +1140,7 @@ if (root) {
       return;
     }
     // 分析完了：默写那一步可以重新打开，回头看错在哪
+    markComplete(document.getElementById("step-record"));
     document.dispatchEvent(new CustomEvent("shadow:analysed"));
     showResult(last.result, box);
   }
