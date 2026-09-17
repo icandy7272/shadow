@@ -307,6 +307,30 @@ def test_unknown_unit_is_a_404(client, tmp_path):
     assert client.get(f"/practice/{segment_id}/99").status_code == 404
 
 
+BROWSER = {"Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
+
+
+def test_a_page_that_is_gone_is_still_a_page(client, tmp_path):
+    """浏览器里打开一个过期的句子链接，原来满屏只有一行 JSON。"""
+    segment_id = _seed(tmp_path)
+
+    for url in (f"/practice/{segment_id}/99", "/no-such-page"):
+        response = client.get(url, headers=BROWSER)
+        assert response.status_code == 404
+        assert response.headers["content-type"].startswith("text/html")
+        assert "页面打不开" in response.text
+        assert 'href="/"' in response.text
+        assert "片段" not in response.text          # 内部的说法不露到界面上
+
+
+def test_the_api_still_answers_json_when_something_is_missing(client, tmp_path):
+    """前端要读 detail 显示原因，接口不能也换成页面。"""
+    response = client.delete("/api/vocab/nothing", headers=BROWSER)
+
+    assert response.status_code == 404
+    assert response.json()["detail"]
+
+
 def test_audio_is_cut_on_demand(client, tmp_path):
     segment_id = _seed(tmp_path)
     response = client.get(f"/audio/{segment_id}/2")

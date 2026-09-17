@@ -18,10 +18,12 @@ from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
                                RedirectResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from collections import Counter
 
@@ -78,6 +80,23 @@ async def _lifespan(app):
 
 app = FastAPI(title="Shadow", lifespan=_lifespan)
 app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
+
+# 这些路径由页面里的 JS 或 <audio> 取用，出错时得回 JSON，前端要读 detail
+_MACHINE_PATHS = ("/api/", "/audio/", "/take/", "/static/")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _missing_page(request: Request, exc: StarletteHTTPException):
+    """浏览器里直接打开的页面找不到时，给一个能点回去的页面，而不是满屏一行 JSON。
+
+    过期的句子链接最常见：素材删掉或重新导入过，编号就对不上了。
+    """
+    wants_page = (exc.status_code == 404 and request.method == "GET"
+                  and "text/html" in request.headers.get("accept", "")
+                  and not request.url.path.startswith(_MACHINE_PATHS))
+    if not wants_page:
+        return await http_exception_handler(request, exc)
+    return templates.TemplateResponse(request, "missing.html", status_code=404)
 
 
 @app.get("/sources", response_class=HTMLResponse)
