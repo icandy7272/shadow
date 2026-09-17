@@ -60,6 +60,7 @@ class TakeSummary:
 
 ACCURACY_SLACK = 0.15    # 比最好的一遍低这么多，就不是同一次尝试了
 PAUSE_OUTLIER = 2.0      # 停顿比同批中位数大这么多倍，多半是中间卡了一下
+RATIO_FLOOR = 0.05       # 完全没停顿时比值是 0，取对数前垫一下
 
 
 def _representative(takes: Sequence[TakeMetrics], speech, typical: float) -> int:
@@ -82,7 +83,18 @@ def _representative(takes: Sequence[TakeMetrics], speech, typical: float) -> int
                   or takes[index].pause_ratio <= limit]
         clean = steady or clean
 
+    if len(clean) == 2:
+        # 两遍没有中位可言：中位就是两遍的平均，两遍离它一样远，原来总落到第 1 遍，
+        # 念砸的那遍照样入选。只能拿原声当尺子，挑节奏离原声近的
+        return min(clean, key=lambda index: _off_reference(takes[index]))
     return min(clean, key=lambda index: abs(speech[index] - typical))
+
+
+def _off_reference(take: TakeMetrics) -> float:
+    """语速、停顿各自离原声差几倍。取对数：慢一倍和快一倍算一样远。"""
+    def fold(ratio: float | None) -> float:
+        return 0.0 if ratio is None else abs(math.log(max(ratio, RATIO_FLOOR)))
+    return fold(take.speech_ratio) + fold(take.pause_ratio)
 
 
 def _spread(values: Sequence[float]) -> Spread:

@@ -132,3 +132,22 @@ def test_all_takes_stumbled_still_yields_one():
              take(accuracy=0.6, speech=1.1, pause=6.5)]
 
     assert summarise(takes).representative in (0, 1)
+
+
+@pytest.mark.parametrize("broken", [0, 1])
+def test_with_two_takes_the_broken_one_is_not_drawn(broken):
+    """两遍没有中位可言：两遍离中位一样远，原来总是挑第 1 遍——哪怕它念砸了。
+    实测第 1 遍发声 10.55×、停顿 14.36×，照样标「代表这轮」，图全画的是它。
+    （数值取能精确打平的，别让浮点误差替它碰巧选对）"""
+    fine = take(speech=0.75, pause=1.0)
+    bad = take(speech=1.25, pause=4.0)
+    takes = [bad, fine] if broken == 0 else [fine, bad]
+
+    assert summarise(takes).representative != broken
+
+
+def test_with_two_takes_a_long_stall_counts_against_it():
+    """语速一样偏离时，停顿拖得离谱的那遍不该入选。"""
+    takes = [take(speech=1.125, pause=5.0), take(speech=0.875, pause=1.0)]
+
+    assert summarise(takes).representative == 1
