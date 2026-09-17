@@ -5,7 +5,12 @@
 
 const GAP = 34;
 const CALLOUT_ROW = 17;   // 词标错行的行距
-const CALLOUT_DROP = 21;  // 第一行词标到词块的引线长度
+const CALLOUT_ROWS = 4;   // 最多错这么多行；再挤只可能是一遍录得离谱，叠就叠吧
+const LABEL_HEIGHT = 15;  // 一行 12px 词标实际占的高
+const LABEL_GAP_PX = 6;   // 同一行两个标签之间至少空这么多
+const TICK_STEPS = [0.5, 1, 2, 5, 10, 15, 30, 60];
+const TICK_MIN_PX = 40;   // 刻度数字之间至少这么宽，不然挤成一串
+const MISHEARD_SHOWN = 6; // 每遍「没听对」最多列这么多处
 const NEAR_BLOCK_SEC = 0.25;  // 点在块外多远还算点中它           // 节奏图两行之间留给落后连线的高度
 const PER_SEMITONE = 7;   // 一个半音多少 px，固定不变，句与句之间才可比
 const TRACE_PAD = 10;     // 折线上下留白，笔画不贴边
@@ -61,14 +66,22 @@ function lane(role, name, blocks, spans, seconds) {
   const track = el("div", "track");
 
   trackRow.append(el("span", "tag", name), track);
+  // 词标和「后面该停没停」这类提示排在同一层里一起错行：
+  // 提示原来贴在色带正上方，跟词标各排各的，窄屏上正好压在词标上
+  const labels = [];
   spans.forEach((span) => {
     const band = el("div", "span");
     band.style.left = `${(span.start / seconds) * 100}%`;
     band.style.width = `${((span.end - span.start) / seconds) * 100}%`;
-    band.append(el("span", "span-flag", span.flag));
     track.append(band);
+    const flag = el("span", "flag", span.flag);
+    const centre = (span.start + span.end) / 2;
+    flag.style.left = `${(centre / seconds) * 100}%`;
+    callouts.append(flag);
+    labels.push({ node: flag, centre });
   });
 
+  const tags = [];              // 和 blocks 一一对应：试听、拖选时按下标找
   blocks.forEach((block) => {
     const box = el("div", block.matched ? "blk" : "blk missed");
     box.style.left = `${(block.start / seconds) * 100}%`;
@@ -77,28 +90,43 @@ function lane(role, name, blocks, spans, seconds) {
 
     // 词标放在块外面：横轴是真实秒数，块不能为了放字而加宽
     const tag = el("span", block.matched ? null : "missed", block.text);
-    tag.style.left = `${((block.start + block.width / 2) / seconds) * 100}%`;
+    const centre = block.start + block.width / 2;
+    tag.style.left = `${(centre / seconds) * 100}%`;
     callouts.append(tag);
+    tags.push(tag);
+    labels.push({ node: tag, centre });
   });
 
   row.append(...(role === "ref" ? [callouts, trackRow] : [trackRow, callouts]));
 
-  // 词一多标签就会挤在一起。量出实际宽度，贪心地错到第二行，并画一根引线。
+  // 词一多标签就会挤在一起。量出实际宽度，从左往右贪心地放：这一行放不下就换下一行，
+  // 行不够就再开一行（最多 CALLOUT_ROWS 行），第 0 行离词块最近，每个标签画一根引线。
+  // 窄屏上原来只有两行，第三个挤的词只能叠上去
   const place = () => {
     const width = track.clientWidth;
     if (!width) return;
-    const rights = [-Infinity, -Infinity];
-    callouts.childNodes.forEach((node, index) => {
-      const block = blocks[index];
-      const centre = ((block.start + block.width / 2) / seconds) * width;
-      const half = node.offsetWidth / 2;
-      let line = rights.findIndex((right) => centre - half > right + 6);
+    const placed = labels
+      .map((label) => ({ ...label, x: (label.centre / seconds) * width,
+                         half: label.node.offsetWidth / 2 }))
+      .sort((a, b) => a.x - b.x);
+    const rights = [];
+    placed.forEach((label) => {
+      let line = rights.findIndex((right) => label.x - label.half > right + LABEL_GAP_PX);
+      if (line < 0 && rights.length < CALLOUT_ROWS) line = rights.push(-Infinity) - 1;
       if (line < 0) line = rights.indexOf(Math.min(...rights));
-      rights[line] = centre + half;
-      node.style.top = `${line * CALLOUT_ROW}px`;
-      node.style.setProperty("--drop", role === "ref"
-        ? `${CALLOUT_DROP - line * CALLOUT_ROW}px`
-        : `${4 + line * CALLOUT_ROW}px`);
+      rights[line] = Math.max(rights[line], label.x + label.half);
+      label.line = line;
+    });
+    const rows = Math.max(2, rights.length);
+    callouts.style.height = `${rows * CALLOUT_ROW + 2}px`;
+    placed.forEach(({ node, line }) => {
+      if (role === "ref") {        // 词标在词块上方：离块最近的一行排在最底下
+        node.style.top = `${(rows - 1 - line) * CALLOUT_ROW}px`;
+        node.style.setProperty("--drop", `${(line + 1) * CALLOUT_ROW + 2 - LABEL_HEIGHT}px`);
+      } else {
+        node.style.top = `${line * CALLOUT_ROW}px`;
+        node.style.setProperty("--drop", `${4 + line * CALLOUT_ROW}px`);
+      }
     });
   };
   if (window.ResizeObserver) new ResizeObserver(place).observe(track);
@@ -124,8 +152,7 @@ function lane(role, name, blocks, spans, seconds) {
   const mark = (range, className) => {
     track.querySelectorAll(".blk").forEach((node, index) =>
       node.classList.toggle(className, within(index, range)));
-    callouts.childNodes.forEach((node, index) =>
-      node.classList.toggle(className, within(index, range)));
+    tags.forEach((node, index) => node.classList.toggle(className, within(index, range)));
   };
 
   return {
@@ -199,12 +226,22 @@ function rhythmFigure(rhythm) {
   body.append(lanes.usr.node);
   node.append(body);
 
+  // 刻度间隔跟着宽度和时长走：原来固定每 0.5 秒一个，录音一长或屏幕一窄就糊成一串
   const ticks = el("div", "ticks");
-  for (let t = 0; t <= seconds + 1e-6; t += 0.5) {
-    const tick = el("span", null, t.toFixed(1));
-    tick.style.left = `${(t / seconds) * 100}%`;
-    ticks.append(tick);
-  }
+  const drawTicks = () => {
+    const width = ticks.clientWidth || FALLBACK_WIDTH;
+    const step = TICK_STEPS.find((one) => (one / seconds) * width >= TICK_MIN_PX)
+      || TICK_STEPS[TICK_STEPS.length - 1];
+    ticks.replaceChildren();
+    for (let i = 0; i * step <= seconds + 1e-6; i += 1) {
+      const t = i * step;
+      const tick = el("span", null, step < 1 ? t.toFixed(1) : String(t));
+      tick.style.left = `${(t / seconds) * 100}%`;
+      ticks.append(tick);
+    }
+  };
+  drawTicks();
+  if (window.ResizeObserver) new ResizeObserver(drawTicks).observe(ticks);
   node.append(ticks);
 
   return {
@@ -828,13 +865,16 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
     `可懂度 ${take.accuracy}% · 发声 ${take.speech.toFixed(2)}x · `
     + `停顿 ${take.pause === null ? "—" : take.pause.toFixed(2) + "x"}`;
 
-  // 机器在这一遍里没听对的词。每一遍各说各的：切到哪一遍就看哪一遍
+  // 机器在这一遍里没听对的词。每一遍各说各的：切到哪一遍就看哪一遍。
+  // 只列前几处——一遍录进了别的声音时会多出几十个词，全列出来占满半屏
   const misheardText = (take) => {
     if (!take.problems.length) return "每个词机器都听出来了";
-    return "没听对：" + take.problems.map((problem) => (
+    const listed = take.problems.slice(0, MISHEARD_SHOWN).map((problem) => (
       problem.kind === "missing" ? `漏 ${problem.ref}`
         : problem.kind === "wrong" ? `${problem.ref}→听成 ${problem.usr}`
           : `多 ${problem.usr}`)).join("、");
+    const more = take.problems.length - MISHEARD_SHOWN;
+    return `没听对：${listed}${more > 0 ? `……还有 ${more} 处` : ""}`;
   };
 
   // 三遍的结果一起列出来：哪一遍有问题一眼看得见，不用一遍遍切过去找。

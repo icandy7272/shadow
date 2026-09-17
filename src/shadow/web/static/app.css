@@ -157,7 +157,7 @@ button:disabled { opacity: .5; cursor: default; }
 
 .callouts { position: relative; height: 36px; margin-left: 46px; }
 .callouts span { position: absolute; transform: translateX(-50%);
-  font-size: 12px; white-space: nowrap; }
+  font-size: 12px; line-height: 15px; white-space: nowrap; }   /* 行高和 figures.js 的 LABEL_HEIGHT 一致 */
 .callouts span::after { content: ""; position: absolute; left: 50%; width: 1px;
   height: var(--drop, 0); background: currentColor; opacity: .3; }
 .lane.ref .callouts span { color: var(--accent); }
@@ -169,9 +169,8 @@ button:disabled { opacity: .5; cursor: default; }
 
 .track .span { position: absolute; top: -4px; bottom: -4px;
   background: rgba(214, 39, 40, .14); border-radius: 4px; }
-.track .span-flag { position: absolute; left: 50%; bottom: 100%;
-  transform: translateX(-50%); white-space: nowrap; font-size: 12px;
-  color: var(--warn); }
+/* 「后面该停没停」这类提示和词标同层错行，颜色跟问题走 */
+.lane .callouts span.flag { color: var(--warn); }
 
 .gap { position: relative; height: 34px; margin-left: 46px; }
 .lag-layer { width: 100%; height: 100%; display: block; }
