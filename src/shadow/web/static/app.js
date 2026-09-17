@@ -1140,6 +1140,8 @@ if (root) {
         `<p class="bad">${(last && last.error) || "比对中断了，重录一遍试试。"}</p>`;
       return;
     }
+    // 每遍的响度提示到这儿就过时了，结果里一遍一行都有；偏轻的警告留着，下一轮还用得上
+    if (micNote && !micNote.classList.contains("low")) say("");
     // 分析完了：默写那一步可以重新打开，回头看错在哪
     markComplete(document.getElementById("step-record"));
     document.dispatchEvent(new CustomEvent("shadow:analysed"));
