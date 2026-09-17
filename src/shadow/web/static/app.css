@@ -1,4 +1,6 @@
 :root {
+  /* 复选框、数字框、下拉框这类原生控件由浏览器画，不声明的话深色模式下还是白方块 */
+  color-scheme: light dark;
   --bg: #fbfbfa; --fg: #1a1a1a; --muted: #6b6b6b; --line: #e2e0dc;
   --accent: #1f77b4; --warn: #d62728; --card: #ffffff; --ok: #2ca02c;
 }
@@ -73,7 +75,8 @@ code { background: var(--card); border: 1px solid var(--line); border-radius: 4p
 tr.fresh .masked { color: var(--muted); font-style: italic; }
 .repeat { color: var(--muted); font-size: 13px; display: inline-flex;
   align-items: center; gap: 5px; }
-.repeat input.times { font: inherit; width: 52px; padding: 4px 6px;
+/* 「录几遍」「每遍前听几次」也是数字框，原来只给连播那个套了样式，另外两个是浏览器默认的 */
+.repeat input[type=number] { font: inherit; width: 52px; padding: 4px 6px;
   border: 1px solid var(--line); border-radius: 5px; background: var(--bg);
   color: var(--fg); text-align: center; }
 button.stop { border-color: var(--warn); color: var(--warn); }
@@ -300,7 +303,7 @@ button:disabled { opacity: .5; cursor: default; }
   .row { gap: 8px; }
   button { padding: 10px 14px; }          /* 手指够得着 */
   .speeds button, .takes button { padding: 8px 12px; }
-  .repeat input.times, #takes, #prelisten { padding: 8px 6px; }
+  .repeat input[type=number] { padding: 8px 6px; }
   .sentence { font-size: 16px; line-height: 2.6; }
   table.units th:nth-child(3), table.units td:nth-child(3),
   table.units th:nth-child(4), table.units td:nth-child(4) { display: none; }
