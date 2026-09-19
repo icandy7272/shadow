@@ -17,7 +17,7 @@
     <div class="vocab-head">
       <b class="vocab-word">{{ item.word }}</b>
       {% if item.entry and item.entry.phonetic %}<span class="phonetic">/{{ item.entry.phonetic }}/</span>{% endif %}
-      <span class="vocab-meta">记过 {{ item.times }} 次 · {{ item.first_day }} 起</span>
+      <span class="vocab-meta">记过 {{ item.times }} 次 · {{ item.first_day | day }} 起</span>
       <button type="button" data-action="forget">记住了</button>
     </div>
     {% if item.entry and item.entry.meanings %}

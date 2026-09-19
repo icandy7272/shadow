@@ -86,7 +86,7 @@
     {% if history %}
     <div class="history">
       <div class="history-head">
-        <b>上次（{{ history.when }}，这句练过 {{ history.times }} 次）</b>
+        <b>上次（{{ history.when | day }}，这句练过 {{ history.times }} 次）</b>
         <label class="reveal"><input type="checkbox" id="history-off"> 先不看</label>
       </div>
       {% if history.issues %}

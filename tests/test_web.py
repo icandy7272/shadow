@@ -121,6 +121,21 @@ def test_last_time_is_shown_inside_the_shadowing_step(client, tmp_path):
     assert "可懂度" not in body
 
 
+def test_dates_are_written_the_same_way_everywhere(client, tmp_path):
+    """同一个日期，练习页原来写「2026-09-17」，素材库、生词本、录音列表都写「09-17」。"""
+    from datetime import date
+
+    segment_id = _seed(tmp_path)
+    _finished_run(segment_id, 2, ["“was” 该降没降"])
+    client.post("/api/vocab", json={"word": "start", "sentence": "It was a start."})
+    today = date.today().strftime("%m-%d")
+
+    for url in (f"/practice/{segment_id}/2", "/sources", "/vocab"):
+        body = client.get(url).text
+        assert today in body
+        assert str(date.today().year) not in body    # 今年的日期不写年份
+
+
 def test_a_fresh_sentence_has_no_last_time_block(client, tmp_path):
     segment_id = _seed(tmp_path)
     assert 'class="history"' not in client.get(f"/practice/{segment_id}/2").text

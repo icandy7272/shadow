@@ -27,7 +27,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from collections import Counter
 
-from .. import (config, db, dictionary, filters, history, library, media, plan,
+from .. import (config, dates, db, dictionary, filters, history, library, media, plan,
                 progress)
 from ..report.takes import recurrence_threshold
 from ..analysis.diff import accuracy as _accuracy
@@ -64,6 +64,7 @@ def _start_command() -> str:
     return f"cd {shlex.quote(str(project))} && uv run shadow serve"
 
 
+templates.env.filters["day"] = lambda stamp: dates.day_label(stamp, _today())
 templates.env.globals["assets"] = _asset_version
 templates.env.globals["start_command"] = _start_command()
 
@@ -486,7 +487,7 @@ def _when(day: date, today: date) -> str:
 
 def _talk_item(row: dict, today: date) -> dict:
     day = date.fromisoformat(row["day"])
-    return {"id": row["id"], "when": _when(day, today), "date": day.strftime("%m-%d"),
+    return {"id": row["id"], "when": _when(day, today), "date": row["day"],
             "length": _mmss(row["seconds"]), "picks": row["picks"],
             "url": f"/talk/audio/{Path(row['audio_path']).name}"}
 
@@ -770,7 +771,7 @@ def vocab_page(request: Request, sort: str = Query("recent")):
     shown = [{
         **item,
         "entry": entries.get(item["word"]),
-        "first_day": datetime.fromisoformat(item["first_added"]).astimezone().strftime("%m-%d"),
+        "first_day": item["first_added"],
         "sources": [{**source, "link": _vocab_link(connection, source)}
                     for source in item["sources"]],
     } for item in items]

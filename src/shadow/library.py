@@ -38,7 +38,7 @@ class Card:
     practised: int              # 练过几句
     rounds: int                 # 一共几轮练习
     takes: int                  # 一共几遍录音
-    last_practised: str | None  # 本地日期，如 09-12
+    last_practised: str | None  # 上次练的时间戳，页面上用 day 过滤器写成日期
     current: bool
 
 
@@ -79,15 +79,6 @@ def _usable_texts(conn, source_id: int) -> list[str]:
             if media.unit_problem(audio, words) is None]
 
 
-def _local_day(stamp: str | None) -> str | None:
-    if not stamp:
-        return None
-    try:
-        return datetime.fromisoformat(stamp).astimezone().strftime("%m-%d")
-    except ValueError:
-        return None
-
-
 def cards(conn) -> list[Card]:
     """每份素材一张卡片，新导入的在前。"""
     chosen = current(conn)
@@ -104,7 +95,7 @@ def cards(conn) -> list[Card]:
             sentences=len(texts),
             practised=sum(1 for text in texts if text in done),
             rounds=len(runs), takes=db.count_takes(conn, row["id"]),
-            last_practised=_local_day(_last_practised(runs)),
+            last_practised=_last_practised(runs),
             current=row["id"] == chosen,
         ))
     return out
