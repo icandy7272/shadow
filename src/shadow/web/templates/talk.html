@@ -43,7 +43,7 @@
   <li class="talk-take" data-id="{{ take.id }}">
     <div class="talk-take-head">
       <b>{{ take.when }}</b><span class="talk-when">{{ take.date | day }} · {{ take.length }}</span>
-      <button class="talk-drop" title="删掉这一段">删掉</button>
+      <button class="talk-drop" title="删除这一段">删除</button>
     </div>
     <audio controls preload="none" src="{{ take.url }}"></audio>
     {% if take.picks %}<p class="talk-used">用了 {{ take.picks|join(' · ') }}</p>{% endif %}

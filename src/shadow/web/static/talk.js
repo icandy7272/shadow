@@ -59,8 +59,8 @@
     const head = el("div", "talk-take-head");
     head.append(el("b", null, take.when),
                 el("span", "talk-when", `${take.date} · ${take.length}`));
-    const drop = el("button", "talk-drop", "删掉");
-    drop.title = "删掉这一段";
+    const drop = el("button", "talk-drop", "删除");
+    drop.title = "删除这一段";
     head.append(drop);
     const audio = el("audio");
     audio.controls = true;
@@ -78,7 +78,7 @@
     const button = event.target.closest(".talk-drop");
     if (!button) return;
     const item = button.closest(".talk-take");
-    if (!window.confirm("删掉这一段录音？")) return;
+    if (!window.confirm("删除这一段录音？")) return;
     button.disabled = true;
     try {
       const response = await fetch(`/api/talk/${item.dataset.id}`, { method: "DELETE" });
