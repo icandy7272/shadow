@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS plan_checks (
     day        TEXT NOT NULL,
     step       TEXT NOT NULL,
     checked_at TEXT NOT NULL,
+    done       INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (day, step)
 );
 
@@ -134,6 +135,8 @@ MIGRATIONS = (
     ("attempts", "metrics_json", "TEXT"),
     ("practice_runs", "saw_text", "INTEGER"),
     ("practice_runs", "gapfill_unknown", "INTEGER"),
+    # 点掉的那一步也要记下来：老库里有行就等于勾上了，默认 1 正好对上
+    ("plan_checks", "done", "INTEGER NOT NULL DEFAULT 1"),
 )
 
 
@@ -605,16 +608,20 @@ def remove_talk(conn: sqlite3.Connection, talk_id: int) -> str | None:
     return row["audio_path"]
 
 
-def plan_checks(conn: sqlite3.Connection, day: str) -> set[str]:
-    """这一天勾了哪几步。day 是本地日期 YYYY-MM-DD。"""
-    return {row["step"] for row in conn.execute(
-        "SELECT step FROM plan_checks WHERE day = ?", (day,))}
+def plan_checks(conn: sqlite3.Connection, day: str) -> dict[str, bool]:
+    """这一天自己点过的那几步，勾上还是点掉。day 是本地日期 YYYY-MM-DD。
+
+    点掉要和「没点过」分开记：系统自己看得出来做完了的那几步会默认勾上，
+    只有明确点掉的那一次能压住它。
+    """
+    return {row["step"]: bool(row["done"]) for row in conn.execute(
+        "SELECT step, done FROM plan_checks WHERE day = ?", (day,))}
 
 
 def set_plan_check(conn: sqlite3.Connection, day: str, step: str, done: bool) -> None:
-    if done:
-        conn.execute("INSERT OR IGNORE INTO plan_checks (day, step, checked_at)"
-                     " VALUES (?, ?, ?)", (day, step, _now()))
-    else:
-        conn.execute("DELETE FROM plan_checks WHERE day = ? AND step = ?", (day, step))
+    conn.execute(
+        "INSERT INTO plan_checks (day, step, checked_at, done) VALUES (?, ?, ?, ?)"
+        " ON CONFLICT(day, step) DO UPDATE SET done = excluded.done,"
+        " checked_at = excluded.checked_at",
+        (day, step, _now(), int(done)))
     conn.commit()

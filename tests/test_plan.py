@@ -120,9 +120,10 @@ def test_ticks_are_kept_per_day(conn):
     db.set_plan_check(conn, "2026-09-14", "new", True)     # 重复勾选不报错
     db.set_plan_check(conn, "2026-09-15", "review", True)
 
+    # 点掉记成「今天没做」，不是「没勾过」：系统自己看得出来的那几步要靠它压住自动勾
     db.set_plan_check(conn, "2026-09-14", "new", False)
-    db.set_plan_check(conn, "2026-09-14", "chain", False)  # 没勾过的取消也不报错
+    db.set_plan_check(conn, "2026-09-14", "chain", False)  # 没勾过的也能点掉
 
-    assert db.plan_checks(conn, "2026-09-14") == {"review"}
-    assert db.plan_checks(conn, "2026-09-15") == {"review"}
-    assert db.plan_checks(conn, "2026-09-16") == set()
+    assert db.plan_checks(conn, "2026-09-14") == {"review": True, "new": False, "chain": False}
+    assert db.plan_checks(conn, "2026-09-15") == {"review": True}
+    assert db.plan_checks(conn, "2026-09-16") == {}

@@ -59,8 +59,8 @@ def test_the_home_page_shows_todays_plan(client, tmp_path):
 
     assert 'id="plan"' in body
     assert "今天的日课 · 周一 · 30 分钟" in body
-    # 五步里，复习那步系统看得出来做没做完，不给复选框
-    assert body.count('class="plan-check"') == 4
+    # 五步都是复选框：系统看得出来的先替你勾上，也能点掉
+    assert body.count('class="plan-check"') == 5
     assert f'<a class="plan-link" href="/practice/{segment_id}/1"' in body
     assert 'href="/plan"' in body
 
@@ -73,7 +73,7 @@ def test_saturday_shows_the_weekly_review(client, tmp_path, monkeypatch):
     body = _home(client, _seed(tmp_path))
 
     assert "今天的日课 · 周六 · 回顾" in body
-    assert body.count('class="plan-check"') == 3
+    assert body.count('class="plan-check"') == 4
 
 
 def test_a_ticked_step_is_remembered_for_the_day(client, tmp_path):
@@ -84,7 +84,7 @@ def test_a_ticked_step_is_remembered_for_the_day(client, tmp_path):
     assert response.json() == {"step": "chain", "done": True, "all_done": False}
     assert 'data-step="chain" checked' in _home(client, segment_id)
     connection = db.connect()
-    assert db.plan_checks(connection, MONDAY.isoformat()) == {"chain"}
+    assert db.plan_checks(connection, MONDAY.isoformat()) == {"chain": True}
     connection.close()
 
     client.post("/api/plan", json={"step": "chain", "done": False})
@@ -191,14 +191,28 @@ def _practised_text(segment_id, unit, text, *, on, rating=4):
 
 
 def test_a_step_the_app_can_measure_ticks_itself(client, tmp_path):
-    """卡片上已经写着「今天的复习做完了」，勾还得自己再点一次——同一件事确认两遍。"""
+    """卡片上已经写着今天有没有到期的，勾还得自己再点一次——同一件事确认两遍。"""
     segment_id = _seed(tmp_path)                 # 都没练过，没有到期的
 
     body = _home(client, segment_id)
 
-    assert '<span class="plan-tick" data-step="review"' in body
-    assert 'class="plan-check" data-step="review"' not in body
-    assert 'class="plan-check" data-step="chain"' in body      # 测不出来的还是手动勾
+    assert 'class="plan-check" data-step="review" checked' in body
+    assert 'class="plan-check" data-step="chain" id' in body   # 测不出来的还空着，自己勾
+
+
+def test_you_can_untick_what_the_app_ticked_for_you(client, tmp_path):
+    """替你勾上的和自己勾的长得一样，就得一样能点掉——不然同一个方框两种脾气。"""
+    segment_id = _seed(tmp_path)
+    assert 'class="plan-check" data-step="review" checked' in _home(client, segment_id)
+
+    assert client.post("/api/plan", json={"step": "review", "done": False}).status_code == 200
+
+    body = _home(client, segment_id)
+    assert 'class="plan-check" data-step="review" id' in body   # 还在，只是没勾上
+    assert 'class="plan-check" data-step="review" checked' not in body
+
+    client.post("/api/plan", json={"step": "review", "done": True})
+    assert 'class="plan-check" data-step="review" checked' in _home(client, segment_id)
 
 
 def test_the_review_step_stays_open_while_sentences_are_due(client, tmp_path):
@@ -207,8 +221,7 @@ def test_the_review_step_stays_open_while_sentences_are_due(client, tmp_path):
 
     body = _home(client, segment_id)
 
-    assert 'class="plan-check" data-step="review"' in body
-    assert '<span class="plan-tick" data-step="review"' not in body
+    assert 'class="plan-check" data-step="review" id' in body
 
 
 def test_the_new_sentence_step_ticks_itself_once_you_have_done_enough(client, tmp_path):
@@ -221,11 +234,11 @@ def test_the_new_sentence_step_ticks_itself_once_you_have_done_enough(client, tm
     _practised(segment_id, 2, on=MONDAY)
 
     assert plan.NEW_SENTENCES == 3
-    assert '<span class="plan-tick" data-step="new"' not in _home(client, segment_id)
+    assert 'class="plan-check" data-step="new" checked' not in _home(client, segment_id)
 
     _practised_text(second, 1, "Thank you all.", on=MONDAY)
 
-    assert '<span class="plan-tick" data-step="new"' in _home(client, segment_id)
+    assert 'class="plan-check" data-step="new" checked' in _home(client, segment_id)
 
 
 def test_the_day_is_done_when_what_is_left_is_ticked(client, tmp_path):

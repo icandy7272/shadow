@@ -119,7 +119,7 @@ def test_recording_ticks_that_step_off_the_plan(client, tmp_path):
     _record(client, "retell")
 
     body = client.get(f"/sources/{_source_of(segment_id)}").text
-    assert 'class="plan-tick" data-step="retell"' in body
+    assert 'class="plan-check" data-step="retell" checked' in body
 
 
 def test_last_weeks_talk_is_labelled_so_you_can_compare(client, tmp_path):

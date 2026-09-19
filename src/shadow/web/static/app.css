@@ -540,10 +540,6 @@ button.miss-word:hover { color: var(--accent); }
    「做完了」在哪儿都是绿对勾，蓝色留给「可以点的东西」 */
 .plan-check { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--ok);
   cursor: pointer; }
-/* 系统自己看得出来做完了的那几步：打勾，不给复选框——它不是让人点的 */
-.plan-tick { display: grid; place-items: center; width: 18px; height: 18px;
-  margin: 3px 0 0; border-radius: 4px; background: var(--ok); color: #fff;
-  font-size: 12px; line-height: 1; }
 .plan-body { display: grid; gap: 3px; min-width: 0; }
 .plan-body label { cursor: pointer; }
 .plan-body label b { font-weight: 600; margin-right: 8px; }
@@ -564,7 +560,6 @@ button.miss-word:hover { color: var(--accent); }
   .plan-foot { padding: 10px 12px; }
   .plan-step { grid-template-columns: 26px minmax(0, 1fr); }
   .plan-check { width: 22px; height: 22px; margin-top: 1px; }   /* 手指够得着 */
-  .plan-tick { width: 22px; height: 22px; margin-top: 1px; font-size: 14px; }
 }
 
 /* ---------- 完整日课页 ---------- */

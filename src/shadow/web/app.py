@@ -353,8 +353,9 @@ def _plan_finished(connection, today: date, review: filters.Selection,
                    new_today: int) -> dict[str, bool]:
     """练习记录里看得出来的那几步，今天做完了没有。
 
-    卡片本来就写着「今天的复习做完了」，勾还要人自己点一次，等于同一件事确认两遍。
-    说的那一步同理：今天在页面上录过，就是做过了。
+    卡片本来就写着今天有没有到期的，勾还要人自己点一次，等于同一件事确认两遍。
+    说的那一步同理：今天在页面上录过，就是做过了。这里只给默认值——
+    自己点掉的那一步以点掉为准（见 _step_done）。
     """
     reviewed = not review.order          # 到期的都练完了（或今天本来就没有）
     talked = db.talk_kinds_on(connection, today.isoformat())
@@ -362,6 +363,11 @@ def _plan_finished(connection, today: date, review: filters.Selection,
             "new": new_today >= plan.NEW_SENTENCES,
             plan.RETELL: plan.RETELL in talked,
             plan.FREE_TALK: plan.FREE_TALK in talked}
+
+
+def _step_done(key: str, marks: dict[str, bool], finished: dict[str, bool]) -> bool:
+    """自己点过就听自己的，没点过才用练习记录里看出来的那个结论。"""
+    return marks[key] if key in marks else finished.get(key, False)
 
 
 def _plan_progress(connection, today: date) -> tuple[filters.Selection, int]:
@@ -383,11 +389,10 @@ def _plan_view(connection, today: date, review: filters.Selection,
     能从练习记录里看出来的几步自己划掉；剩下的测不出来，还是手动勾。
     """
     weekday = today.weekday()
-    ticked = db.plan_checks(connection, today.isoformat())
+    marks = db.plan_checks(connection, today.isoformat())
     finished = _plan_finished(connection, today, review, new_today)
     steps = [{"key": step.key, "title": step.title, "detail": step.detail,
-              "link": step.link, "auto": finished.get(step.key, False),
-              "done": finished.get(step.key, False) or step.key in ticked}
+              "link": step.link, "done": _step_done(step.key, marks, finished)}
              for step in plan.steps_for(weekday)]
     return {"heading": plan.heading(weekday), "steps": steps,
             "all_done": all(step["done"] for step in steps),
@@ -572,9 +577,9 @@ def save_plan_check(payload: dict = Body(...)):
         raise HTTPException(400, "今天的日课里没有这一步。")
     connection = _db()
     db.set_plan_check(connection, today.isoformat(), step, done)
-    ticked = db.plan_checks(connection, today.isoformat())
+    marks = db.plan_checks(connection, today.isoformat())
     finished = _plan_finished(connection, today, *_plan_progress(connection, today))
-    all_done = all(item.key in ticked or finished.get(item.key, False)
+    all_done = all(_step_done(item.key, marks, finished)
                    for item in plan.steps_for(today.weekday()))
     return {"step": step, "done": done, "all_done": all_done}
 

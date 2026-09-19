@@ -21,19 +21,16 @@
   <ul class="plan-steps">
     {% for step in plan.steps %}
     <li class="plan-step{{ ' done' if step.done }}">
-      {%- if step.auto %}
-      <span class="plan-tick" data-step="{{ step.key }}" title="做完了，自动划掉">✓</span>
-      {%- else %}
+      {#- 五步都是复选框：练习记录里看得出来的先替你勾上，不认就点掉，当天记住 -#}
       <input type="checkbox" class="plan-check" data-step="{{ step.key }}"{% if step.done %} checked{% endif %} id="plan-{{ step.key }}">
-      {%- endif %}
       <div class="plan-body">
-        <label{% if not step.auto %} for="plan-{{ step.key }}"{% endif %}><b>{{ step.title }}</b><span>{{ step.detail }}</span></label>
+        <label for="plan-{{ step.key }}"><b>{{ step.title }}</b><span>{{ step.detail }}</span></label>
         {% if step.link == 'review' %}
           {% if plan.review_count %}
           <a class="plan-link" href="#units" data-filter-link="review">筛出该复习的 {{ plan.review_count }} 句 →</a>
           {% if plan.deferred %}<span class="plan-none">还有 {{ plan.deferred }} 句排在后面几天</span>{% endif %}
           {% elif plan.deferred %}
-          <span class="plan-none">今天的复习做完了 · 还有 {{ plan.deferred }} 句排在后面几天</span>
+          <span class="plan-none">今天没有到期的 · 还有 {{ plan.deferred }} 句排在后面几天</span>
           {% else %}
           <span class="plan-none">没有要复习的</span>
           {% endif %}
