@@ -1,4 +1,4 @@
-// 串起来：今天练过的几句连着放，跟着读，中间不停下来改。
+// 连着放：今天练过的（串起来）或本周练过的（整段跟读），跟着读，中间不停下来改。
 (() => {
   const controls = document.getElementById("chain-controls");
   const list = document.getElementById("chain-list");
@@ -6,6 +6,7 @@
   const button = document.getElementById("chain-play");
   const progress = document.getElementById("chain-progress");
   const rounds = Math.max(1, Number(controls.dataset.rounds) || 1);
+  const step = controls.dataset.step;      // 跟完了在日课里划掉的是哪一步
   const items = [...list.querySelectorAll(".chain-item")];
   const idle = button.textContent;
   // 跟读要跟的是真速度，所以这儿自成一档，默认原速：盲听那边调慢了，串起来不跟着慢。
@@ -27,9 +28,24 @@
     progress.textContent = note;
   };
 
+  // 从头放到尾就是做完了。跟完还要回首页勾一次，是同一件事确认两遍——
+  // 这里替人勾上；中途停下的不算。
+  const tick = async () => {
+    if (!step) return;
+    try {
+      const response = await fetch("/api/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step, done: true }),
+      });
+      if (response.ok) progress.textContent += " · 日课里已勾上";
+    } catch (err) { /* 服务断了就算了，人回首页自己勾 */ }
+  };
+
   const playFrom = (round, index) => {
     if (round > rounds) {
-      stop(`跟完了 ${rounds} 遍`);
+      stop(`跟完了${rounds > 1 ? ` ${rounds} 遍` : ""}`);
+      tick();
       return;
     }
     if (index >= items.length) {

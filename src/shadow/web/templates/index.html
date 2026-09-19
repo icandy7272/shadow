@@ -39,6 +39,14 @@
           {% endif %}
         {% elif step.link == 'chain' %}
           <a class="plan-link" href="/chain">把今天练过的连起来跟 →</a>
+        {% elif step.link == 'whole' %}
+          {% if plan.week_count %}
+          <a class="plan-link" href="/chain?scope=week">把本周练过的 {{ plan.week_count }} 句从头跟到尾 →</a>
+          {% else %}
+          <span class="plan-none">本周还没练过句子</span>
+          {% endif %}
+        {% elif step.link == 'talk' %}
+          <a class="plan-link" href="/talk">{% if step.key == 'free_talk' %}挑表达、说 2 分钟，录完和上周比 →{% else %}录一段复述，录完就能回听 →{% endif %}</a>
         {% elif step.link == 'next' %}
           {% if next_unit %}
           <a class="plan-link" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}">开始下一句（第 {{ next_unit.number }} 句）→</a>

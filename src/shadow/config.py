@@ -104,11 +104,17 @@ def attempt_audio_dir() -> Path:
     return data_dir() / "audio" / "attempts"
 
 
+def talk_audio_dir() -> Path:
+    """自己开口说的那几段（复述、自由说）。不挂在素材下面：换素材也要留着对比。"""
+    return data_dir() / "audio" / "talks"
+
+
 def ensure_dirs() -> None:
     for directory in (
         data_dir(),
         source_audio_dir(),
         segment_audio_dir(),
         attempt_audio_dir(),
+        talk_audio_dir(),
     ):
         directory.mkdir(parents=True, exist_ok=True)

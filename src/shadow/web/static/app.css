@@ -81,12 +81,13 @@ tr.fresh .masked { color: var(--muted); font-style: italic; }
   color: var(--fg); text-align: center; }
 /* 「正在进行，点这里停」全站只有一种样子：红底白字。原来主按钮是红底、普通按钮是红框红字、
    只听原声 / 只听我的连字都不变、试音干脆不变色——同一个意思四种长相，找「停」得先认一遍 */
-button.stop, #stop-take { background: var(--warn); border-color: var(--warn); color: #fff; }
+button.stop, #stop-take, #talk-stop { background: var(--warn); border-color: var(--warn);
+  color: #fff; }
 button:disabled { opacity: .5; cursor: default; }
 
 .status { color: var(--muted); font-size: 14px; min-height: 1.4em; margin: 8px 0; }
 .status.live { color: var(--warn); font-weight: 500; }
-#stop-take { font-size: 16px; padding: 10px 22px; }
+#stop-take, #talk-stop { font-size: 16px; padding: 10px 22px; }
 .bar { height: 6px; border-radius: 3px; background: var(--line);
   overflow: hidden; margin: 2px 0 10px; }
 .bar i { display: block; height: 100%; width: 0; border-radius: 3px;
@@ -457,6 +458,41 @@ button.miss-word:hover { color: var(--accent); }
 .chain-go { margin-left: auto; color: var(--muted); font-size: 13px; text-decoration: none;
   white-space: nowrap; }
 .chain-go:hover { color: var(--accent); }
+/* 两种口径互相有个门：今天练过的 ↔ 本周练过的 */
+.page-foot { margin: 22px 0 0; font-size: 13px; }
+.page-foot a { color: var(--muted); text-decoration: none; }
+.page-foot a:hover { color: var(--accent); }
+
+/* ---------- 自己开口说 ----------
+   挑几个表达 → 说一段 → 回听、和上周比。不放原声、不比对，页面上就这三件事 */
+.talk { margin-bottom: 10px; }
+.talk-picks { margin-bottom: 18px; }
+.talk-picks-head { margin: 0 0 8px; font-weight: 600; }
+.talk-count { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
+.talk-pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.talk-pick-list label { display: flex; align-items: baseline; gap: 8px; cursor: pointer;
+  padding: 8px 12px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 8px; }
+.talk-pick-list label:has(.talk-pick:checked) { border-color: var(--accent); }
+.talk-pick { flex: none; width: 18px; height: 18px; accent-color: var(--accent); }
+/* 出自哪一句：挑的时候得想得起来这个词当时是怎么用的 */
+.talk-from { color: var(--muted); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+/* 没在录、也没什么要说的，那一行就别占着地方 */
+.talk .status:empty { display: none; }
+.talk-head { margin-top: 20px; }
+.talk-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 12px; }
+.talk-take { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 16px; }
+.talk-take-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; }
+.talk-when { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.talk-drop { margin-left: auto; padding: 3px 12px; font-size: 13px; }
+.talk-take audio { width: 100%; margin-top: 8px; }
+.talk-used { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+@media (max-width: 640px) {
+  .talk-pick-list label { padding: 10px 12px; }
+  .talk-pick { width: 22px; height: 22px; }     /* 手指够得着 */
+  .talk-drop { padding: 6px 12px; }
+}
 
 /* ---------- 生词本 ---------- */
 .count { color: var(--muted); font-size: 14px; font-weight: 400; margin-left: 10px; }

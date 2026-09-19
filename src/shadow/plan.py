@@ -11,7 +11,10 @@ from datetime import date, timedelta
 REVIEW = "review"      # 链接：筛出该复习的句子
 NEXT = "next"          # 链接：开始下一句没练过的
 CHAIN = "chain"        # 链接：把今天练过的几句连起来跟
+WHOLE = "whole"        # 链接：把本周练过的连起来，从头跟到尾
+TALK = "talk"          # 链接：自己开口说，在页面上录下来
 CHAIN_ROUNDS = 2       # 串起来跟几遍
+WHOLE_ROUNDS = 1       # 整段跟读跟几遍：从头到尾一遍，不中断
 LOW_RATING = 2         # 盲听自评不超过这个分，算没听懂
 GOOD_RATING = 4        # 到这个分，算听懂了
 SATURDAY, SUNDAY = 5, 6
@@ -32,14 +35,15 @@ _WEEKDAY = (
     Step("review", "复习到期的", "从上往下 3–5 句：先盲听一遍；跟不上的，完整跟读一遍", REVIEW),
     Step("new", "精练新句子", "3–5 句：盲听 → 默写 → 看字跟读 → 不看字跟读", NEXT),
     Step("chain", "串起来", "今天练过的几句连着跟 2 遍，中间不停下来改", CHAIN),
-    Step("retell", "复述", "合上材料，用自己的话讲一遍，录下来回听"),
+    Step("retell", "复述", "合上材料，用自己的话讲一遍，录下来回听", TALK),
     _EXTENSIVE,
 )
 
 _SATURDAY = (
     Step("redo", "重练", "到期的都过一遍：没听懂、问题没解决的排在最前面", REVIEW),
-    Step("whole", "整段跟读", "本周练过的句子从头跟到尾，不中断"),
-    Step("free_talk", "自由说", "挑本周学到的 3–5 个表达，就一个话题连着说 2 分钟，录音和上周对比"),
+    Step("whole", "整段跟读", "本周练过的句子从头跟到尾，不中断", WHOLE),
+    Step("free_talk", "自由说", "挑本周学到的 3–5 个表达，就一个话题连着说 2 分钟，录音和上周对比",
+         TALK),
     _EXTENSIVE,
 )
 
@@ -70,6 +74,44 @@ def heading(weekday: int) -> str:
 def is_step(weekday: int, key: str) -> bool:
     """这一步今天有没有。周六的「自由说」不能在周一勾。"""
     return any(step.key == key for step in steps_for(weekday))
+
+
+def week_start(day: date) -> date:
+    """这一天所在那一周的周一。周六回顾要的「本周练过的」就是从这天算起。"""
+    return day - timedelta(days=day.weekday())
+
+
+# --- 自己开口说 -------------------------------------------------------------
+#
+# 跟读练的是「听清」和「说得像」，练不出「自己组织语言说出来」。所以每天留一段复述，
+# 周六留一段自由说。两件事是同一台机器：挑好要用的话、连着说一段、录下来回头比。
+# 步骤名就是录音的种类名，日课里那一步靠「今天录没录过」自己划掉。
+
+FREE_TALK, RETELL = "free_talk", "retell"
+
+
+@dataclass(frozen=True, slots=True)
+class Talk:
+    kind: str
+    title: str
+    seconds: int      # 说多久。到点自动停，早说完可以自己点
+    span: str         # 页面上怎么写这个时长：「2 分钟」比「120 秒」好读
+    lede: str
+
+
+TALKS = {
+    FREE_TALK: Talk(FREE_TALK, "自由说", 120, "2 分钟",
+                    "挑本周学到的 3–5 个表达，就一个话题连着说 2 分钟。"
+                    "说不顺也别停下来重来——录完和上周那段比，听的是能不能一直说下去。"),
+    RETELL: Talk(RETELL, "复述", 90, "1 分半",
+                 "合上材料，用自己的话把今天这段讲一遍。录完回听一遍，"
+                 "把「想说却说不出」的地方记下来，明天去原句里找人家怎么说的。"),
+}
+
+
+def talk_for(weekday: int) -> Talk:
+    """今天该说的是哪一种：周六自由说，别的日子复述。"""
+    return TALKS[FREE_TALK if weekday == SATURDAY else RETELL]
 
 
 # --- 复习排期 ---------------------------------------------------------------

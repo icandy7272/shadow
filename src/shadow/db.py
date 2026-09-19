@@ -100,6 +100,18 @@ CREATE TABLE IF NOT EXISTS vocab_sources (
     PRIMARY KEY (word, sentence)
 );
 
+-- 自己开口说的录音：每天的复述、周六的自由说。不挂在素材上——
+-- 说的是自己的话，不是哪一句；换素材、删素材都还要留着和上周比
+CREATE TABLE IF NOT EXISTS talks (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    day        TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    audio_path TEXT NOT NULL,
+    seconds    REAL NOT NULL,
+    picks_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 -- 日课勾选：哪天、哪一步。按本地日期存，第二天自然是空的
 CREATE TABLE IF NOT EXISTS plan_checks (
     day        TEXT NOT NULL,
@@ -555,6 +567,42 @@ def remove_vocab(conn: sqlite3.Connection, word: str) -> bool:
 
 
 # --- 日课 -------------------------------------------------------------------
+
+
+def add_talk(conn: sqlite3.Connection, *, day: str, kind: str, audio_path: str,
+             seconds: float, picks: Sequence[str] = ()) -> int:
+    """记下一段自己说的。picks 是开口前挑的那几个表达，回头才知道这段在练什么。"""
+    cursor = conn.execute(
+        "INSERT INTO talks (day, kind, audio_path, seconds, picks_json, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (day, kind, audio_path, seconds, json.dumps(list(picks), ensure_ascii=False), _now()))
+    conn.commit()
+    return int(cursor.lastrowid)
+
+
+def list_talks(conn: sqlite3.Connection, *, kind: str,
+               limit: int = 20) -> list[dict[str, Any]]:
+    """同一种里最近的几段，新的在前。复述和自由说各比各的，不混在一起。"""
+    rows = conn.execute(
+        "SELECT * FROM talks WHERE kind = ? ORDER BY day DESC, id DESC LIMIT ?",
+        (kind, limit))
+    return [{**dict(row), "picks": json.loads(row["picks_json"])} for row in rows]
+
+
+def talk_kinds_on(conn: sqlite3.Connection, day: str) -> set[str]:
+    """这一天录过哪几种。日课里「说」的那一步靠它自己划掉，不用再勾一次。"""
+    return {row["kind"] for row in conn.execute(
+        "SELECT DISTINCT kind FROM talks WHERE day = ?", (day,))}
+
+
+def remove_talk(conn: sqlite3.Connection, talk_id: int) -> str | None:
+    """删掉一段，返回它的音频路径好让调用方删文件。没有这一段就返回 None。"""
+    row = conn.execute("SELECT audio_path FROM talks WHERE id = ?", (talk_id,)).fetchone()
+    if row is None:
+        return None
+    conn.execute("DELETE FROM talks WHERE id = ?", (talk_id,))
+    conn.commit()
+    return row["audio_path"]
 
 
 def plan_checks(conn: sqlite3.Connection, day: str) -> set[str]:

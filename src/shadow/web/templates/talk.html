@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ spec.title }} · Shadow{% endblock %}
+{% block content %}
+<div class="head"><h1>{{ spec.title }}</h1></div>
+<p class="hint">{{ spec.lede }}</p>
+
+<div class="talk" id="talk" data-kind="{{ spec.kind }}" data-seconds="{{ spec.seconds }}">
+  {% if spec.kind == 'free_talk' %}
+  <section class="talk-picks">
+    <p class="talk-picks-head">本周学到的表达 <span class="talk-count" id="talk-count">挑 3–5 个</span></p>
+    {% if picks %}
+    <ul class="talk-pick-list">
+      {% for pick in picks %}
+      <li><label><input type="checkbox" class="talk-pick" value="{{ pick.text }}">
+        <b>{{ pick.text }}</b>{% if pick.from %}<span class="talk-from">{{ pick.from }}</span>{% endif %}
+      </label></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="plan-none">本周还没练过句子，也没记下生词——挑不出表达就先随便说一个话题，
+      说满 2 分钟也算数。</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <p class="hint insecure" id="no-mic" hidden>这台设备上录不了音——浏览器只在
+    HTTPS 或 localhost 下才给麦克风权限。换电脑，或者照 README 挂上自己的域名。</p>
+  <div class="row">
+    <button class="primary" id="talk-start">▶ 开始说（{{ spec.span }}）</button>
+    <button id="talk-stop" hidden>说完了</button>
+    <span class="plays" id="talk-clock"></span>
+  </div>
+  <div class="bar" id="talk-bar" hidden><i></i></div>
+  <p class="status" id="talk-status"></p>
+</div>
+
+<h2 class="talk-head">录过的</h2>
+<p class="hint">{% if spec.kind == 'free_talk' %}和上周那段比：卡住的次数少了没有，同样 {{ spec.span }}能说的东西多了没有。
+  {% else %}回听一遍就够了，别对着原文逐句改——这一步练的是自己组织语言。{% endif %}</p>
+<p class="empty" id="talk-empty"{% if takes %} hidden{% endif %}>还没录过。说完一段，这里就能回听。</p>
+<ol class="talk-list" id="talk-list">
+  {% for take in takes %}
+  <li class="talk-take" data-id="{{ take.id }}">
+    <div class="talk-take-head">
+      <b>{{ take.when }}</b><span class="talk-when">{{ take.date }} · {{ take.length }}</span>
+      <button class="talk-drop" title="删掉这一段">删掉</button>
+    </div>
+    <audio controls preload="none" src="{{ take.url }}"></audio>
+    {% if take.picks %}<p class="talk-used">用了 {{ take.picks|join(' · ') }}</p>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+
+<p class="page-foot"><a href="/talk?kind={{ other.kind }}">换成{{ other.title }}（{{ other.span }}）→</a></p>
+{% endblock %}

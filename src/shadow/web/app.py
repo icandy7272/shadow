@@ -82,7 +82,7 @@ app = FastAPI(title="Shadow", lifespan=_lifespan)
 app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
 # 这些路径由页面里的 JS 或 <audio> 取用，出错时得回 JSON，前端要读 detail
-_MACHINE_PATHS = ("/api/", "/audio/", "/take/", "/static/")
+_MACHINE_PATHS = ("/api/", "/audio/", "/take/", "/talk/audio/", "/static/")
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -348,14 +348,19 @@ def _local_day(stamp: str | None) -> date | None:
         return None
 
 
-def _plan_finished(review: filters.Selection, new_today: int) -> dict[str, bool]:
+def _plan_finished(connection, today: date, review: filters.Selection,
+                   new_today: int) -> dict[str, bool]:
     """练习记录里看得出来的那几步，今天做完了没有。
 
     卡片本来就写着「今天的复习做完了」，勾还要人自己点一次，等于同一件事确认两遍。
+    说的那一步同理：今天在页面上录过，就是做过了。
     """
     reviewed = not review.order          # 到期的都练完了（或今天本来就没有）
+    talked = db.talk_kinds_on(connection, today.isoformat())
     return {"review": reviewed, "redo": reviewed,
-            "new": new_today >= plan.NEW_SENTENCES}
+            "new": new_today >= plan.NEW_SENTENCES,
+            plan.RETELL: plan.RETELL in talked,
+            plan.FREE_TALK: plan.FREE_TALK in talked}
 
 
 def _plan_progress(connection, today: date) -> tuple[filters.Selection, int]:
@@ -371,40 +376,183 @@ def _plan_progress(connection, today: date) -> tuple[filters.Selection, int]:
 
 
 def _plan_view(connection, today: date, review: filters.Selection,
-               new_today: int) -> dict:
+               new_today: int, week_count: int) -> dict:
     """首页日课卡片要的东西：今天是星期几、哪几步、做完了哪些、该复习几句、顺延几句。
 
-    能从练习记录里看出来的两步自己划掉；剩下三步测不出来，还是手动勾。
+    能从练习记录里看出来的几步自己划掉；剩下的测不出来，还是手动勾。
     """
     weekday = today.weekday()
     ticked = db.plan_checks(connection, today.isoformat())
-    finished = _plan_finished(review, new_today)
+    finished = _plan_finished(connection, today, review, new_today)
     steps = [{"key": step.key, "title": step.title, "detail": step.detail,
               "link": step.link, "auto": finished.get(step.key, False),
               "done": finished.get(step.key, False) or step.key in ticked}
              for step in plan.steps_for(weekday)]
     return {"heading": plan.heading(weekday), "steps": steps,
             "all_done": all(step["done"] for step in steps),
-            "review_count": len(review.order), "deferred": len(review.deferred)}
+            "review_count": len(review.order), "deferred": len(review.deferred),
+            "week_count": week_count}
+
+
+def _practised_since(connection, since: date) -> list[dict]:
+    """当前素材上从某天起练过的句子，按原文顺序。连起来跟和自由说都要它。"""
+    source_id = library.current(connection)
+    if source_id is None:
+        return []
+    states = _practice_states(connection, source_id)
+    return [item for item in _sentences(connection, source_id)
+            if (states.get(item["text"], filters.NEVER).last_day or date.min) >= since]
+
+
+CHAIN_GAP_SEC = 0.6     # 两句之间留一口气，和 chain.js 里的一致；估时长要算上
+
+
+def _chain_view(scope: str, today: date) -> dict:
+    """连着跟的两种口径：今天练过的（串起来）、本周练过的（整段跟读）。
+
+    同一件事、同一个页面，差别只在筛哪一段时间、跟几遍。
+    """
+    if scope == "week":
+        return {"scope": "week", "step": "whole", "title": "整段跟读",
+                "since": plan.week_start(today), "rounds": plan.WHOLE_ROUNDS,
+                "lede": "本周练过的句子从头跟到尾，中间不停下来改。单句练的是「像」，"
+                        "整段练的是「不断」。",
+                "other": {"href": "/chain", "label": "只连今天练过的 · 串起来 →"}}
+    return {"scope": "today", "step": "chain", "title": "串起来",
+            "since": today, "rounds": plan.CHAIN_ROUNDS,
+            "lede": "今天练过的几句连着跟，中间不停下来改——这一步练的是把单句接成一段话的"
+                    "节奏，错一两个词没关系。",
+            "other": {"href": "/chain?scope=week", "label": "本周练过的都连上 · 整段跟读 →"}}
 
 
 @app.get("/chain", response_class=HTMLResponse)
-def chain_page(request: Request):
-    """今天练过的几句连着跟——日课里的「串起来」。
+def chain_page(request: Request, scope: str = Query("today")):
+    """练过的句子连着放——日课里的「串起来」和周六的「整段跟读」。
 
     单句练得再准，接成一段话时节奏还是断的：这一步只放音，不比对，中间不停。
     """
     connection = _db()
-    source_id = library.current(connection)
     today = _today()
-    sentences = []
-    if source_id is not None:
-        states = _practice_states(connection, source_id)
-        sentences = [item for item in _sentences(connection, source_id)
-                     if states.get(item["text"], filters.NEVER).last_day == today]
+    view = _chain_view("week" if scope == "week" else "today", today)
+    sentences = _practised_since(connection, view["since"])
+    seconds = sum(item["seconds"] + CHAIN_GAP_SEC for item in sentences) * view["rounds"]
     return templates.TemplateResponse(
         request, "chain.html",
-        {"sentences": sentences, "rounds": plan.CHAIN_ROUNDS})
+        {**view, "sentences": sentences, "minutes": max(1, round(seconds / 60)),
+         # 跟完了自己在日课里划掉；不是今天的步骤就别勾（周六没有「串起来」这一步）
+         "tick": view["step"] if plan.is_step(today.weekday(), view["step"]) else ""})
+
+
+# --- 自己开口说：每天的复述、周六的自由说 -----------------------------------
+
+TALK_PICKS = 12         # 页面上最多列这么多个表达，挑 3–5 个就够说 2 分钟
+TALK_HISTORY = 8        # 录过的列这么几段。要的是和上周比，不是翻一年的档案
+MAX_PICK_CHARS = 200
+
+
+def _week_picks(connection, today: date) -> list[dict]:
+    """「本周学到的表达」：这周记进生词本的词，带它出自哪句。
+
+    默写里写不出的词就是这周真正欠的表达，挑出来用一次，比另找话题有用。
+    这周一个词都没记下（没做默写）时退回本周练过的句子，总得有东西可挑。
+    """
+    start = plan.week_start(today)
+    seen, words = set(), []
+    for item in db.list_vocab(connection):          # 最近记下的在前
+        for source in item["sources"]:
+            day = _local_day(source["added_at"])
+            if day is None or day < start or item["word"] in seen:
+                continue
+            seen.add(item["word"])
+            words.append({"text": item["word"], "from": source["sentence"]})
+    if words:
+        return words[:TALK_PICKS]
+    recent = _practised_since(connection, start)[-TALK_PICKS:]
+    return [{"text": item["text"], "from": ""} for item in reversed(recent)]
+
+
+def _mmss(seconds: float) -> str:
+    whole = int(round(seconds))
+    return f"{whole // 60}:{whole % 60:02d}"
+
+
+def _when(day: date, today: date) -> str:
+    """这段是什么时候录的。要比的是「这周」和「上周」，所以按周说，不按天数说。"""
+    if day == today:
+        return "今天"
+    weeks = max(0, (plan.week_start(today) - plan.week_start(day)).days // 7)
+    return ("本周", "上周")[weeks] if weeks < 2 else f"{weeks} 周前"
+
+
+def _talk_item(row: dict, today: date) -> dict:
+    day = date.fromisoformat(row["day"])
+    return {"id": row["id"], "when": _when(day, today), "date": day.strftime("%m-%d"),
+            "length": _mmss(row["seconds"]), "picks": row["picks"],
+            "url": f"/talk/audio/{Path(row['audio_path']).name}"}
+
+
+@app.get("/talk", response_class=HTMLResponse)
+def talk_page(request: Request, kind: str | None = Query(None)):
+    """合上材料自己说一段，录下来。日课里的「复述」和周六的「自由说」。
+
+    跟读练不出「自己组织语言说出来」，这一步才练。原来只写着「手机录音」——
+    录在哪、上周那段在哪，都得自己想办法，于是最容易被跳过。
+    """
+    today = _today()
+    spec = plan.TALKS.get(kind) or plan.talk_for(today.weekday())
+    connection = _db()
+    takes = [_talk_item(row, today)
+             for row in db.list_talks(connection, kind=spec.kind, limit=TALK_HISTORY)]
+    return templates.TemplateResponse(
+        request, "talk.html",
+        {"spec": spec, "takes": takes,
+         "picks": _week_picks(connection, today) if spec.kind == plan.FREE_TALK else [],
+         "other": plan.TALKS[plan.RETELL if spec.kind == plan.FREE_TALK else plan.FREE_TALK]})
+
+
+@app.post("/api/talk", status_code=201)
+async def save_talk(kind: Annotated[str, Form()],
+                    file: Annotated[UploadFile, File()],
+                    picks: Annotated[list[str] | None, Form()] = None):
+    """收下一段录音。不转写、不比对——这一步的反馈是自己回听，和上周那段比。"""
+    if kind not in plan.TALKS:
+        raise HTTPException(400, "没有这一种。")
+    today = _today()
+    stamp = datetime.now().strftime("%H%M%S")
+    dest = config.talk_audio_dir() / f"{kind}-{today.isoformat()}-{stamp}.wav"
+    try:
+        media.convert_upload(await file.read(), dest)
+        media.validate_attempt(dest)      # 太短、接近静音就地拦下，别攒一堆废录音
+        seconds = media.probe_duration(dest)
+    except Exception as exc:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(400, str(exc))
+    chosen = [pick.strip()[:MAX_PICK_CHARS]
+              for pick in (picks or []) if pick.strip()][:TALK_PICKS]
+    talk_id = db.add_talk(_db(), day=today.isoformat(), kind=kind, audio_path=str(dest),
+                          seconds=seconds, picks=chosen)
+    return {"talk": _talk_item({"id": talk_id, "day": today.isoformat(), "seconds": seconds,
+                                "picks": chosen, "audio_path": str(dest)}, today)}
+
+
+@app.delete("/api/talk/{talk_id}")
+def remove_talk_api(talk_id: int):
+    """删掉一段。16k 的 wav 一分钟两兆，攒一年是要占地方的。"""
+    path = db.remove_talk(_db(), talk_id)
+    if path is None:
+        raise HTTPException(404, "这一段已经不在了。")
+    Path(path).unlink(missing_ok=True)
+    return {"removed": True}
+
+
+@app.get("/talk/audio/{name}")
+def talk_audio(name: str):
+    """回放自己说的那一段。只认录音目录里的文件名，不接受路径。"""
+    folder = config.talk_audio_dir().resolve()
+    path = (folder / name).resolve()
+    if path.parent != folder or not path.exists():
+        raise HTTPException(404, "录音不存在")
+    return FileResponse(path, media_type="audio/wav")
 
 
 @app.get("/plan", response_class=HTMLResponse)
@@ -424,7 +572,7 @@ def save_plan_check(payload: dict = Body(...)):
     connection = _db()
     db.set_plan_check(connection, today.isoformat(), step, done)
     ticked = db.plan_checks(connection, today.isoformat())
-    finished = _plan_finished(*_plan_progress(connection, today))
+    finished = _plan_finished(connection, today, *_plan_progress(connection, today))
     all_done = all(item.key in ticked or finished.get(item.key, False)
                    for item in plan.steps_for(today.weekday()))
     return {"step": step, "done": done, "all_done": all_done}
@@ -444,6 +592,9 @@ def source_page(request: Request, source_id: int):
     # 该复习的那几句排过急迫程度，名次带给前端：点「该复习」时列表按它重排
     review = filters.select(filters.REVIEW, here, today)
     new_today = sum(1 for state in here if state.first_day == today)
+    # 周六的「整段跟读」要连的就是这些：本周练过的
+    since = plan.week_start(today)
+    week_count = sum(1 for state in here if state.last_day and state.last_day >= since)
     ranks = {index: rank for rank, index in enumerate(review.order, 1)}
     for index, item in enumerate(catalogue):
         state = here[index]
@@ -459,7 +610,7 @@ def source_page(request: Request, source_id: int):
         {"catalogue": catalogue, "source": source, "next_unit": next_unit,
          "practised": sum(1 for item in catalogue if item["runs"]),
          "days": progress.calendar(connection),
-         "plan": _plan_view(connection, today, review, new_today)},
+         "plan": _plan_view(connection, today, review, new_today, week_count)},
     )
 
 
