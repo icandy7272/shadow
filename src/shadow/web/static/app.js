@@ -309,7 +309,7 @@ if (root) {
   const refreshCount = () => {
     const written = typed.value.split(/\s+/)
       .filter((token) => PLACEHOLDER.test(token) || HAS_WORD.test(token)).length;
-    counter.textContent = `已写 ${written} / ${wordTotal} 个词`;
+    counter.textContent = `已写 ${written}/${wordTotal} 个词`;
     counter.classList.toggle("over", written > wordTotal);
   };
   typed.addEventListener("input", refreshCount);

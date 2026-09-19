@@ -46,7 +46,7 @@ def test_the_library_shows_every_state(client, tmp_path):
 
     body = client.get("/sources").text
 
-    assert "练过 0 / 2 句" in body
+    assert "练过 0/2 句" in body
     assert "正在导入" in body and "下载" in body
     assert "ERROR: Video unavailable" in body
     assert 'data-action="retry"' in body

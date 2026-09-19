@@ -801,8 +801,8 @@ def test_a_sentence_the_audio_does_not_contain_is_not_offered(client, tmp_path):
     index = client.get("/").text
     assert "音频里没有这句" not in index
     assert f'href="/practice/{segment_id}/2"' not in index
-    assert "练过 0 / 2 句" in index
-    assert "练过 0 / 2 句" in client.get("/sources").text
+    assert "练过 0/2 句" in index
+    assert "练过 0/2 句" in client.get("/sources").text
 
 
 def test_a_failed_submit_can_be_sent_again(client, tmp_path):

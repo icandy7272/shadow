@@ -26,7 +26,7 @@ def test_the_dictation_step_is_one_box_with_a_word_count(client, tmp_path):
     body = client.get(f"/practice/{segment_id}/1").text
 
     assert 'id="dictation-text"' in body
-    assert "已写 0 / 3 个词" in body
+    assert "已写 0/3 个词" in body
     assert 'id="dictation-unknown"' in body
     assert 'class="box"' not in body
     # 对答案之前，默写这一步里不能有原文

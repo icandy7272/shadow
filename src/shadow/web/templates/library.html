@@ -18,7 +18,7 @@
     <div class="card-main">
       <p class="card-title">{{ card.title }}</p>
       {% if card.status == 'ready' %}
-        <p class="card-meta">{{ '%.0f'|format(card.minutes) }} 分钟 · 练过 {{ card.practised }} / {{ card.sentences }} 句{% if card.last_practised %} · 上次 {{ card.last_practised | day }}{% endif %}</p>
+        <p class="card-meta">{{ '%.0f'|format(card.minutes) }} 分钟 · 练过 {{ card.practised }}/{{ card.sentences }} 句{% if card.last_practised %} · 上次 {{ card.last_practised | day }}{% endif %}</p>
       {% elif card.status == 'failed' %}
         <p class="card-meta card-error">{{ card.error }}</p>
       {% else %}
