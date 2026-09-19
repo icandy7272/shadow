@@ -113,7 +113,7 @@ uv run shadow dict lookup <word>        # 查词
 ~/.shadow/
 ├── shadow.db       # 素材、句子、练习记录、生词本
 ├── dict.sqlite     # 离线词典（shadow dict install 装的）
-└── audio/          # 原声、切好的句子、每遍录音
+└── audio/          # 原声、切好的句子、每遍录音、自己说的那几段
 ```
 
 ## 开发

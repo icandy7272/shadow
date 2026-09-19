@@ -11,7 +11,7 @@
 {%- set path = request.url.path -%}
 {%- set here = 'vocab' if path == '/vocab'
           else 'library' if path == '/sources'
-          else 'plan' if path.startswith('/sources/') or path in ('/plan', '/chain')
+          else 'plan' if path.startswith('/sources/') or path in ('/plan', '/chain', '/talk')
           else '' -%}
 <header><a href="/" class="home">Shadow</a>
   {%- for key, href, label in [('plan', '/#plan', '日课'), ('library', '/sources', '素材库'), ('vocab', '/vocab', '生词本')] -%}
@@ -28,5 +28,6 @@
 <script src="/static/library.js?v={{ assets() }}"></script>
 <script src="/static/vocab.js?v={{ assets() }}"></script>
 <script src="/static/chain.js?v={{ assets() }}"></script>
+<script src="/static/talk.js?v={{ assets() }}"></script>
 </body>
 </html>
