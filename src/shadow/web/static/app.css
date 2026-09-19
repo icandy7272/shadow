@@ -536,7 +536,9 @@ button.miss-word:hover { color: var(--accent); }
 .plan-steps { list-style: none; margin: 0; padding: 0 16px; }
 .plan-step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px;
   padding: 10px 0; border-top: 1px solid var(--line); }
-.plan-check { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--accent);
+/* 勾上就是绿的，和系统自动划掉的那几步、和步骤序号上的对勾一个颜色：
+   「做完了」在哪儿都是绿对勾，蓝色留给「可以点的东西」 */
+.plan-check { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--ok);
   cursor: pointer; }
 /* 系统自己看得出来做完了的那几步：打勾，不给复选框——它不是让人点的 */
 .plan-tick { display: grid; place-items: center; width: 18px; height: 18px;
