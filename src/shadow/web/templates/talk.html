@@ -23,6 +23,19 @@
   </section>
   {% endif %}
 
+  {% if spec.kind == 'retell' %}
+  <section class="talk-picks">
+    {% if passage %}
+    <p class="talk-picks-head">{% if passage.today %}今天新练的{% else %}上次新练的（{{ passage.day | day }}）{% endif %} {{ passage.count }} 句
+      <span class="talk-count">第 {{ passage.first }}{% if passage.last != passage.first %}–{{ passage.last }}{% endif %} 句 · 关键词按原文顺序</span></p>
+    <p class="talk-cues">{% for cue in passage.cues %}<span class="talk-cue">{{ cue }}</span>{% endfor %}</p>
+    <p class="hint">只是提醒讲到哪儿了。讲意思，不用一字不差；想不起原话就换简单的说法，别停下来查。</p>
+    {% else %}
+    <p class="empty">还没新练过句子。先去<a href="/">练几句新的</a>，再回来用自己的话讲一遍。</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
   <p class="hint insecure" id="no-mic" hidden>这台设备上录不了音——浏览器只在
     HTTPS 或 localhost 下才给麦克风权限。换电脑，或者照 README 挂上自己的域名。</p>
   <div class="row">

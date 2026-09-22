@@ -32,6 +32,7 @@ from .. import (config, dates, db, dictionary, filters, history, library, media,
 from ..report.takes import recurrence_threshold
 from ..analysis.diff import accuracy as _accuracy
 from ..drill import dictation
+from ..drill.cues import cues
 from ..drill.units import split_into_units
 from .. import review as review_mod
 from ..ingest.downloader import DownloadError
@@ -477,6 +478,30 @@ def _week_picks(connection, today: date) -> list[dict]:
     return [{"text": item["text"], "from": ""} for item in reversed(recent)]
 
 
+def _retell_passage(connection, today: date) -> dict | None:
+    """复述讲哪几句：今天新练的；今天只做了复习，就讲上次新练的那几句。
+
+    新句子是顺着原文往下练的，连得成一段；复习的散在全文各处，拼不成一件事，
+    讲起来就只剩背句子。页面上只给关键词，不给原句。
+    """
+    source_id = library.current(connection)
+    if source_id is None:
+        return None
+    states = _practice_states(connection, source_id)
+    by_day: dict[date, list[dict]] = {}
+    for item in _sentences(connection, source_id):
+        first = states.get(item["text"], filters.NEVER).first_day
+        if first is not None and first <= today:
+            by_day.setdefault(first, []).append(item)
+    if not by_day:
+        return None
+    day = max(by_day)
+    items = sorted(by_day[day], key=lambda item: item["number"])
+    return {"day": day, "today": day == today, "count": len(items),
+            "first": items[0]["number"], "last": items[-1]["number"],
+            "cues": cues([item["text"] for item in items])}
+
+
 def _mmss(seconds: float) -> str:
     whole = int(round(seconds))
     return f"{whole // 60}:{whole % 60:02d}"
@@ -513,6 +538,7 @@ def talk_page(request: Request, kind: str | None = Query(None)):
         request, "talk.html",
         {"spec": spec, "takes": takes,
          "picks": _week_picks(connection, today) if spec.kind == plan.FREE_TALK else [],
+         "passage": _retell_passage(connection, today) if spec.kind == plan.RETELL else None,
          "other": plan.TALKS[plan.RETELL if spec.kind == plan.FREE_TALK else plan.FREE_TALK]})
 
 

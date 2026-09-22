@@ -80,6 +80,51 @@ def test_retelling_does_not_hand_you_the_material(client, tmp_path):
     assert "Hello there." not in body
 
 
+def test_retelling_covers_todays_new_sentences_with_cues_not_the_text(client, tmp_path):
+    """复述只讲今天新练的那几句：新句子是顺着往下练的，连得成一段；复习的散在全文各处。
+    页面给几个关键词提醒讲到哪儿了，不给原句——给了就成了照着念。"""
+    segment_id = _seed(tmp_path)
+    _practised(segment_id, 1, on=MONDAY - timedelta(days=3))    # 以前练过，今天只是复习
+    _practised(segment_id, 1, on=MONDAY)
+    _practised(segment_id, 2, on=MONDAY)                        # 今天新练的
+
+    body = client.get("/talk?kind=retell").text
+
+    assert "今天新练的 1 句" in body
+    assert "第 2 句" in body
+    assert '<span class="talk-cue">start</span>' in body
+    assert "It was a start." not in body
+    assert ">hello<" not in body                                 # 复习的那句不算
+
+
+def test_a_day_without_new_sentences_retells_the_last_new_ones(client, tmp_path):
+    """今天只做了复习，也得有东西可讲：讲上次新练的那几句。"""
+    segment_id = _seed(tmp_path)
+    _practised(segment_id, 2, on=MONDAY - timedelta(days=2))
+
+    body = client.get("/talk?kind=retell").text
+
+    assert "上次新练的" in body
+    assert "09-12" in body
+    assert '<span class="talk-cue">start</span>' in body
+
+
+def test_retelling_before_any_practice_says_where_to_start(client, tmp_path):
+    _seed(tmp_path)
+
+    body = client.get("/talk?kind=retell").text
+
+    assert "还没新练过句子" in body
+    assert 'class="talk-cue"' not in body
+
+
+def test_free_talk_has_no_retell_cues(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    _practised(segment_id, 2, on=MONDAY)
+
+    assert 'class="talk-cue"' not in client.get("/talk?kind=free_talk").text
+
+
 def test_today_is_saturdays_free_talk_and_a_weekdays_retell(client, tmp_path, monkeypatch):
     from shadow.web import app as web
 
