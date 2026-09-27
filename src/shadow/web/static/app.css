@@ -332,7 +332,8 @@ button:disabled { opacity: .5; cursor: default; }
 .filters button.chosen { background: var(--accent); color: #fff;
   border-color: var(--accent); }
 .filters-hint { color: var(--muted); font-size: 12px; margin-left: 4px; }
-.units .left { color: var(--warn); }
+/* 上次还有几处要改：练过的行整行变灰，这一格要压过它 */
+table.units tr td.left, table.units tr.done td.left { color: var(--warn); }
 
 /* ---------- 服务指示灯：每个页面顶上都有 ---------- */
 .service { margin-left: auto; align-self: center; display: inline-flex;

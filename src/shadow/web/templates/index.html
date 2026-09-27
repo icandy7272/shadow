@@ -88,7 +88,7 @@
   <span class="filters-hint" id="filter-count"></span>
 </div>
 <table class="units" id="units">
-  <thead><tr><th>#</th><th>句子</th><th>时长</th><th>词</th><th>练过</th></tr></thead>
+  <thead><tr><th>#</th><th>句子</th><th>时长</th><th>词</th><th>练过</th><th title="上次跟读还有几处没改好">要改</th></tr></thead>
   <tbody>
   {% for item in catalogue %}
     <tr class="{{ 'done' if item.runs else 'fresh' }}"
@@ -106,9 +106,9 @@
       </td>
       <td class="num">{{ '%.1f'|format(item.seconds) }}s</td>
       <td class="num">{{ item.words }}</td>
-      <td class="num">{{ item.runs or '' }}{% if item.issues %}
-        <span class="left" title="上次还有 {{ item.issues }} 处没解决"
-          >·{{ item.issues }}</span>{% endif %}</td>
+      {#- 原来挤在一格里写「15 ·3」，后一个数只有鼠标悬停才知道是什么。拆开，单位写出来 -#}
+      <td class="num runs">{% if item.runs %}{{ item.runs }} 次{% endif %}</td>
+      <td class="num left">{% if item.issues %}{{ item.issues }} 处{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>

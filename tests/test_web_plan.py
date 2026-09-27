@@ -174,7 +174,7 @@ def test_every_row_has_as_many_cells_as_the_header(client, tmp_path):
     head = re.search(r"<thead>(.*?)</thead>", body, re.S).group(1)
     row = re.search(r"<tbody>\s*<tr.*?>(.*?)</tr>", body, re.S).group(1)
 
-    assert head.count("<th>") == row.count("<td")
+    assert head.count("<th") == row.count("<td")          # 表头可能带 title，别数 "<th>"
 
 
 def _practised_text(segment_id, unit, text, *, on, rating=4):
@@ -259,3 +259,21 @@ def test_the_day_is_done_when_what_is_left_is_ticked(client, tmp_path):
     _practised_text(second, 1, "Thank you all.", on=MONDAY)
 
     assert "做完了" in _home(client, segment_id)
+
+
+def test_the_list_says_what_its_numbers_mean(client, tmp_path):
+    """「练过」一栏原来写「15 ·3」：前一个是练了几次，后一个是上次还有几处要改，
+    只有鼠标悬停才看得出来，手机上根本没法悬停。拆成两栏，单位写出来。"""
+    segment_id = _seed(tmp_path)
+    _practised(segment_id, 1, on=MONDAY - timedelta(days=1))
+    _practised(segment_id, 1, on=MONDAY - timedelta(days=1), titles=["a", "b"])
+    _practised(segment_id, 2, on=MONDAY - timedelta(days=1))
+
+    body = _home(client, segment_id)
+
+    assert "<th>练过</th>" in body
+    assert '<th title="上次跟读还有几处没改好">要改</th>' in body
+    assert '<td class="num runs">2 次</td>' in body
+    assert '<td class="num left">2 处</td>' in body
+    assert '<td class="num runs">1 次</td>' in body
+    assert "·2" not in body
