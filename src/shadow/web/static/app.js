@@ -118,19 +118,6 @@ if (planCard) {
     });
   });
 
-  // 「筛出该复习的 N 句」：点中列表上的筛选，再滚到列表
-  planCard.querySelectorAll("[data-filter-link]").forEach((link) => {
-    link.addEventListener("click", (event) => {
-      const button = document.querySelector(
-        `#filters button[data-filter="${link.dataset.filterLink}"]`);
-      if (!button) return;
-      event.preventDefault();
-      button.click();
-      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      document.getElementById("units").scrollIntoView(
-        { behavior: still ? "auto" : "smooth", block: "start" });
-    });
-  });
 }
 
 // ---------- 练习页 ----------

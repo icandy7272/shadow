@@ -116,7 +116,7 @@ def test_review_picks_yesterdays_sentences_and_unfinished_ones(client, tmp_path)
 
     assert body.count('data-review="1"') == 2
     assert 'data-filter="review"' in body
-    assert "筛出该复习的 2 句" in body
+    assert "开始复习（2 句）" in body
 
 
 def test_a_sentence_practised_well_is_not_due_again_the_next_day(client, tmp_path):
@@ -129,7 +129,7 @@ def test_a_sentence_practised_well_is_not_due_again_the_next_day(client, tmp_pat
 
     body = _home(client, segment_id)
 
-    assert "筛出该复习的 1 句" in body
+    assert "开始复习（1 句）" in body
     assert _rows(body) == {1: (True, 1), 2: (False, 0)}
 
 
@@ -142,6 +142,9 @@ def test_the_most_urgent_sentence_is_first_in_the_queue(client, tmp_path):
     body = _home(client, segment_id)
 
     assert _rows(body) == {1: (True, 2), 2: (True, 1)}
+    # 日课卡片直接进最急的那句：原来只能筛出列表，列表上练过的句子带着原文，
+    # 点进去之前就看到了，盲听白做
+    assert f'class="plan-link" href="/practice/{segment_id}/2?from=review"' in body
     onwards = client.get(f"/practice/{segment_id}/2?from=review").text
     assert f'href="/practice/{segment_id}/1?from=review"' in onwards
 

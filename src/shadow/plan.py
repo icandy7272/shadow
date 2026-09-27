@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-REVIEW = "review"      # 链接：筛出该复习的句子
+REVIEW = "review"      # 链接：直接进最急的那句，按急迫程度往下练
 NEXT = "next"          # 链接：开始下一句没练过的
 CHAIN = "chain"        # 链接：把今天练过的几句连起来跟
 WHOLE = "whole"        # 链接：把本周练过的连起来，从头跟到尾

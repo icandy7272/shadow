@@ -384,7 +384,7 @@ def _plan_progress(connection, today: date) -> tuple[filters.Selection, int]:
 
 
 def _plan_view(connection, today: date, review: filters.Selection,
-               new_today: int, week_count: int) -> dict:
+               new_today: int, week_count: int, review_start: dict | None = None) -> dict:
     """首页日课卡片要的东西：今天是星期几、哪几步、做完了哪些、该复习几句、顺延几句。
 
     能从练习记录里看出来的几步自己划掉；剩下的测不出来，还是手动勾。
@@ -398,7 +398,7 @@ def _plan_view(connection, today: date, review: filters.Selection,
     return {"heading": plan.heading(weekday), "steps": steps,
             "all_done": all(step["done"] for step in steps),
             "review_count": len(review.order), "deferred": len(review.deferred),
-            "week_count": week_count}
+            "review_start": review_start, "week_count": week_count}
 
 
 def _practised_since(connection, since: date) -> list[dict]:
@@ -637,12 +637,16 @@ def source_page(request: Request, source_id: int):
         item["review_rank"] = ranks.get(index, 0)
     # 没练过的第一句：有个直达入口就不用浏览列表，也就不会被剧透
     next_unit = next((i for i in catalogue if not i["runs"] and i["usable"]), None)
+    # 复习也一样：直接进最急的那句。只给筛选的话，列表上练过的句子带着原文，
+    # 点进去之前就看到了，盲听白做
+    review_start = catalogue[review.order[0]] if review.order else None
     return templates.TemplateResponse(
         request, "index.html",
         {"catalogue": catalogue, "source": source, "next_unit": next_unit,
          "practised": sum(1 for item in catalogue if item["runs"]),
          "days": progress.calendar(connection),
-         "plan": _plan_view(connection, today, review, new_today, week_count)},
+         "plan": _plan_view(connection, today, review, new_today, week_count,
+                            review_start)},
     )
 
 
