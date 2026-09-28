@@ -50,6 +50,7 @@ def _practised(segment_id, unit, *, on, titles=(), rating=4):
                        (stamp, stamp, run_id))
     connection.commit()
     connection.close()
+    return run_id
 
 
 def test_the_home_page_shows_todays_plan(client, tmp_path):

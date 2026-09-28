@@ -121,6 +121,14 @@ CREATE TABLE IF NOT EXISTS plan_checks (
     PRIMARY KEY (day, step)
 );
 
+-- 「这句不用再练」：复习、下一句都跳过它。按原文文字记，和练习记录的算法一致
+CREATE TABLE IF NOT EXISTS retired_units (
+    source_id  INTEGER NOT NULL,
+    text       TEXT NOT NULL,
+    retired_at TEXT NOT NULL,
+    PRIMARY KEY (source_id, text)
+);
+
 CREATE INDEX IF NOT EXISTS idx_segments_source ON segments(source_id);
 CREATE INDEX IF NOT EXISTS idx_attempts_run ON attempts(run_id);
 """
@@ -518,6 +526,7 @@ def delete_source(conn: sqlite3.Connection, source_id: int, *,
                      segment_ids)
         conn.execute(f"DELETE FROM practice_runs WHERE segment_id IN ({marks})", segment_ids)
         conn.execute(f"DELETE FROM saved_phrases WHERE segment_id IN ({marks})", segment_ids)
+        conn.execute("DELETE FROM retired_units WHERE source_id = ?", (source_id,))
         conn.execute("DELETE FROM segments WHERE source_id = ?", (source_id,))
         conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
     own = (source["audio_path"],) if source is not None and source["audio_path"] else ()
@@ -606,6 +615,22 @@ def remove_talk(conn: sqlite3.Connection, talk_id: int) -> str | None:
     conn.execute("DELETE FROM talks WHERE id = ?", (talk_id,))
     conn.commit()
     return row["audio_path"]
+
+
+def retired_texts(conn: sqlite3.Connection, source_id: int) -> set[str]:
+    """这份素材里标了「不用再练」的句子。"""
+    return {row["text"] for row in conn.execute(
+        "SELECT text FROM retired_units WHERE source_id = ?", (source_id,))}
+
+
+def set_retired(conn: sqlite3.Connection, source_id: int, text: str, retired: bool) -> None:
+    if retired:
+        conn.execute("INSERT OR IGNORE INTO retired_units (source_id, text, retired_at)"
+                     " VALUES (?, ?, ?)", (source_id, text, _now()))
+    else:
+        conn.execute("DELETE FROM retired_units WHERE source_id = ? AND text = ?",
+                     (source_id, text))
+    conn.commit()
 
 
 def plan_checks(conn: sqlite3.Connection, day: str) -> dict[str, bool]:

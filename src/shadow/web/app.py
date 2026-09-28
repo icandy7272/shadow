@@ -231,11 +231,17 @@ def _practice_states(connection, source_id: int) -> dict[str, filters.State]:
             last[text] = when
         if when is not None and (text not in first or when < first[text]):
             first[text] = when
-    return {text: filters.State(
-                runs=count, issues=issues.get(text, 0), rating=ratings.get(text),
-                last_day=last.get(text), first_day=first.get(text),
-                due=plan.due_day(last[text], levels[text]) if text in last else None)
-            for text, count in runs.items()}
+    retired = db.retired_texts(connection, source_id)
+    states = {text: filters.State(
+                  runs=count, issues=issues.get(text, 0), rating=ratings.get(text),
+                  last_day=last.get(text), first_day=first.get(text),
+                  due=plan.due_day(last[text], levels[text]) if text in last else None,
+                  retired=text in retired)
+              for text, count in runs.items()}
+    # 没练过就标了不用再练的（Thank you. 这种）：也得有一条，队列才认得出来
+    for text in retired - states.keys():
+        states[text] = replace(filters.NEVER, retired=True)
+    return states
 
 
 def _place(connection, segment_id: int, unit: int, queue: str | None = None) -> dict:
@@ -263,15 +269,17 @@ def _place(connection, segment_id: int, unit: int, queue: str | None = None) -> 
         return None if index is None else by_key[(units[index]["segment"], units[index]["unit"])]
 
     usable = [item["usable"] for item in units]
+    states = _practice_states(connection, source_id)
+    progress = [states.get(item["text"], filters.NEVER) for item in units]
     if queue is None:
+        # 标了不用再练的也跳过：「下一句」不该再把人送回去
         picked = filters.Selection(
-            order=tuple(index for index, ok in enumerate(usable) if ok))
+            order=tuple(index for index, ok in enumerate(usable)
+                        if ok and not progress[index].retired))
         after = filters.after(picked, position, wrap=False)
         view = None
     else:
-        states = _practice_states(connection, source_id)
-        here = [states.get(item["text"], filters.NEVER) for item in units]
-        picked = filters.select(queue, here, _today(), usable=usable)
+        picked = filters.select(queue, progress, _today(), usable=usable)
         after = filters.after(picked, position)
         view = filters.view(queue, remaining=filters.remaining(picked, position))
     before = filters.before(picked, position)
@@ -635,8 +643,10 @@ def source_page(request: Request, source_id: int):
         item["rating"] = state.rating
         item["review"] = index in ranks
         item["review_rank"] = ranks.get(index, 0)
+        item["retired"] = state.retired
     # 没练过的第一句：有个直达入口就不用浏览列表，也就不会被剧透
-    next_unit = next((i for i in catalogue if not i["runs"] and i["usable"]), None)
+    next_unit = next((i for i in catalogue
+                      if not i["runs"] and i["usable"] and not i["retired"]), None)
     # 复习也一样：直接进最急的那句。只给筛选的话，列表上练过的句子带着原文，
     # 点进去之前就看到了，盲听白做
     review_start = catalogue[review.order[0]] if review.order else None
@@ -656,6 +666,7 @@ def practice(request: Request, segment_id: int, unit: int,
     """from 是列表上点进来时用的筛选：下一句在同一个筛选里找。"""
     connection = _db()
     segment, words = _unit_words(connection, segment_id, unit)
+    text = " ".join(w.text for w in words)
     step = _place(connection, segment_id, unit, filters.parse(from_))
     source = db.get_source(connection, segment["source_id"])
     problem = media.unit_problem(source["audio_path"] if source else None, words)
@@ -682,8 +693,34 @@ def practice(request: Request, segment_id: int, unit: int,
             "min_take_sec": config.MIN_ATTEMPT_SEC,
             # 只传给第三步。里面带着句子原文的片段，提前露出来盲听就废了。
             "history": history.last_practice(connection, segment_id, unit),
+            "done_before": _step_counts(connection, segment["source_id"], text),
+            "retired": text in db.retired_texts(connection, segment["source_id"]),
         },
     )
+
+
+def _step_counts(connection, source_id: int, text: str) -> dict[str, int]:
+    """这句之前每一步各做过几次：盲听打过分、默写对过答案、跟读录过音。"""
+    counts = {"listen": 0, "drill": 0, "record": 0}
+    for run in db.source_runs(connection, source_id):
+        if run["unit_text"] != text:
+            continue
+        counts["listen"] += run["blind_rating"] is not None
+        counts["drill"] += run["gapfill_total"] is not None
+        counts["record"] += bool(db.run_metrics(connection, run["id"]))
+    return counts
+
+
+@app.post("/api/retire")
+def retire_unit(payload: dict = Body(...)):
+    """标成「这句不用再练」，或者撤回。太短的、早就熟了的，每次复习都来一遍太耗时间。"""
+    segment, unit, retired = payload.get("segment"), payload.get("unit"), payload.get("retired")
+    if not (isinstance(segment, int) and isinstance(unit, int) and isinstance(retired, bool)):
+        raise HTTPException(400, "要说明是哪一句、标上还是撤回。")
+    connection = _db()
+    row, words = _unit_words(connection, segment, unit)
+    db.set_retired(connection, row["source_id"], " ".join(w.text for w in words), retired)
+    return {"retired": retired}
 
 
 @app.get("/audio/{segment_id}/{unit}")

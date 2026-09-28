@@ -93,6 +93,7 @@
   {% for item in catalogue %}
     <tr class="{{ 'done' if item.runs else 'fresh' }}"
         data-runs="{{ item.runs }}" data-issues="{{ item.issues }}"
+        data-retired="{{ 1 if item.retired else 0 }}"
         data-rating="{{ item.rating if item.rating is not none else '' }}"
         data-review="{{ 1 if item.review else 0 }}"
         data-review-rank="{{ item.review_rank }}">
@@ -102,7 +103,7 @@
           {% if item.runs %}{{ item.text }}
           {% else %}<span class="masked" data-text="{{ item.text }}">{{ item.words }} 个词</span>
           {% endif %}
-        </a>
+        </a>{% if item.retired %}<span class="unit-tag">不再练</span>{% endif %}
       </td>
       <td class="num">{{ '%.1f'|format(item.seconds) }}s</td>
       <td class="num">{{ item.words }}</td>

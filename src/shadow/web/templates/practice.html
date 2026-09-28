@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 {% block subtitle %}<span class="crumb"><a href="/sources/{{ source_id }}">{{ source }}</a> · 第 {{ number }} 句 / 共 {{ total_units }} 句</span>{% endblock %}
 {% block content %}
+{#- 每一步之前做过几次。只给次数，不给内容——内容里有原文 -#}
+{% macro times(n) %}<em class="step-count">{% if n %}之前 {{ n }} 次{% else %}第一次{% endif %}</em>{% endmacro %}
 <div id="practice" data-segment="{{ segment }}" data-unit="{{ unit }}"
      data-min-take="{{ min_take_sec }}" data-seconds="{{ seconds }}"
      data-spoken="{{ spoken }}">
 
   <section class="step" id="step-listen">
-    <h2><span class="n">1</span> 盲听</h2>
+    <h2><span class="n">1</span> 盲听{{ times(done_before.listen) }}</h2>
     <p class="hint">不看文字，就听。听完给自己打个分。</p>
     <p class="hint keys">快捷键：空格 放/停（录音时 = 说完了） · 1–5 打分 · ← → 上一句 / 下一句</p>
     <div class="row">
@@ -25,7 +27,7 @@
   </section>
 
   <section class="step locked" id="step-drill">
-    <h2><span class="n">2</span> 默写</h2>
+    <h2><span class="n">2</span> 默写{{ times(done_before.drill) }}</h2>
     <p class="hint">听到什么写什么，一整句写在下面。漏了词就把光标挪过去补上；不会的词写一个 ?——对完答案会给出释义，并记进生词本。</p>
     <div class="row">
       <button class="play" data-src="/audio/{{ segment }}/{{ unit }}">▶ 重听</button>
@@ -46,7 +48,7 @@
   </section>
 
   <section class="step locked" id="step-record">
-    <h2><span class="n">3</span> 跟读
+    <h2><span class="n">3</span> 跟读{{ times(done_before.record) }}
       {%- if history %}<em class="step-badge">上次{% if history.issues %}有
         {{ history.issues | length }} 处要改{% else %}没有反复出现的问题{% endif %}</em>
       {%- endif %}</h2>
@@ -117,6 +119,13 @@
     <a class="next" href="/sources/{{ source_id }}">这份素材练完了，回列表 →</a>
     {% endif %}
   </nav>
+  <p class="retire-row" id="retire-row">
+    {%- if retired %}
+    已标为不再练：复习和「下一句」都会跳过这句 · <button type="button" id="unretire" class="link-button">恢复练习</button>
+    {%- else %}
+    <button type="button" id="retire" title="复习和「下一句」都跳过这句；以后想练，在这页点「恢复练习」">这句熟了，不再练</button>
+    {%- endif %}
+  </p>
   {% if queue %}
   <p class="pager-note">正在按「{{ queue.title }}」往下练 · <a href="/practice/{{ segment }}/{{ unit }}">改回原文顺序</a></p>
   {% endif %}

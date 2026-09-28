@@ -33,6 +33,7 @@ class State:
     last_day: date | None
     due: date | None = None        # 下次该复习的日子，由练习记录一路算出来
     first_day: date | None = None  # 第一次练它是哪天：日课要数今天新练了几句
+    retired: bool = False          # 标了「不用再练」：哪个队列都不进
 
 
 NEVER = State(runs=0, issues=0, rating=None, last_day=None)
@@ -57,6 +58,8 @@ def parse(raw: str | None) -> str | None:
 
 
 def matches(name: str, state: State, today: date) -> bool:
+    if state.retired:
+        return False
     if name == REVIEW:
         return plan.is_due(state.due, today)
     if name == ISSUES:

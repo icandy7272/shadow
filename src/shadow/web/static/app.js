@@ -27,12 +27,15 @@ if (filters) {
   const body = document.querySelector("table.units tbody");
   const rows = [...body.querySelectorAll("tr")];
   const count = document.getElementById("filter-count");
+  // 标了「不再练」的哪个筛选都不进，和练习页「下一句」的规则一样
+  const active = (row) => row.dataset.retired !== "1";
   const keep = {
     all: () => true,
     review: (row) => row.dataset.review === "1",     // 服务端按日课的规则算好了
-    fresh: (row) => Number(row.dataset.runs) === 0,
-    issues: (row) => Number(row.dataset.issues) > 0,
-    unheard: (row) => row.dataset.rating !== "" && Number(row.dataset.rating) <= 2,
+    fresh: (row) => active(row) && Number(row.dataset.runs) === 0,
+    issues: (row) => active(row) && Number(row.dataset.issues) > 0,
+    unheard: (row) => active(row) && row.dataset.rating !== ""
+      && Number(row.dataset.rating) <= 2,
   };
   const rank = (row) => Number(row.dataset.reviewRank) || Infinity;
 
@@ -150,6 +153,33 @@ const root = document.getElementById("practice");
 if (root) {
   const segment = root.dataset.segment;
   const unit = root.dataset.unit;
+
+  // 「这句熟了，不再练」：标完直接去下一句——都不想练了，没必要停在这儿；
+  // 「恢复练习」：撤回，留在本页
+  const markRetired = async (button, retired) => {
+    button.disabled = true;
+    try {
+      const response = await fetch("/api/retire", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ segment: Number(segment), unit: Number(unit), retired }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+    } catch (err) {
+      button.disabled = false;
+      document.getElementById("retire-row").append(
+        el("span", "plan-error", " 没存上，服务恢复后再点一次"));
+      service.check();
+      return;
+    }
+    const next = document.querySelector(".pager a.next");
+    if (retired && next) window.location.assign(next.href);
+    else window.location.reload();
+  };
+  document.getElementById("retire")?.addEventListener(
+    "click", (event) => markRetired(event.currentTarget, true));
+  document.getElementById("unretire")?.addEventListener(
+    "click", (event) => markRetired(event.currentTarget, false));
   const counts = new WeakMap();
 
   // 连播：一遍放完接着下一遍，中途可停

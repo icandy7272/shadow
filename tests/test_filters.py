@@ -131,3 +131,11 @@ def test_the_pager_says_which_filter_you_are_walking_through():
         "name": "review", "title": "该复习", "label": "复习下一句",
         "done": "今天该复习的都练完了", "remaining": 3, "query": "?from=review"}
     assert filters.view("fresh", remaining=0)["label"] == "练下一句新的"
+
+
+@pytest.mark.parametrize("name", ["review", "issues", "unheard", "fresh"])
+def test_a_sentence_you_marked_as_done_is_in_no_queue(name):
+    """「这句不用再练」：太短的、早就熟了的，每次复习都来一遍太耗时间。"""
+    retired = [_due(issues=2, rating=1, retired=True),
+               filters.State(runs=0, issues=0, rating=None, last_day=None, retired=True)]
+    assert filters.select(name, retired, TODAY).order == ()

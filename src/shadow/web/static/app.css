@@ -264,6 +264,17 @@ button:disabled { opacity: .5; cursor: default; }
 /* 锁住时只说有几处要改，不说是哪些词——说了就泄题了。
    不给边框：它长得像按钮，可点不动 */
 .step-badge { font-style: normal; font-size: 12px; font-weight: 400; color: var(--muted); }
+/* 这一步之前做过几次：一直显示，锁着、收起都在 */
+.step-count { font-style: normal; font-size: 12px; font-weight: 400; color: var(--muted); }
+/* 「这句熟了，不再练」 */
+.retire-row { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+.retire-row button { padding: 4px 12px; font-size: 13px; color: var(--muted); }
+.link-button { padding: 0; border: 0; background: none; color: var(--accent);
+  font: inherit; cursor: pointer; }
+.link-button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.unit-tag { margin-left: 8px; padding: 0 7px; border: 1px solid var(--line);
+  border-radius: 999px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+table.units tr[data-retired="1"] a { color: var(--muted); }
 .step:not(.locked) .step-badge { display: none; }
 
 /* 图 1 也能点：点哪行放哪行 */
