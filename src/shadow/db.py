@@ -297,6 +297,13 @@ def segment_edges(conn: sqlite3.Connection, segment_id: int) -> tuple[float, flo
 # --- 练习记录 ---------------------------------------------------------------
 
 
+def run_unit(conn: sqlite3.Connection, run_id: int) -> tuple[int, int] | None:
+    """这一轮练的是哪一句：(片段, 单元)。没有这一轮就是 None。"""
+    row = conn.execute("SELECT segment_id, unit_index FROM practice_runs WHERE id = ?",
+                       (run_id,)).fetchone()
+    return None if row is None else (row["segment_id"], row["unit_index"])
+
+
 def start_run(
     conn: sqlite3.Connection,
     *,

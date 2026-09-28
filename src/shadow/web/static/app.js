@@ -150,6 +150,11 @@ function markComplete(step) {
 }
 
 const root = document.getElementById("practice");
+// 同一次练习的三步记进同一行：打分时服务端开一行，默写、跟读接着往里写。
+// 原来页面没把这个编号传回去，每一步各开一行——「练过 N 次」被放大成三倍，
+// 今天新练的句子也被当成复习过的，占掉了当天的复习名额。
+let runId = null;
+const keepRun = (data) => { if (data && data.run_id != null) runId = data.run_id; };
 if (root) {
   const segment = root.dataset.segment;
   const unit = root.dataset.unit;
@@ -246,12 +251,14 @@ if (root) {
       body.append("segment", segment);
       body.append("unit", unit);
       body.append("rating", button.dataset.rating);
+      if (runId !== null) body.append("run_id", String(runId));   // 改分数：还是这一轮
       const note = listenStep.querySelector(".saved");
       note.hidden = false;
       try {
         const response = await fetch("/api/rating", { method: "POST", body });
         note.textContent = response.ok ? "记下了。" : "保存失败。";
         note.classList.toggle("bad", !response.ok);
+        if (response.ok) keepRun(await response.json());
       } catch (err) {
         // 听已经听过了，别因为存不上就卡住后面的步骤
         note.textContent = "没存上：服务断了。恢复后再点一次分数就行。";
@@ -362,6 +369,7 @@ if (root) {
           segment: Number(segment), unit: Number(unit),
           replays: counts.get(replayButton) || 0,
           text: typed.value,
+          run_id: runId,
         }),
       });
     } catch (err) {
@@ -379,7 +387,9 @@ if (root) {
       submitDrill.disabled = false;
       return;
     }
-    box.replaceChildren(...dictationResult(await response.json()));
+    const graded = await response.json();
+    keepRun(graded);
+    box.replaceChildren(...dictationResult(graded));
     // 框收起来，只留答案和释义；开始跟读时整步再收起
     drillStep.classList.add("graded");
     markComplete(drillStep);
@@ -1123,6 +1133,7 @@ if (root) {
     body.append("segment", segment);
     body.append("unit", unit);
     body.append("saw_text", sawText ? "1" : "0");
+    if (runId !== null) body.append("run_id", String(runId));
     blobs.forEach((blob, i) => body.append("files", blob, `take${i + 1}.webm`));
 
     let last;
@@ -1164,6 +1175,8 @@ if (root) {
     }
     // 每遍的响度提示到这儿就过时了，结果里一遍一行都有；偏轻的警告留着，下一轮还用得上
     if (micNote && !micNote.classList.contains("low")) say("");
+    // 这一轮到此为止。同一页上再录一轮，算新的一轮——和原来一样各记各的
+    runId = null;
     // 分析完了：默写那一步可以重新打开，回头看错在哪
     markComplete(document.getElementById("step-record"));
     document.dispatchEvent(new CustomEvent("shadow:analysed"));

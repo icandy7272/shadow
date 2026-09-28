@@ -730,9 +730,14 @@ def audio(segment_id: int, unit: int):
                         media_type="audio/wav")
 
 
-def _run_for(connection, segment: int, unit: int, run_id: int | None, words):
-    """同一次练习的三步记进同一行，与命令行 practice 一致。"""
-    if run_id is not None:
+def _run_for(connection, segment: int, unit: int, run_id, words):
+    """同一次练习的三步记进同一行，与命令行 practice 一致。
+
+    编号是页面传来的，不能信：不是整数、没有这一轮、或者是别的句子那一轮，
+    都另开一行，免得写进别处的记录里。
+    """
+    if (isinstance(run_id, int) and not isinstance(run_id, bool)
+            and db.run_unit(connection, run_id) == (segment, unit)):
         return run_id
     return db.start_run(connection, segment_id=segment, unit_index=unit,
                         unit_text=" ".join(w.text for w in words))

@@ -115,3 +115,50 @@ def test_a_malformed_submission_is_rejected(client, tmp_path, payload):
     body = {key: segment_id if value == SEGMENT else value for key, value in payload.items()}
 
     assert client.post("/api/dictation", json=body).status_code == 400
+
+
+def _runs(segment_id):
+    from shadow import db
+    connection = db.connect()
+    rows = connection.execute(
+        "SELECT id, unit_index, blind_rating, gapfill_total FROM practice_runs"
+        " WHERE segment_id = ? ORDER BY id", (segment_id,)).fetchall()
+    connection.close()
+    return [tuple(row) for row in rows]
+
+
+def test_one_round_is_one_row(client, tmp_path):
+    """打分和默写是同一轮：页面把打分拿到的编号带回来，就写进同一行。
+    原来每一步各开一行，「练过 N 次」被放大成三倍。"""
+    segment_id = _seed(tmp_path)
+    run_id = client.post("/api/rating", data={"segment": segment_id, "unit": 2,
+                                               "rating": 4}).json()["run_id"]
+
+    graded = client.post("/api/dictation", json={"segment": segment_id, "unit": 2,
+                                                  "text": "It was a start.",
+                                                  "run_id": run_id}).json()
+
+    assert graded["run_id"] == run_id
+    assert _runs(segment_id) == [(run_id, 2, 4, 4)]
+
+
+def test_a_round_of_another_sentence_is_not_written_into(client, tmp_path):
+    """编号是页面传来的，不能信：别的句子那一轮不能被写进去。"""
+    segment_id = _seed(tmp_path)
+    other = client.post("/api/rating", data={"segment": segment_id, "unit": 1,
+                                             "rating": 4}).json()["run_id"]
+
+    graded = client.post("/api/dictation", json={"segment": segment_id, "unit": 2,
+                                                  "text": "It was a start.",
+                                                  "run_id": other}).json()
+
+    assert graded["run_id"] != other
+    assert _runs(segment_id) == [(other, 1, 4, None), (graded["run_id"], 2, None, 4)]
+
+
+def test_a_malformed_round_number_starts_a_fresh_round(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    graded = client.post("/api/dictation", json={"segment": segment_id, "unit": 2,
+                                                  "text": "It was a start.",
+                                                  "run_id": "12; DROP"}).json()
+    assert isinstance(graded["run_id"], int)
