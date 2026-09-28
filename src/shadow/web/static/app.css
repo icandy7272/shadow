@@ -337,7 +337,8 @@ table.units tr[data-retired="1"] a { color: var(--muted); }
   border: 1px solid currentColor; border-bottom-width: 2px; border-radius: 4px;
   font: 500 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
   text-align: center; vertical-align: 1px; opacity: .55; }
-.key-arrow { font: inherit; }
+/* 字本身就是键的（打分的 1–5、翻页的 ← →）：手机上照常是字，电脑上画成键帽 */
+.key-inline { font: inherit; }
 @media (hover: hover) and (min-width: 641px) {
   .key { display: inline-block; }
   /* 空格只挂在此刻按空格会按到的那个按钮上 */
@@ -345,8 +346,7 @@ table.units tr[data-retired="1"] a { color: var(--muted); }
   #practice .space-target .key-space { display: inline-block; }
   /* 按不了的按钮不挂键：录音时「开始」灰着，R 也不认 */
   button:disabled .key { display: none !important; }
-  /* 翻页的箭头就是 ← → 键：电脑上画成键帽 */
-  .key-arrow { display: inline-block; padding: 0 4px; border: 1px solid currentColor;
+  .key-inline { display: inline-block; min-width: 1.4em; text-align: center; padding: 0 4px; border: 1px solid currentColor;
     border-bottom-width: 2px; border-radius: 4px; font-size: 12px; line-height: 1.4;
     opacity: .7; }
 }

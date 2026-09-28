@@ -41,8 +41,11 @@ def test_every_step_on_the_practice_page_shows_its_key_on_the_button(client, tmp
     plays = re.findall(r'<button class="play"[^>]*>(.*?)</button>', body, re.S)
     assert ['<kbd class="key key-space" aria-hidden="true">空格</kbd>' in p for p in plays] == [True, True]
     assert 'aria-hidden="true">Esc</kbd>' in plays[1]
-    # 翻页的箭头就是 ← → 两个键
-    assert '<kbd class="key-arrow" aria-hidden="true">→</kbd>' in body
+    # 打分的 1–5、翻页的 ← →：字本身就是键，电脑上画成键帽，手机上照常显示
+    for score in "12345":
+        assert (f'<button data-rating="{score}"><kbd class="key-inline" aria-hidden="true">'
+                f'{score}</kbd>') in body
+    assert '<kbd class="key-inline" aria-hidden="true">→</kbd>' in body
     # 文字版的快捷键说明不要了
     assert "快捷键：" not in body
 

@@ -16,11 +16,11 @@
       <span class="plays"></span>
     </div>
     <div class="rating">
-      <button data-rating="1">1 几乎没听懂</button>
-      <button data-rating="2">2 抓到几个词</button>
-      <button data-rating="3">3 大意懂了</button>
-      <button data-rating="4">4 基本都懂</button>
-      <button data-rating="5">5 每个词都清楚</button>
+      <button data-rating="1"><kbd class="key-inline" aria-hidden="true">1</kbd> 几乎没听懂</button>
+      <button data-rating="2"><kbd class="key-inline" aria-hidden="true">2</kbd> 抓到几个词</button>
+      <button data-rating="3"><kbd class="key-inline" aria-hidden="true">3</kbd> 大意懂了</button>
+      <button data-rating="4"><kbd class="key-inline" aria-hidden="true">4</kbd> 基本都懂</button>
+      <button data-rating="5"><kbd class="key-inline" aria-hidden="true">5</kbd> 每个词都清楚</button>
     </div>
     <p class="saved" hidden></p>
   </section>
@@ -104,18 +104,18 @@
 
   <nav class="pager">
     {% if prev_unit %}
-    <a href="/practice/{{ prev_unit.segment }}/{{ prev_unit.unit }}{{ queue.query if queue else '' }}"><kbd class="key-arrow" aria-hidden="true">←</kbd> 上一句</a>
+    <a href="/practice/{{ prev_unit.segment }}/{{ prev_unit.unit }}{{ queue.query if queue else '' }}"><kbd class="key-inline" aria-hidden="true">←</kbd> 上一句</a>
     {% else %}<span></span>{% endif %}
     {% if next_unit and queue %}
     <a class="next" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}{{ queue.query }}"
-       >{{ queue.label }}（第 {{ next_unit.number }} 句 · 还剩 {{ queue.remaining }} 句）<kbd class="key-arrow" aria-hidden="true">→</kbd></a>
+       >{{ queue.label }}（第 {{ next_unit.number }} 句 · 还剩 {{ queue.remaining }} 句）<kbd class="key-inline" aria-hidden="true">→</kbd></a>
     {% elif next_unit %}
     <a class="next" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}"
-       >练下一句（第 {{ next_unit.number }}/{{ total_units }} 句）<kbd class="key-arrow" aria-hidden="true">→</kbd></a>
+       >练下一句（第 {{ next_unit.number }}/{{ total_units }} 句）<kbd class="key-inline" aria-hidden="true">→</kbd></a>
     {% elif queue %}
-    <a class="next" href="/sources/{{ source_id }}">{{ queue.done }}，回列表 <kbd class="key-arrow" aria-hidden="true">→</kbd></a>
+    <a class="next" href="/sources/{{ source_id }}">{{ queue.done }}，回列表 <kbd class="key-inline" aria-hidden="true">→</kbd></a>
     {% else %}
-    <a class="next" href="/sources/{{ source_id }}">这份素材练完了，回列表 <kbd class="key-arrow" aria-hidden="true">→</kbd></a>
+    <a class="next" href="/sources/{{ source_id }}">这份素材练完了，回列表 <kbd class="key-inline" aria-hidden="true">→</kbd></a>
     {% endif %}
   </nav>
   <p class="retire-row" id="retire-row">
