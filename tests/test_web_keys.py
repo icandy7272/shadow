@@ -34,13 +34,15 @@ def test_every_step_on_the_practice_page_shows_its_key_on_the_button(client, tmp
     assert _keys_on(body, "submit-drill") == ["回车"]
     assert _keys_on(body, "start-record") == ["R"]
     assert _keys_on(body, "stop-take") == ["空格"]
-    assert _keys_on(body, "redo-take") == ["Esc"]
+    # Esc 键可能是坏的：重来用删除键（删掉这一遍），重听用 Tab（光标在默写框里）
+    assert _keys_on(body, "redo-take") == ["⌫"]
     assert _keys_on(body, "peek") == ["T"]
     assert _keys_on(body, "retire") == ["K"]
     # 两个播放键：盲听的放/停，默写的重听（框里按 Esc）
     plays = re.findall(r'<button class="play"[^>]*>(.*?)</button>', body, re.S)
     assert ['<kbd class="key key-space" aria-hidden="true">空格</kbd>' in p for p in plays] == [True, True]
-    assert 'aria-hidden="true">Esc</kbd>' in plays[1]
+    assert 'aria-hidden="true">Tab</kbd>' in plays[1]
+    assert ">Esc</kbd>" not in body
     # 打分的 1–5、翻页的 ← →：字本身就是键，电脑上画成键帽，手机上照常显示
     for score in "12345":
         assert (f'<button data-rating="{score}"><kbd class="key-inline" aria-hidden="true">'

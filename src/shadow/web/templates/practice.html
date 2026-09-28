@@ -29,7 +29,7 @@
     <h2><span class="n">2</span> 默写{{ times(done_before.drill) }}</h2>
     <p class="hint">听到什么写什么，一整句写在下面。漏了词就把光标挪过去补上；不会的词写一个 ?——对完答案会给出释义，并记进生词本。</p>
     <div class="row">
-      <button class="play" data-src="/audio/{{ segment }}/{{ unit }}"><span class="label">▶ 重听</span><kbd class="key" aria-hidden="true">Esc</kbd><kbd class="key key-space" aria-hidden="true">空格</kbd></button>
+      <button class="play" data-src="/audio/{{ segment }}/{{ unit }}"><span class="label">▶ 重听</span><kbd class="key" aria-hidden="true">Tab</kbd><kbd class="key key-space" aria-hidden="true">空格</kbd></button>
       <label class="repeat">连播 <input type="number" class="times" value="3" min="1" max="50"> 遍</label>
       <span class="plays"></span>
     </div>
@@ -73,7 +73,7 @@
         <span class="meter" id="mic-meter" hidden><i></i></span>
         <span class="mic-note" id="mic-note"></span>
         <button id="stop-take" hidden>说完了<kbd class="key key-space" aria-hidden="true">空格</kbd></button>
-        <button id="redo-take" hidden>这遍重来<kbd class="key" aria-hidden="true">Esc</kbd></button>
+        <button id="redo-take" hidden>这遍重来<kbd class="key" aria-hidden="true">⌫</kbd></button>
         <button id="resubmit" hidden>重新提交</button>
       </div>
       <div class="bar" id="rec-progress" hidden><i></i></div>

@@ -331,8 +331,9 @@ if (root) {
     const [, onlyRef, onlyMine] =
       [...document.querySelectorAll("#rec-result:not([hidden]) .playbar > button")];
 
-    if (key === "Escape") {
-      if (recording) press(byId("redo-take"));      // 这一遍说砸了，作废重来
+    // 这一遍说砸了，作废重来。删除键：删掉这一遍；Esc 也认（有的键盘 Esc 是坏的）
+    if (key === "Backspace" || key === "Escape") {
+      if (recording) press(byId("redo-take"));
       return;
     }
     if (recording && key !== " ") return;           // 录着的时候只认说完了、重来
@@ -404,7 +405,8 @@ if (root) {
   typed.addEventListener("keydown", (event) => {
     if (event.isComposing) return;              // 输入法选词的回车、取消的 Esc 不算
     const key = physicalKey(event);
-    if (key === "Escape") {
+    // Tab 在这个框里本来只会把光标跳走，拿来重听；想离开框用 Shift+Tab。Esc 也认
+    if ((key === "Tab" && !event.shiftKey) || key === "Escape") {
       // 写到一半想再听一遍：手不用离开键盘，光标也留在原处
       event.preventDefault();
       drillStep.querySelector("button.play")?.click();
