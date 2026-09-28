@@ -10,9 +10,8 @@
   {% endif %}
 {% else %}
 <p class="hint">共 {{ sentences|length }} 句 · 连着放约 {{ minutes }} 分钟。{{ lede }}点某一句可以从那句接着放。</p>
-<p class="hint keys">快捷键：空格 连着放 / 停</p>
 <div class="row" id="chain-controls" data-rounds="{{ rounds }}" data-step="{{ tick }}">
-  <button class="primary" id="chain-play">▶ 连着放{% if rounds > 1 %} {{ rounds }} 遍{% endif %}</button>
+  <button class="primary" id="chain-play"><span class="label">▶ 连着放{% if rounds > 1 %} {{ rounds }} 遍{% endif %}</span><kbd class="key" aria-hidden="true">空格</kbd></button>
   <span class="plays" id="chain-progress"></span>
 </div>
 <ol class="chain-list" id="chain-list">

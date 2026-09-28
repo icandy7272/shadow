@@ -8,7 +8,7 @@
   const rounds = Math.max(1, Number(controls.dataset.rounds) || 1);
   const step = controls.dataset.step;      // 跟完了在日课里划掉的是哪一步
   const items = [...list.querySelectorAll(".chain-item")];
-  const idle = button.textContent;
+  const idle = labelOf(button);
   // 跟读要跟的是真速度，所以这儿自成一档，默认原速：盲听那边调慢了，串起来不跟着慢。
   // 真想放慢也行，按钮就在旁边，调了下次还记得
   const chainSpeed = makeSpeed("shadow.chain-speed");
@@ -22,7 +22,7 @@
     clearTimeout(timer);
     if (audio) { audio.pause(); chainSpeed.forget(audio); audio = null; }
     playing = false;
-    button.textContent = idle;
+    setLabel(button, idle);
     button.classList.remove("stop");
     items.forEach((item) => item.classList.remove("now"));
     progress.textContent = note;
@@ -65,7 +65,7 @@
 
   const start = (index) => {
     playing = true;
-    button.textContent = "■ 停";
+    setLabel(button, "■ 停");
     button.classList.add("stop");
     playFrom(1, index);
   };

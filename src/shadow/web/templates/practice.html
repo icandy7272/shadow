@@ -10,9 +10,8 @@
   <section class="step" id="step-listen">
     <h2><span class="n">1</span> 盲听{{ times(done_before.listen) }}</h2>
     <p class="hint">不看文字，就听。听完给自己打个分。</p>
-    <p class="hint keys">快捷键：空格 放/停 · 1–5 打分 · ← → 上一句 / 下一句 · K 这句熟了</p>
     <div class="row">
-      <button class="play" data-src="/audio/{{ segment }}/{{ unit }}">▶ 播放（{{ seconds }}s）</button>
+      <button class="play" data-src="/audio/{{ segment }}/{{ unit }}"><span class="label">▶ 播放（{{ seconds }}s）</span><kbd class="key key-space" aria-hidden="true">空格</kbd></button>
       <label class="repeat">连播 <input type="number" class="times" value="10" min="1" max="50"> 遍</label>
       <span class="plays"></span>
     </div>
@@ -29,9 +28,8 @@
   <section class="step locked" id="step-drill">
     <h2><span class="n">2</span> 默写{{ times(done_before.drill) }}</h2>
     <p class="hint">听到什么写什么，一整句写在下面。漏了词就把光标挪过去补上；不会的词写一个 ?——对完答案会给出释义，并记进生词本。</p>
-    <p class="hint keys">快捷键：回车 对答案 · Esc 重听</p>
     <div class="row">
-      <button class="play" data-src="/audio/{{ segment }}/{{ unit }}">▶ 重听</button>
+      <button class="play" data-src="/audio/{{ segment }}/{{ unit }}"><span class="label">▶ 重听</span><kbd class="key" aria-hidden="true">Esc</kbd><kbd class="key key-space" aria-hidden="true">空格</kbd></button>
       <label class="repeat">连播 <input type="number" class="times" value="3" min="1" max="50"> 遍</label>
       <span class="plays"></span>
     </div>
@@ -42,7 +40,7 @@
       <div class="dictation-bar">
         <span class="dictation-count" id="dictation-count" data-total="{{ word_total }}">已写 0/{{ word_total }} 个词</span>
         <button type="button" id="dictation-unknown" title="在光标处插一个 ?">不会 ?</button>
-        <button class="primary" id="submit-drill">对答案</button>
+        <button class="primary" id="submit-drill">对答案<kbd class="key" aria-hidden="true">回车</kbd></button>
       </div>
     </div>
     <div class="result" hidden></div>
@@ -54,11 +52,10 @@
         {{ history.issues | length }} 处要改{% else %}没有反复出现的问题{% endif %}</em>
       {%- endif %}</h2>
     <p class="hint">每遍录音前会自动放几次原声——听和说之间不能有间隔。听完嘀一声就开始说，说完停一下就自动收，手上不用动；想早点收就点「说完了」。</p>
-    <p class="hint keys">快捷键：R 开始 · 空格 说完了 · Esc 这遍重来 · T 看一眼原文；出结果后 空格 同时播放 · O 只听原声 · M 只听我的</p>
     <p class="hint insecure" id="no-mic" hidden>这台设备上录不了音——浏览器只在
       HTTPS 或 localhost 下才给麦克风权限。前两步照常，跟读请用电脑。</p>
     <div class="row">
-      <button class="primary" id="start-record">开始</button>
+      <button class="primary" id="start-record">开始<kbd class="key" aria-hidden="true">R</kbd></button>
       <details class="rec-more" id="rec-more">
         <summary id="rec-more-summary">录 3 遍 · 每遍前听 4 次</summary>
         <div class="rec-settings">
@@ -75,14 +72,14 @@
       <div class="row live-row">
         <span class="meter" id="mic-meter" hidden><i></i></span>
         <span class="mic-note" id="mic-note"></span>
-        <button id="stop-take" hidden>说完了</button>
-        <button id="redo-take" hidden>这遍重来</button>
+        <button id="stop-take" hidden>说完了<kbd class="key key-space" aria-hidden="true">空格</kbd></button>
+        <button id="redo-take" hidden>这遍重来<kbd class="key" aria-hidden="true">Esc</kbd></button>
         <button id="resubmit" hidden>重新提交</button>
       </div>
       <div class="bar" id="rec-progress" hidden><i></i></div>
     </div>
     <div class="peek">
-      <button id="peek">看一眼原文</button>
+      <button id="peek"><span class="label">看一眼原文</span><kbd class="key" aria-hidden="true">T</kbd></button>
       <span class="hint">记不住再看。屏幕上有字，人就会去读它，而不是模仿声音。</span>
       <p id="peek-text" class="sentence-plain" hidden>
         {{ words | map(attribute='text') | join(' ') }}</p>
@@ -107,25 +104,25 @@
 
   <nav class="pager">
     {% if prev_unit %}
-    <a href="/practice/{{ prev_unit.segment }}/{{ prev_unit.unit }}{{ queue.query if queue else '' }}">← 上一句</a>
+    <a href="/practice/{{ prev_unit.segment }}/{{ prev_unit.unit }}{{ queue.query if queue else '' }}"><kbd class="key-arrow" aria-hidden="true">←</kbd> 上一句</a>
     {% else %}<span></span>{% endif %}
     {% if next_unit and queue %}
     <a class="next" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}{{ queue.query }}"
-       >{{ queue.label }}（第 {{ next_unit.number }} 句 · 还剩 {{ queue.remaining }} 句）→</a>
+       >{{ queue.label }}（第 {{ next_unit.number }} 句 · 还剩 {{ queue.remaining }} 句）<kbd class="key-arrow" aria-hidden="true">→</kbd></a>
     {% elif next_unit %}
     <a class="next" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}"
-       >练下一句（第 {{ next_unit.number }}/{{ total_units }} 句）→</a>
+       >练下一句（第 {{ next_unit.number }}/{{ total_units }} 句）<kbd class="key-arrow" aria-hidden="true">→</kbd></a>
     {% elif queue %}
-    <a class="next" href="/sources/{{ source_id }}">{{ queue.done }}，回列表 →</a>
+    <a class="next" href="/sources/{{ source_id }}">{{ queue.done }}，回列表 <kbd class="key-arrow" aria-hidden="true">→</kbd></a>
     {% else %}
-    <a class="next" href="/sources/{{ source_id }}">这份素材练完了，回列表 →</a>
+    <a class="next" href="/sources/{{ source_id }}">这份素材练完了，回列表 <kbd class="key-arrow" aria-hidden="true">→</kbd></a>
     {% endif %}
   </nav>
   <p class="retire-row" id="retire-row">
     {%- if retired %}
-    已标为不再练：复习和「下一句」都会跳过这句 · <button type="button" id="unretire" class="link-button">恢复练习</button>
+    已标为不再练：复习和「下一句」都会跳过这句 · <button type="button" id="unretire" class="link-button">恢复练习<kbd class="key" aria-hidden="true">K</kbd></button>
     {%- else %}
-    <button type="button" id="retire" title="复习和「下一句」都跳过这句；以后想练，在这页点「恢复练习」">这句熟了，不再练</button>
+    <button type="button" id="retire" title="复习和「下一句」都跳过这句；以后想练，在这页点「恢复练习」">这句熟了，不再练<kbd class="key" aria-hidden="true">K</kbd></button>
     {%- endif %}
   </p>
   {% if queue %}

@@ -331,8 +331,25 @@ table.units tr[data-retired="1"] a { color: var(--muted); }
 
 .insecure { color: var(--warn); }
 /* 快捷键只对有键盘的设备有意义 */
-.keys { display: none; }
-@media (hover: hover) and (min-width: 641px) { .keys { display: block; margin-top: -8px; } }
+/* 快捷键写在按钮上：键帽样的小标，只在有键盘的电脑上出现。
+   手机上没有键盘，挂着反而占地方 */
+.key { display: none; margin-left: 8px; padding: 0 5px; min-width: 1.5em;
+  border: 1px solid currentColor; border-bottom-width: 2px; border-radius: 4px;
+  font: 500 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center; vertical-align: 1px; opacity: .55; }
+.key-arrow { font: inherit; }
+@media (hover: hover) and (min-width: 641px) {
+  .key { display: inline-block; }
+  /* 空格只挂在此刻按空格会按到的那个按钮上 */
+  #practice .key-space { display: none; }
+  #practice .space-target .key-space { display: inline-block; }
+  /* 按不了的按钮不挂键：录音时「开始」灰着，R 也不认 */
+  button:disabled .key { display: none !important; }
+  /* 翻页的箭头就是 ← → 键：电脑上画成键帽 */
+  .key-arrow { display: inline-block; padding: 0 4px; border: 1px solid currentColor;
+    border-bottom-width: 2px; border-radius: 4px; font-size: 12px; line-height: 1.4;
+    opacity: .7; }
+}
 
 .figure-controls { margin-bottom: 14px; }
 .figure-controls .takes { margin-top: 0; }

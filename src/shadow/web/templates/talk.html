@@ -38,10 +38,9 @@
 
   <p class="hint insecure" id="no-mic" hidden>这台设备上录不了音——浏览器只在
     HTTPS 或 localhost 下才给麦克风权限。换电脑，或者照 README 挂上自己的域名。</p>
-  <p class="hint keys">快捷键：空格 开始说 / 说完了</p>
   <div class="row">
-    <button class="primary" id="talk-start">▶ 开始说（{{ spec.span }}）</button>
-    <button id="talk-stop" hidden>说完了</button>
+    <button class="primary" id="talk-start"><span class="label">▶ 开始说（{{ spec.span }}）</span><kbd class="key" aria-hidden="true">空格</kbd></button>
+    <button id="talk-stop" hidden>说完了<kbd class="key" aria-hidden="true">空格</kbd></button>
     <span class="plays" id="talk-clock"></span>
   </div>
   <div class="bar" id="talk-bar" hidden><i></i></div>

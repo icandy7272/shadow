@@ -15,7 +15,7 @@
   const count = document.getElementById("talk-count");
   const kind = root.dataset.kind;
   const limit = Math.max(10, Number(root.dataset.seconds) || 120);
-  const idle = startButton.textContent;
+  const idle = labelOf(startButton);
 
   if (!window.isSecureContext) {
     const note = document.getElementById("no-mic");
@@ -112,7 +112,7 @@
     stream = null;
     stopButton.hidden = true;
     startButton.hidden = false;
-    startButton.textContent = idle;
+    setLabel(startButton, idle);
     status.classList.remove("live");
     bar.hidden = true;
     clock.textContent = "";

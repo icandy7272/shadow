@@ -192,7 +192,7 @@ if (root) {
     const row = button.parentElement;
     const label = row.querySelector(".plays");
     const timesInput = row.querySelector("input.times");
-    const idle = button.textContent;      // 放完要变回「▶ 播放（2.6s）」
+    const idle = labelOf(button);         // 放完要变回「▶ 播放（2.6s）」
     counts.set(button, 0);
     let audio = null;
     let left = 0;
@@ -204,7 +204,7 @@ if (root) {
       if (audio) { audio.pause(); audio = null; }
       left = 0;
       playing = false;
-      button.textContent = idle;
+      setLabel(button, idle);
       button.classList.remove("stop");
     };
     loops.add(finish);
@@ -231,7 +231,7 @@ if (root) {
       stopLoops();              // 另一段还在放就先停，两段叠在一起什么都听不清
       left = Math.max(1, Number(timesInput ? timesInput.value : 1) || 1);
       playing = true;
-      button.textContent = "■ 停";
+      setLabel(button, "■ 停");
       button.classList.add("stop");
       playOnce();
     });
@@ -281,6 +281,36 @@ if (root) {
   // 电脑上练一句，手要在鼠标和键盘之间来回好几趟。接管几个最常用的键；
   // 只要光标在输入框里，一律不接管——那时每个键都该是在打字。
   // 认键一律用 physicalKey：中文输入法开着时 event.key 会变成 "Process"
+  // 空格此刻按的是哪个按钮。按键处理和按钮上的「空格」小标用同一条规则：
+  // 录音中是「说完了」；出了结果是「同时播放」；否则是最后展开的那一步的播放键
+  // （练到第二步，空格该放的是第二步的重听）
+  const spaceTarget = () => {
+    if (recording) return document.getElementById("stop-take");
+    const both = document.querySelector("#rec-result:not([hidden]) .playbar > button");
+    if (both) return both;
+    const plays = [...document.querySelectorAll(".step:not(.locked) button.play")];
+    return plays[plays.length - 1] || null;
+  };
+  // 「空格」小标只挂在它此刻对应的那个按钮上，别处的藏起来
+  const markSpace = () => {
+    const target = spaceTarget();
+    root.querySelectorAll("button").forEach((button) => {
+      const want = button === target;
+      // 只在变了的时候改：改 class 会再触发一次观察，不变就不改，免得来回打转
+      if (button.classList.contains("space-target") !== want) {
+        button.classList.toggle("space-target", want);
+      }
+    });
+  };
+  // 攒一下再刷：一次操作会连着改好几处。不用 requestAnimationFrame——页面在后台时它不跑
+  let marking = 0;
+  new MutationObserver(() => {
+    clearTimeout(marking);
+    marking = setTimeout(markSpace, 0);
+  }).observe(root, { subtree: true, childList: true, attributes: true,
+                     attributeFilter: ["class", "hidden", "disabled"] });
+  markSpace();
+
   //
   // 一句从头到尾不碰鼠标：空格放 → 1–5 打分 → 打字、回车对答案 → R 开始跟读 →
   // （自动收，或空格说完了）→ 空格听对比 → → 下一句。
@@ -297,7 +327,7 @@ if (root) {
     // 跟读这一步还锁着的时候，它里面的东西一律不碰：「看一眼原文」提前按出来，盲听就废了
     const shadowing = !byId("step-record").classList.contains("locked");
     // 结果页的三个播放键：同时播放、只听原声、只听我的
-    const [both, onlyRef, onlyMine] =
+    const [, onlyRef, onlyMine] =
       [...document.querySelectorAll("#rec-result:not([hidden]) .playbar > button")];
 
     if (key === "Escape") {
@@ -332,22 +362,9 @@ if (root) {
     }
 
     if (key === " ") {
-      if (recording) {
-        // 正在录这一遍：空格就是「说完了」。别的时候不放音——原声正按节奏走着
-        press(byId("stop-take"));
-        return;
-      }
-      // 出了结果，空格就是对比着听：录完第一件想做的事是听自己刚才那遍
-      if (both) {
-        press(both);
-        return;
-      }
-      // 放最后展开的那一步的音：练到第二步了，空格该放的是第二步的重听
-      const buttons = [...document.querySelectorAll(".step:not(.locked) button.play")];
-      const play = buttons[buttons.length - 1];
-      if (!play) return;
-      event.preventDefault();
-      play.click();
+      // 录着的时候是「说完了」（别的时候不放音——原声正按节奏走着）；
+      // 出了结果是对比着听：录完第一件想做的事是听自己刚才那遍
+      press(spaceTarget());
       return;
     }
     if (/^[1-5]$/.test(key)) {
@@ -600,7 +617,7 @@ if (peekButton) {
   const peekText = document.getElementById("peek-text");
   peekButton.addEventListener("click", () => {
     peekText.hidden = !peekText.hidden;
-    peekButton.textContent = peekText.hidden ? "看一眼原文" : "收起原文";
+    setLabel(peekButton, peekText.hidden ? "看一眼原文" : "收起原文");
     if (!peekText.hidden) sawText = true;
   });
 }

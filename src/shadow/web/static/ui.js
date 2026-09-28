@@ -7,6 +7,27 @@ function el(tag, className, text) {  // eslint-disable-line no-unused-vars
   return node;
 }
 
+// 按钮上的快捷键小标（只在有键盘的电脑上显示）。按钮上的字放在 .label 里：
+// 放着的时候按钮变成「■ 停」只改这段字，小标留着——整个 textContent 一改就抹掉了
+function labelOf(button) {  // eslint-disable-line no-unused-vars
+  return (button.querySelector(":scope > .label") || button).textContent;
+}
+
+function setLabel(button, text) {  // eslint-disable-line no-unused-vars
+  (button.querySelector(":scope > .label") || button).textContent = text;
+}
+
+function keyButton(className, text, ...keys) {  // eslint-disable-line no-unused-vars
+  const button = el("button", className);
+  button.append(el("span", "label", text));
+  keys.forEach((key) => {
+    const cap = el("kbd", key === "空格" ? "key key-space" : "key", key);
+    cap.setAttribute("aria-hidden", "true");
+    button.append(cap);
+  });
+  return button;
+}
+
 // 中文输入法开着的时候，Chrome 先把键交给输入法：event.key 变成 "Process"，
 // 于是所有按键名都对不上，快捷键集体失灵——而页面上还写着「1–5 打分」。
 // event.code 是键盘上那个物理键位，跟输入法、跟键盘布局都无关，按它判断才稳。
