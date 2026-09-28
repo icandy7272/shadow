@@ -174,4 +174,15 @@
   });
 
   stopButton.addEventListener("click", finish);
+
+  // 空格：开始说 / 说完了。勾选表达的复选框上按空格还是勾选它
+  document.addEventListener("keydown", (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
+    if (event.target.closest("input, textarea, select, [contenteditable]")) return;
+    if (physicalKey(event) !== " ") return;
+    const target = stopButton.hidden ? startButton : stopButton;
+    if (target.hidden || target.disabled) return;
+    event.preventDefault();
+    target.click();
+  });
 })();

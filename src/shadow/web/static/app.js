@@ -281,19 +281,65 @@ if (root) {
   // 电脑上练一句，手要在鼠标和键盘之间来回好几趟。接管几个最常用的键；
   // 只要光标在输入框里，一律不接管——那时每个键都该是在打字。
   // 认键一律用 physicalKey：中文输入法开着时 event.key 会变成 "Process"
+  //
+  // 一句从头到尾不碰鼠标：空格放 → 1–5 打分 → 打字、回车对答案 → R 开始跟读 →
+  // （自动收，或空格说完了）→ 空格听对比 → → 下一句。
   document.addEventListener("keydown", (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
     if (event.target.closest("input, textarea, select, [contenteditable]")) return;
     const key = physicalKey(event);
+    const byId = (id) => document.getElementById(id);
+    const press = (button) => {
+      if (!button || button.hidden || button.disabled) return;
+      event.preventDefault();
+      button.click();
+    };
+    // 跟读这一步还锁着的时候，它里面的东西一律不碰：「看一眼原文」提前按出来，盲听就废了
+    const shadowing = !byId("step-record").classList.contains("locked");
+    // 结果页的三个播放键：同时播放、只听原声、只听我的
+    const [both, onlyRef, onlyMine] =
+      [...document.querySelectorAll("#rec-result:not([hidden]) .playbar > button")];
+
+    if (key === "Escape") {
+      if (recording) press(byId("redo-take"));      // 这一遍说砸了，作废重来
+      return;
+    }
+    if (recording && key !== " ") return;           // 录着的时候只认说完了、重来
+    if (key === "r") {
+      if (shadowing) press(byId("start-record"));
+      return;
+    }
+    if (key === "t") {
+      if (shadowing) press(byId("peek"));
+      return;
+    }
+    if (key === "o" || key === "m") {
+      press(key === "o" ? onlyRef : onlyMine);
+      return;
+    }
+    if (key === "k") {
+      // 一个键就把这句从复习里拿掉还跳走了，按错了不容易发现：键盘上多问一句
+      const retire = byId("retire");
+      if (retire && !retire.disabled) {
+        event.preventDefault();
+        if (window.confirm("这句不再练？复习和「下一句」都会跳过它，以后可以在这页恢复。")) {
+          retire.click();
+        }
+        return;
+      }
+      press(byId("unretire"));
+      return;
+    }
 
     if (key === " ") {
       if (recording) {
         // 正在录这一遍：空格就是「说完了」。别的时候不放音——原声正按节奏走着
-        const done = document.getElementById("stop-take");
-        if (done && !done.hidden) {
-          event.preventDefault();
-          done.click();
-        }
+        press(byId("stop-take"));
+        return;
+      }
+      // 出了结果，空格就是对比着听：录完第一件想做的事是听自己刚才那遍
+      if (both) {
+        press(both);
         return;
       }
       // 放最后展开的那一步的音：练到第二步了，空格该放的是第二步的重听
@@ -338,8 +384,17 @@ if (root) {
   };
   typed.addEventListener("input", refreshCount);
   typed.addEventListener("keydown", (event) => {
-    // 回车就是对答案；输入法选词的回车不算
-    if (physicalKey(event) !== "Enter" || event.isComposing || event.shiftKey) return;
+    if (event.isComposing) return;              // 输入法选词的回车、取消的 Esc 不算
+    const key = physicalKey(event);
+    if (key === "Escape") {
+      // 写到一半想再听一遍：手不用离开键盘，光标也留在原处
+      event.preventDefault();
+      drillStep.querySelector("button.play")?.click();
+      typed.focus();
+      return;
+    }
+    // 回车就是对答案
+    if (key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     submitDrill.click();
   });

@@ -72,6 +72,15 @@
 
   button.addEventListener("click", () => (playing ? stop() : start(0)));
 
+  // 空格：连着放 / 停。光标在输入框里时不接管
+  document.addEventListener("keydown", (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
+    if (event.target.closest("input, textarea, select, [contenteditable]")) return;
+    if (physicalKey(event) !== " ") return;
+    event.preventDefault();
+    button.click();
+  });
+
   // 点某一句，从这句接着往下放
   list.addEventListener("click", (event) => {
     const item = event.target.closest(".chain-item");
