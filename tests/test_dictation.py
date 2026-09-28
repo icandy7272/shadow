@@ -98,3 +98,22 @@ def test_a_number_can_be_typed_as_digits_or_as_a_word():
     assert dictation.matches("seven", "7,")
     assert dictation.matches("25", "twenty-five")
     assert not dictation.matches("8", "seven")
+
+
+def test_a_misspelling_lines_up_with_the_word_it_looks_like():
+    """实测：漏了 a、把 calligraphy 写成 celigraph，却被判成「a 写成 celigraph、
+    calligraphy 漏写」。写错按像不像算代价，像的那个才对得上。"""
+    words = _words("I", "decided", "to", "take", "a", "calligraphy", "class")
+
+    graded = dictation.grade(words, "I decided to take celigraph class")
+
+    assert [(mark.answer, mark.status, mark.guess) for mark in graded.marks][4:6] == [
+        ("a", MISSING, ""), ("calligraphy", WRONG, "celigraph")]
+    assert graded.extras == ()
+
+
+def test_stopping_early_still_leaves_the_missing_words_at_the_end():
+    """像不像只在有得选时起作用：写到一半停下，缺的仍是后半句。"""
+    words = _words("I", "decided", "to", "take", "a", "calligraphy", "class")
+
+    assert _statuses(dictation.grade(words, "I decided to")) == [OK, OK, OK] + [MISSING] * 4

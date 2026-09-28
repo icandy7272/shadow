@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import re
+from difflib import SequenceMatcher
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -85,24 +86,38 @@ def _typed(text: str) -> list[tuple[str, bool]]:
     return out
 
 
+# 代价都乘了 100，好用整数比大小（回溯时要判相等，浮点数靠不住）。
+GAP = 100            # 漏写一个、多写一个
+WRONG_BASE = 100     # 写错一个，再按不像的程度往上加，最多加 WRONG_SPREAD
+WRONG_SPREAD = 90    # 加满也不到 GAP：写错一个永远比「漏写 + 多写」便宜
+
+
 def _cost(answer: str, typed: tuple[str, bool]) -> int:
+    """写的这个词对上原文这个词要花多少。
+
+    原来写错一律算 1：celigraph 对 a 和对 calligraphy 一样贵，打平了就挑错。
+    现在越像越便宜，拼错的词会对上它像的那个。
+    """
     guess, unknown = typed
-    return 0 if unknown or matches(guess, answer) else 1
+    if unknown or matches(guess, answer):
+        return 0
+    alike = SequenceMatcher(None, _bare(guess), _bare(answer), autojunk=False).ratio()
+    return WRONG_BASE + round(WRONG_SPREAD * (1 - alike))
 
 
 def _table(answers: Sequence[tuple[int, str]], typed: Sequence[tuple[str, bool]]):
-    """编辑距离表：对上 0，写错 1，漏写 1，多写 1。"""
+    """编辑距离表：对上 0，写错 100–190（越不像越贵），漏写 100，多写 100。"""
     rows, cols = len(answers), len(typed)
     table = [[0] * (cols + 1) for _ in range(rows + 1)]
     for i in range(1, rows + 1):
-        table[i][0] = i
+        table[i][0] = i * GAP
     for j in range(1, cols + 1):
-        table[0][j] = j
+        table[0][j] = j * GAP
     for i in range(1, rows + 1):
         for j in range(1, cols + 1):
             table[i][j] = min(table[i - 1][j - 1] + _cost(answers[i - 1][1], typed[j - 1]),
-                              table[i - 1][j] + 1,
-                              table[i][j - 1] + 1)
+                              table[i - 1][j] + GAP,
+                              table[i][j - 1] + GAP)
     return table
 
 
@@ -121,11 +136,11 @@ def grade(words: Sequence[Word], text: str) -> Graded:
     i, j = len(answers), len(typed)
     # 从后往前回溯：一样好时先认漏写、多写，这样对上的词都靠前
     while i > 0 or j > 0:
-        if i > 0 and table[i][j] == table[i - 1][j] + 1:
+        if i > 0 and table[i][j] == table[i - 1][j] + GAP:
             index, answer = answers[i - 1]
             marks.append(Mark(index=index, answer=answer, guess="", status=MISSING))
             i -= 1
-        elif j > 0 and table[i][j] == table[i][j - 1] + 1:
+        elif j > 0 and table[i][j] == table[i][j - 1] + GAP:
             guess, unknown = typed[j - 1]
             if not unknown:
                 extras.append(guess)
