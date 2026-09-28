@@ -90,3 +90,11 @@ def test_nothing_typed_means_every_word_is_missing():
 def test_key_is_lowercase_without_edge_punctuation():
     assert dictation.key("Graduated,") == "graduated"
     assert dictation.key("“I'm") == "i'm"
+
+
+def test_a_number_can_be_typed_as_digits_or_as_a_word():
+    """原文写 seven，默写成 7 也对；原文写 7，默写成 seven 也对。"""
+    assert dictation.matches("7", "seven")
+    assert dictation.matches("seven", "7,")
+    assert dictation.matches("25", "twenty-five")
+    assert not dictation.matches("8", "seven")

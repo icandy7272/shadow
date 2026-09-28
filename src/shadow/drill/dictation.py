@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from ..models import Word
+from ..text import spell_number
 
 OK = "ok"
 WRONG = "wrong"
@@ -52,7 +53,8 @@ def split(text: str) -> Token:
 
 
 def _bare(text: str) -> str:
-    return _IGNORED.sub("", text.lower())
+    bare = _IGNORED.sub("", text.lower())
+    return spell_number(bare) or bare          # 7 和 seven 是同一个词
 
 
 def needs_box(text: str) -> bool:

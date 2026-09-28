@@ -97,3 +97,9 @@ def test_unreliable_indices_flags_words_the_audio_does_not_support():
 
 def test_nothing_is_unreliable_when_both_agree():
     assert unreliable_indices(REF, list(REF)) == frozenset()
+
+
+def test_a_number_said_the_same_but_written_differently_is_not_misheard():
+    """实测：「walk the seven miles」三遍里两遍被判成「seven→听成 7」。"""
+    tokens = diff_words(["walk", "the", "seven", "miles"], ["walk", "the", "7", "miles"])
+    assert kinds(tokens) == ["equal", "equal", "equal", "equal"]
