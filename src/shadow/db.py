@@ -297,6 +297,48 @@ def segment_edges(conn: sqlite3.Connection, segment_id: int) -> tuple[float, flo
 # --- 练习记录 ---------------------------------------------------------------
 
 
+# 一轮里各步留下的列。并行的时候逐列搬到保留的那一行
+_ROUND_COLUMNS = ("blind_rating", "gapfill_correct", "gapfill_total", "gapfill_heard",
+                  "gapfill_replays", "gapfill_unknown", "saw_text")
+
+
+def round_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """每一行练习记录做了哪几步：打过分、默写过、录过几遍音。认同一轮用。"""
+    return conn.execute(
+        "SELECT r.id, r.segment_id, r.unit_index, r.unit_text, r.started_at,"
+        " r.blind_rating, r.gapfill_total,"
+        " (SELECT COUNT(*) FROM attempts a WHERE a.run_id = r.id) AS takes"
+        " FROM practice_runs r").fetchall()
+
+
+def merge_runs(conn: sqlite3.Connection, groups: Sequence[Sequence[int]]) -> int:
+    """每组并进它的第一行：各步的数据搬过去，录音挂过去，其余几行删掉。
+
+    一个事务里做完：并到一半出错，库还是原样。返回删掉了几行。
+    """
+    removed = 0
+    with conn:
+        for ids in groups:
+            keep, rest = ids[0], list(ids[1:])
+            if not rest:
+                continue
+            marks = ", ".join("?" for _ in rest)
+            for column in _ROUND_COLUMNS:
+                conn.execute(
+                    f"UPDATE practice_runs SET {column} = (SELECT {column} FROM practice_runs"
+                    f" WHERE id IN ({marks}) AND {column} IS NOT NULL ORDER BY id LIMIT 1)"
+                    f" WHERE id = ? AND {column} IS NULL", (*rest, keep))
+            conn.execute(
+                "UPDATE practice_runs SET finished_at = (SELECT MAX(COALESCE(finished_at,"
+                f" started_at)) FROM practice_runs WHERE id IN (?, {marks})) WHERE id = ?",
+                (keep, *rest, keep))
+            conn.execute(f"UPDATE attempts SET run_id = ? WHERE run_id IN ({marks})",
+                         (keep, *rest))
+            conn.execute(f"DELETE FROM practice_runs WHERE id IN ({marks})", rest)
+            removed += len(rest)
+    return removed
+
+
 def run_unit(conn: sqlite3.Connection, run_id: int) -> tuple[int, int] | None:
     """这一轮练的是哪一句：(片段, 单元)。没有这一轮就是 None。"""
     row = conn.execute("SELECT segment_id, unit_index FROM practice_runs WHERE id = ?",

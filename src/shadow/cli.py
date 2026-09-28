@@ -9,7 +9,7 @@ from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
 
-from . import config, db, dictionary, media, review
+from . import config, db, dictionary, media, review, rounds
 from .analysis.diff import accuracy as diff_accuracy
 from .drill import dictation
 from .drill.units import ends_mid_phrase, split_into_units
@@ -185,6 +185,52 @@ def cmd_realign(args: argparse.Namespace) -> int:
 
 def _same_sentence(left: str, right: str) -> bool:
     return "".join(left.lower().split()) == "".join(right.lower().split())
+
+
+def _backup(connection, label: str) -> Path:
+    """整个库拷一份到 backups/。用 SQLite 自己的备份，服务开着也拷得完整。"""
+    import sqlite3
+
+    folder = config.data_dir() / "backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    dest = folder / f"shadow-before-{label}-{datetime.now():%Y%m%d-%H%M%S}.db"
+    target = sqlite3.connect(dest)
+    try:
+        connection.backup(target)
+    finally:
+        target.close()
+    return dest
+
+
+def _round_row(row) -> rounds.Row:
+    steps = {rounds.LISTEN if row["blind_rating"] is not None else None,
+             rounds.DRILL if row["gapfill_total"] is not None else None,
+             rounds.RECORD if row["takes"] else None} - {None}
+    return rounds.Row(id=row["id"],
+                      unit=(row["segment_id"], row["unit_index"], row["unit_text"] or ""),
+                      started=datetime.fromisoformat(row["started_at"]),
+                      steps=frozenset(steps))
+
+
+def cmd_merge_rounds(args: argparse.Namespace) -> int:
+    """把旧记录里拆开的同一轮并回一行。
+
+    网页原来打分、默写、跟读各存一行：「练过 N 次」被放大成三倍，
+    今天新练的句子还占掉了当天的复习名额。动手前先把整个库备份一份。
+    """
+    connection = _open_db()
+    groups = rounds.merges([_round_row(row) for row in db.round_rows(connection)])
+    if not groups:
+        print("没有要并的：每一轮都已经是一行了。")
+        return 0
+    extra = sum(len(group) - 1 for group in groups)
+    if args.dry_run:
+        print(f"会并 {len(groups)} 轮，少 {extra} 行。去掉 --dry-run 就动手，动手前会先备份。")
+        return 0
+    backup = _backup(connection, "merge-rounds")
+    removed = db.merge_runs(connection, groups)
+    print(f"并了 {len(groups)} 轮，少了 {removed} 行。原来的库备份在 {backup}")
+    return 0
 
 
 def cmd_recompute(args: argparse.Namespace) -> int:
@@ -648,6 +694,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_recompute = sub.add_parser("recompute", help="拿现在的代码重算所有历史录音")
     p_recompute.set_defaults(func=cmd_recompute)
+
+    p_merge = sub.add_parser("merge-rounds", help="把旧记录里拆开的同一轮并回一行（先备份）")
+    p_merge.add_argument("--dry-run", action="store_true", help="只说会并几轮，不动库")
+    p_merge.set_defaults(func=cmd_merge_rounds)
 
     p_realign = sub.add_parser("realign", help="用强制对齐改写词时间戳")
     p_realign.add_argument("-s", "--segment", type=int, help="只对齐这一个片段")
