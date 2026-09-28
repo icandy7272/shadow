@@ -44,8 +44,28 @@ function physicalKey(event) {  // eslint-disable-line no-unused-vars
   if (letter && (!event.key || event.key === "Process" || event.key === "Unidentified")) {
     return letter[1].toLowerCase();
   }
-  const key = event.key || "";                 // 合成事件没有 code，退回 key
+  // 合成事件没有 code，退回 key。中文输入法全角状态下打出来是「３」「ｒ」「　」，
+  // 折成半角再认
+  const key = (event.key || "").normalize("NFKC");
   return key.length === 1 ? key.toLowerCase() : key;
+}
+
+// 快捷键不灵时的诊断：网址后面加 ?keys=debug，右下角列出最近几次按键——
+// 键盘和输入法到底发了什么，截个图就知道
+if (new URLSearchParams(window.location.search).get("keys") === "debug") {
+  const box = el("pre", "key-debug");
+  box.style.cssText = "position:fixed;right:12px;bottom:12px;z-index:99;margin:0;"
+    + "padding:8px 10px;background:#111;color:#eee;font:12px/1.5 monospace;"
+    + "border-radius:6px;opacity:.9;pointer-events:none;white-space:pre";
+  const lines = [];
+  document.addEventListener("keydown", (event) => {
+    lines.unshift(`key=${JSON.stringify(event.key)} code=${event.code || "-"} `
+      + `keyCode=${event.keyCode} composing=${event.isComposing} `
+      + `→ ${JSON.stringify(physicalKey(event))} @${event.target.tagName.toLowerCase()}`);
+    box.textContent = lines.slice(0, 6).join("\n");
+  }, true);
+  if (document.body) document.body.append(box);
+  else document.addEventListener("DOMContentLoaded", () => document.body.append(box));
 }
 
 // 变速只作用于「听」：盲听、重听、图 2 的对比。

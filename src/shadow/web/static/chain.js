@@ -74,7 +74,8 @@
 
   // 空格：连着放 / 停。光标在输入框里时不接管
   document.addEventListener("keydown", (event) => {
-    if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
+    // 焦点不在输入框里，没有正在组的字：有的输入法把 isComposing 一直带着，不能看它
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
     if (event.target.closest("input, textarea, select, [contenteditable]")) return;
     if (physicalKey(event) !== " ") return;
     event.preventDefault();

@@ -315,7 +315,8 @@ if (root) {
   // 一句从头到尾不碰鼠标：空格放 → 1–5 打分 → 打字、回车对答案 → R 开始跟读 →
   // （自动收，或空格说完了）→ 空格听对比 → → 下一句。
   document.addEventListener("keydown", (event) => {
-    if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
+    // 焦点不在输入框里，没有正在组的字：有的输入法把 isComposing 一直带着，不能看它
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
     if (event.target.closest("input, textarea, select, [contenteditable]")) return;
     const key = physicalKey(event);
     const byId = (id) => document.getElementById(id);
