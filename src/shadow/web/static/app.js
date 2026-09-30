@@ -1256,6 +1256,12 @@ if (root) {
     markComplete(document.getElementById("step-record"));
     document.dispatchEvent(new CustomEvent("shadow:analysed"));
     showResult(last.result, box);
+    // 分析完滚到跟读这一步的开头：每一遍的结果和图都在它下面，不用再自己往下找。
+    // 等分析的十几秒里人常切去别的标签页，页面在后台时平滑滚动不会动——那就直接跳过去
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      || document.visibilityState === "hidden";
+    document.getElementById("step-record").scrollIntoView(
+      { behavior: still ? "auto" : "smooth", block: "start" });
   }
 
   function showResult(data, box) {
