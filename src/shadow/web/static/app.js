@@ -1270,7 +1270,10 @@ if (root) {
       data.skipped.map((s) =>
         `<p class="bad">跳过第 ${s.index} 遍：开头有 ${s.drift} 秒的话没进转写，比不了</p>`).join("") +
       (data.issues.length
-        ? "<p><b>下一遍改这些：</b></p>" + data.issues.map((i) =>
+        ? (data.heard_all
+          // 机器每个词都听对了，发音已经够清楚：停顿、升降调只作参考，不算「要改」、不卡复习
+          ? "<p><b>细节参考</b><span class='hint'>　每个词机器都听对了，这些不算「要改」，不影响复习</span></p>"
+          : "<p><b>下一遍改这些：</b></p>") + data.issues.map((i) =>
             `<div class="issue"><b>${i.title}</b>（${i.hits}/${i.total} 次）` +
             `<span>${i.detail}</span><span>${i.action}</span></div>`).join("")
         : "<p class='ok'>没有反复出现的问题。</p>") +

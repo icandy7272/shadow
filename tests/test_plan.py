@@ -100,9 +100,11 @@ def test_the_worst_sentences_come_first():
         return plan.urgency(due=TODAY - timedelta(days=overdue), today=TODAY,
                             issues=issues, rating=rating)
 
-    assert key(issues=1) < key(rating=1) < key()           # 老问题 > 没听懂 > 单纯到期
+    # 没听懂 > 老问题 > 单纯到期。原来老问题排最前，听懂了只剩停顿没改好的句子
+    # 占满每天的名额，真没听懂的反而天天顺延
+    assert key(rating=1) < key(issues=1) < key()
     assert key(overdue=5) < key(overdue=1)                 # 同一档里逾期久的在前
-    assert key(issues=1, overdue=0) < key(rating=1, overdue=9)
+    assert key(rating=1, overdue=0) < key(issues=1, overdue=9)
 
 
 @pytest.fixture()

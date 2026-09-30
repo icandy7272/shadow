@@ -57,7 +57,9 @@ def _practised(segment_id, unit, *, on, titles=(), rating=4):
     db.set_blind_rating(connection, run_id, rating)
     for _ in range(2):
         db.add_attempt(connection, run_id=run_id, audio_path="x.wav", asr_text=text,
-                       metrics={"accuracy": 1.0, "speech_ratio": 1.0, "pause_ratio": None,
+                       # 带问题的按没全听对：全听对时问题不计入「要改」
+                       metrics={"accuracy": 0.9 if titles else 1.0,
+                                "speech_ratio": 1.0, "pause_ratio": None,
                                 "issues": [{"kind": "stretched", "ref_index": 0,
                                             "score": 1.0, "title": t} for t in titles]})
     db.finish_run(connection, run_id)

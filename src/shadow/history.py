@@ -8,8 +8,10 @@
 from __future__ import annotations
 
 from collections import Counter
+import statistics
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Sequence
 
 from . import db
 from .report.takes import recurrence_threshold
@@ -29,6 +31,26 @@ def _local_date(stamp: str) -> str:
         return stamp[:10]
 
 
+def clearly_heard(metrics: Sequence[dict]) -> bool:
+    """这一轮多数几遍里，机器是不是每个词都听对了。"""
+    heard = [take["accuracy"] for take in metrics if take.get("accuracy") is not None]
+    return bool(heard) and statistics.median(heard) >= 1.0
+
+
+def open_issues(metrics: Sequence[dict]) -> tuple[str, ...]:
+    """这一轮留下的「要改」：多数几遍里都出现的问题，出现得多的在前。
+
+    机器在多数几遍里每个词都听对了，就一条也不算。发音已经清楚到机器每个词都认得出，
+    剩下的停顿、升降调听着像样却一直被判要改，熟句子因此天天回来；
+    而且换一份材料又是另一回事。这些提示在结果页照样给，只是不再卡复习。
+    """
+    if clearly_heard(metrics):
+        return ()
+    counted = Counter(issue["title"] for take in metrics for issue in take.get("issues", ()))
+    threshold = recurrence_threshold(len(metrics))
+    return tuple(title for title, hits in counted.most_common() if hits >= threshold)
+
+
 def last_practice(connection, segment_id: int, unit_index: int) -> Practice | None:
     """没练过、或练了但没录音，都返回 None。"""
     rounds = [
@@ -41,13 +63,7 @@ def last_practice(connection, segment_id: int, unit_index: int) -> Practice | No
         return None
 
     row, metrics = rounds[-1]
-    counted = Counter(
-        issue["title"] for take in metrics for issue in take.get("issues", ())
-    )
-    threshold = recurrence_threshold(len(metrics))
-    issues = tuple(
-        title for title, hits in counted.most_common() if hits >= threshold
-    )
+    issues = open_issues(metrics)
     return Practice(
         times=len(rounds),
         when=_local_date(row["finished_at"] or row["started_at"]),

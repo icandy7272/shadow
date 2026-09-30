@@ -322,11 +322,8 @@ def _unit_audio(connection, segment_id: int, unit: int) -> Path:
 
 
 def _recurring(metrics: list[dict]) -> int:
-    """上一轮反复出现的问题有几条。偶尔犯一次的不算。"""
-    counted = Counter(issue["title"] for take in metrics
-                      for issue in take.get("issues", ()))
-    threshold = recurrence_threshold(len(metrics))
-    return sum(1 for hits in counted.values() if hits >= threshold)
+    """上一轮还「要改」的有几条。规则和练习页「上次」那一块是同一条（history.open_issues）。"""
+    return len(history.open_issues(metrics))
 
 
 def _sentences(connection, source_id: int) -> list[dict]:
@@ -1003,6 +1000,8 @@ def _review_payload(result, run_id: int, *, audio: dict, takes: dict,
                     for i, _n, d in result.skipped],
         "rejected": list(rejected),
         "accuracy": round(summary.accuracy.median * 100),
+        # 多数几遍机器每个词都听对了：下面的问题只作参考，不算「要改」（history.open_issues）
+        "heard_all": summary.accuracy.median >= 1.0,
         "speech": round(summary.speech_ratio.median, 2),
         "pause": None if summary.pause_ratio is None
                  else round(summary.pause_ratio.median, 2),

@@ -91,14 +91,15 @@ def test_practice_page_links_to_the_neighbouring_units(client, tmp_path):
     assert f'href="/practice/{segment_id}/3"' not in body
 
 
-def _finished_run(segment_id, unit, titles):
+def _finished_run(segment_id, unit, titles, heard=0.8):
+    """录过音的一轮。可懂度默认没到 100%：全听对时问题不计入「要改」。"""
     connection = db.connect()
     run_id = db.start_run(connection, segment_id=segment_id, unit_index=unit,
                           unit_text="It was a start.")
     for _ in range(2):
         db.add_attempt(
             connection, run_id=run_id, audio_path="x.wav", asr_text="It was a start.",
-            metrics={"accuracy": 1.0, "speech_ratio": 1.1, "pause_ratio": None,
+            metrics={"accuracy": heard, "speech_ratio": 1.1, "pause_ratio": None,
                      "issues": [{"kind": "stretched", "ref_index": 0, "score": 1.0,
                                  "title": t} for t in titles]},
         )
@@ -484,6 +485,8 @@ def test_takes_endpoint_runs_the_whole_review(client, tmp_path, monkeypatch):
     data = _stream(response)[-1]["result"]
     assert data["count"] == 2
     assert data["accuracy"] == 100
+    # 每个词都听对了：停顿、升降调的提示只作参考，不算「要改」
+    assert data["heard_all"] is True
     # 每一遍都出图，让人自己挑着看
     assert len(data["view"]["takes"]) == 2
     assert 0 <= data["view"]["chosen"] < 2

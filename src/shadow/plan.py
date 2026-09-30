@@ -167,12 +167,13 @@ def urgency(*, due: date, today: date, issues: int,
             rating: int | None) -> tuple[int, int]:
     """排队用的先后：越小越先练。
 
-    老问题没解决 → 盲听没听懂 → 单纯到期；同一档里逾期越久的越靠前。
-    快忘掉的东西复习收益最高，而人的注意力在前几分钟最好。
+    盲听没听懂 → 老问题没解决 → 单纯到期；同一档里逾期越久的越靠前。
+    没听懂是最大的缺口，排最前：原来老问题排第一，听懂了只剩细节的句子占满每天的
+    名额，真没听懂的天天顺延。快忘掉的东西复习收益最高，而人的注意力在前几分钟最好。
     """
-    if issues > 0:
+    if rating is not None and rating <= LOW_RATING:
         rank = 0
-    elif rating is not None and rating <= LOW_RATING:
+    elif issues > 0:
         rank = 1
     else:
         rank = 2

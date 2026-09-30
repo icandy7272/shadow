@@ -61,7 +61,7 @@ def test_review_puts_the_worst_sentences_first():
                     _due(rating=1),              # 没听懂
                     _due(issues=2),              # 老问题没解决
                     _due(days_over=9))           # 逾期最久的到期句
-    assert picked.order == (2, 1, 3, 0)
+    assert picked.order == (1, 2, 3, 0)          # 没听懂 → 老问题 → 按逾期
     assert picked.resorted
 
 

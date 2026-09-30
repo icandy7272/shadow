@@ -33,15 +33,21 @@ def _rows(body):
     return {int(number): (due == "1", int(rank)) for due, rank, number in found}
 
 
-def _practised(segment_id, unit, *, on, titles=(), rating=4):
-    """某一天练过这句：自评几分、录音里反复出现哪些问题。"""
+def _practised(segment_id, unit, *, on, titles=(), rating=4, heard=None):
+    """某一天练过这句：自评几分、录音里反复出现哪些问题。
+
+    heard 是机器听对的比例。不给的话：带问题时按没全听对（0.9）——全听对时问题
+    不计入「要改」；不带问题时按全听对。
+    """
+    if heard is None:
+        heard = 0.9 if titles else 1.0
     connection = db.connect()
     run_id = db.start_run(connection, segment_id=segment_id, unit_index=unit,
                           unit_text=TEXTS[unit])
     db.set_blind_rating(connection, run_id, rating)
     for _ in range(2):
         db.add_attempt(connection, run_id=run_id, audio_path="x.wav", asr_text=TEXTS[unit],
-                       metrics={"accuracy": 1.0, "speech_ratio": 1.0, "pause_ratio": None,
+                       metrics={"accuracy": heard, "speech_ratio": 1.0, "pause_ratio": None,
                                 "issues": [{"kind": "stretched", "ref_index": 0,
                                             "score": 1.0, "title": t} for t in titles]})
     db.finish_run(connection, run_id)
@@ -278,3 +284,20 @@ def test_the_list_says_what_its_numbers_mean(client, tmp_path):
     assert '<td class="num left">2 处</td>' in body
     assert '<td class="num runs">1 次</td>' in body
     assert "·2" not in body
+
+
+def test_a_sentence_heard_word_for_word_moves_on_despite_pauses_and_pitch(client, tmp_path):
+    """听懂了（5 分），机器每个词都听对了，只剩停顿、升降调：不算要改，照常往后推，
+    不再第二天又回来。实测第 15 句 13 轮，每轮 5 分、每轮都剩一两处，天天回来。"""
+    segment_id = _seed(tmp_path)
+    for days_ago in (4, 1):              # 练了两轮：第一轮之后都是隔天，第二轮才分得出来
+        _practised(segment_id, 1, on=MONDAY - timedelta(days=days_ago), rating=5,
+                   titles=["“there” 后面该停没停"], heard=1.0)
+        _practised(segment_id, 2, on=MONDAY - timedelta(days=days_ago), rating=5,
+                   titles=["“was” 该降没降"], heard=0.75)      # 有词没听对：照旧要改
+
+    body = _home(client, segment_id)
+
+    assert _rows(body) == {1: (False, 0), 2: (True, 1)}
+    assert '<td class="num left">1 处</td>' in body              # 只有第 2 句
+    assert body.count('<td class="num left"></td>') == 1
