@@ -21,12 +21,20 @@ const SLOT_GAP_PX = 8;
 const FALLBACK_WIDTH = 760;
 const WORD_PAD = 0.06;    // 单词试听前后各留一点，免得削掉爆破音
 const WORD_GAP_MS = 240;  // 两条之间留个空，耳朵才分得开
-const WORD_ROUNDS = 2;    // 原声→你的，来回两遍
+const WORD_ROUNDS = 10;   // 原声→你的，来回十遍
 const PRE_ROLL = 0.15;    // 两条都提前一点起播：正好切在词头会削掉爆破音的起音，
                           // 两边削掉的还不一样多，听着就像没对齐
 
 const svgNS = "http://www.w3.org/2000/svg";
 const HELP_KEY = "shadow.fig-help";
+
+// 只保留当前选词试听的停止入口，切换录音不会累积页面事件监听。
+let stopSelectedWords = null;
+document.addEventListener("pointerdown", (event) => {
+  if (!stopSelectedWords) return;
+  if (event.target.closest("button, a, input, select, textarea, label, summary")) return;
+  stopSelectedWords();
+});
 
 // 图的说明第一次有用，之后每次都占地方：收起来，想看再点。展开与否记在本机
 function figHelp(title, text) {
@@ -346,8 +354,8 @@ function pitchFigure(slots) {
   const node = el("figure", "fig");
   const caption = figHelp("图 2 · 音高",
     "一词一格（横轴不是时间），线的高低 = 音高，"
-    + "线的走向 = 这个词从头到尾怎么走的。点一个词：先放原声再放你的，来回两遍；"
-    + "按住往旁边拖，可以把连读的几个词连起来听。");
+    + "线的走向 = 这个词从头到尾怎么走的。点一个词：先放原声再放你的，来回十遍；"
+    + "按住往旁边拖，可以把连读的几个词连起来听。点击页面空白可停止试听。");
   // 图例是看图的钥匙，留在标题行上，不跟着说明收起来
   caption.querySelector("summary").append(el("i", "legend-ref", "原声（虚线）"),
                                           el("i", "legend-usr", "你（实心）"));
@@ -553,6 +561,7 @@ function playback(rhythm, audio, onFrame, onStopped) {
   const RESUME_WAIT_MS = 1000;
   let context = null;
   let timer = null;
+  let cancelClip = null;
   let session = 0;
 
   const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -625,6 +634,8 @@ function playback(rhythm, audio, onFrame, onStopped) {
   // 按钮状态立刻重置掉——按钮按下去就弹回来。
   function halt() {
     session += 1;
+    if (stopSelectedWords === stop) stopSelectedWords = null;
+    if (cancelClip) cancelClip();
     if (timer) clearInterval(timer);
     timer = null;
     [ref, usr].forEach((media) => media.pause());
@@ -690,9 +701,12 @@ function playback(rhythm, audio, onFrame, onStopped) {
       let watch = null;
       const finish = () => {
         clearInterval(watch);
+        if (timer === watch) timer = null;
+        cancelClip = null;
         media.pause();
         done();
       };
+      cancelClip = finish;
       watch = setInterval(() => {
         if (mine !== session || media.currentTime >= to || media.ended
             || performance.now() - since > cap) {
@@ -704,10 +718,12 @@ function playback(rhythm, audio, onFrame, onStopped) {
     });
   }
 
-  // 单词层级的对比：同一个词，先放原声再放你的，来回两遍。
+  // 单词层级的对比：同一个词，先放原声再放你的，来回十遍。
   // 一个词只有两三百毫秒，两条叠在一起听不出什么，得挨着放。
   async function compare(slot, onSide) {
+    if (stopSelectedWords) stopSelectedWords();
     halt();
+    stopSelectedWords = stop;
     const mine = session;
     [ref, usr].forEach(prime);             // 必须在第一个 await 之前
     graph();
@@ -738,7 +754,9 @@ function playback(rhythm, audio, onFrame, onStopped) {
 
   // 只放一条：图 1 的两行各属于一个音源，点哪行就放哪行
   async function playOne(side, at, onSide) {
+    if (stopSelectedWords) stopSelectedWords();
     halt();
+    stopSelectedWords = stop;
     const mine = session;
     const media = side === "ref" ? ref : usr;
     prime(media);                          // 必须在第一个 await 之前
