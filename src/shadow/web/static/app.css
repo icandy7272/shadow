@@ -670,6 +670,7 @@ button.miss-word:hover { color: var(--accent); }
 .step.foldable > h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px;
   border-radius: 4px; }
 .step.foldable.done h2::after { content: "已完成 · 点开看默写"; }
+.step.foldable.done.skipped h2::after { content: "已跳过 · 点开补写"; }
 .step.foldable:not(.done) h2::after { content: "收起"; margin-left: auto; font-size: 12px;
   font-weight: 400; color: var(--muted); }
 

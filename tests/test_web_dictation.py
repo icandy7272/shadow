@@ -28,6 +28,8 @@ def test_the_dictation_step_is_one_box_with_a_word_count(client, tmp_path):
     assert 'id="dictation-text"' in body
     assert "已写 0/3 个词" in body
     assert 'id="dictation-unknown"' in body
+    assert 'id="skip-drill"' in body
+    assert "跳过默写" in body
     assert 'class="box"' not in body
     # 对答案之前，默写这一步里不能有原文
     assert "Thank" not in body.split('id="step-record"')[0]
@@ -162,3 +164,24 @@ def test_a_malformed_round_number_starts_a_fresh_round(client, tmp_path):
                                                   "text": "It was a start.",
                                                   "run_id": "12; DROP"}).json()
     assert isinstance(graded["run_id"], int)
+
+
+def test_dictation_auto_skip_uses_cumulative_perfect_runs(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    page = lambda: client.get(f"/practice/{segment_id}/2").text
+    assert 'data-auto-skip="false"' in page()
+    _post(client, segment_id, "It was a start.")
+    assert 'data-auto-skip="false"' in page()
+    _post(client, segment_id, "It was start.")
+    _post(client, segment_id, "It was a start.")
+    assert 'data-auto-skip="true"' in page()
+    assert "已全对 2 次，自动跳过" in page()
+    assert 'data-auto-skip="false"' in client.get(f"/practice/{segment_id}/1").text
+
+
+def test_extra_words_and_resubmitting_same_run_do_not_count_twice(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    first = _post(client, segment_id, "It was a start.").json()
+    _post(client, segment_id, "It was a start.", run_id=first["run_id"])
+    _post(client, segment_id, "It was a start extra.")
+    assert 'data-auto-skip="false"' in client.get(f"/practice/{segment_id}/2").text

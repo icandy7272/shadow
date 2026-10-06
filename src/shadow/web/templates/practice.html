@@ -25,8 +25,9 @@
     <p class="saved" hidden></p>
   </section>
 
-  <section class="step locked" id="step-drill">
-    <h2><span class="n">2</span> 默写{{ times(done_before.drill) }}</h2>
+  <section class="step locked" id="step-drill"
+           data-auto-skip="{{ 'true' if done_before.perfect >= 2 else 'false' }}">
+    <h2><span class="n">2</span> 默写{{ times(done_before.drill) }}{% if done_before.perfect >= 2 %}<em class="step-badge">已全对 {{ done_before.perfect }} 次，自动跳过</em>{% endif %}</h2>
     <p class="hint">听到什么写什么，一整句写在下面。漏了词就把光标挪过去补上；不会的词写一个 ?——对完答案会给出释义，并记进生词本。</p>
     <div class="row">
       <button class="play" data-src="/audio/{{ segment }}/{{ unit }}"><span class="label">▶ 重听</span><kbd class="key" aria-hidden="true">Tab</kbd><kbd class="key key-space" aria-hidden="true">空格</kbd></button>
@@ -41,6 +42,7 @@
         <span class="dictation-count" id="dictation-count" data-total="{{ word_total }}">已写 0/{{ word_total }} 个词</span>
         <button type="button" id="dictation-unknown" title="在光标处插一个 ?">不会 ?</button>
         <button class="primary" id="submit-drill">对答案<kbd class="key" aria-hidden="true">回车</kbd></button>
+        <button type="button" id="skip-drill">跳过默写<kbd class="key" aria-hidden="true">空白时回车</kbd></button>
       </div>
     </div>
     <div class="result" hidden></div>

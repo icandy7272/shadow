@@ -268,6 +268,11 @@ if (root) {
       const drill = document.getElementById("step-drill");
       drill.classList.remove("locked");
       markComplete(listenStep);
+      if (drill.dataset.autoSkip === "true" && !drill.classList.contains("foldable")) {
+        document.getElementById("skip-drill").click();
+        document.getElementById("step-record").scrollIntoView({ block: "start" });
+        return;
+      }
       // 展开了但页面不动，还得自己找下去。滚过去；电脑上顺手把光标放进输入框，
       // 手机上不聚焦——弹出的键盘会挡掉半屏
       const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -389,6 +394,7 @@ if (root) {
   // 第二步：整句默写。一整句写在一个框里，漏了词挪光标补上；不会的词写一个 ?
   const drillStep = document.getElementById("step-drill");
   const submitDrill = document.getElementById("submit-drill");
+  const skipDrill = document.getElementById("skip-drill");
   const typed = document.getElementById("dictation-text");
   const counter = document.getElementById("dictation-count");
   const wordTotal = Number(counter.dataset.total);
@@ -413,10 +419,11 @@ if (root) {
       typed.focus();
       return;
     }
-    // 回车就是对答案
+    // 空白时回车跳过，有内容才对答案；Shift+Enter 仍然换行。
     if (key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
-    submitDrill.click();
+    if (typed.value.trim()) submitDrill.click();
+    else skipDrill.click();
   });
   // 在光标处插一个 ?，前后补空格，光标停在它后面接着写
   document.getElementById("dictation-unknown").addEventListener("click", () => {
@@ -428,6 +435,15 @@ if (root) {
     typed.focus();
     typed.setSelectionRange(head.length, head.length);
     refreshCount();
+  });
+
+  skipDrill.addEventListener("click", () => {
+    if (submitDrill.disabled || drillStep.classList.contains("locked")) return;
+    stopLoops();
+    drillStep.classList.add("skipped");
+    setFolded(true);
+    document.getElementById("step-record").classList.remove("locked");
+    document.getElementById("start-record").focus();
   });
 
   submitDrill.addEventListener("click", async () => {
@@ -467,6 +483,7 @@ if (root) {
     box.replaceChildren(...dictationResult(graded));
     // 框收起来，只留答案和释义；开始跟读时整步再收起
     drillStep.classList.add("graded");
+    drillStep.classList.remove("skipped");
     markComplete(drillStep);
     setFolded(false);
     document.getElementById("step-record").classList.remove("locked");

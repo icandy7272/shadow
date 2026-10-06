@@ -143,6 +143,7 @@ MIGRATIONS = (
     ("attempts", "metrics_json", "TEXT"),
     ("practice_runs", "saw_text", "INTEGER"),
     ("practice_runs", "gapfill_unknown", "INTEGER"),
+    ("practice_runs", "dictation_extras", "INTEGER NOT NULL DEFAULT 0"),
     # 点掉的那一步也要记下来：老库里有行就等于勾上了，默认 1 正好对上
     ("plan_checks", "done", "INTEGER NOT NULL DEFAULT 1"),
 )
@@ -371,7 +372,7 @@ def set_blind_rating(conn: sqlite3.Connection, run_id: int, rating: int) -> None
 
 
 def set_dictation(conn: sqlite3.Connection, run_id: int, *, correct: int, total: int,
-                  unknown: int, replays: int) -> None:
+                  unknown: int, replays: int, extras: int = 0) -> None:
     """整句默写的记分。沿用填空时代的列名，gapfill_heard 不再写。
 
     重听次数要记：「重听十遍才写出来」和「一遍就写对」差得很远，
@@ -379,8 +380,8 @@ def set_dictation(conn: sqlite3.Connection, run_id: int, *, correct: int, total:
     """
     conn.execute(
         "UPDATE practice_runs SET gapfill_correct = ?, gapfill_total = ?,"
-        " gapfill_unknown = ?, gapfill_replays = ? WHERE id = ?",
-        (correct, total, unknown, replays, run_id))
+        " gapfill_unknown = ?, gapfill_replays = ?, dictation_extras = ? WHERE id = ?",
+        (correct, total, unknown, replays, extras, run_id))
     conn.commit()
 
 

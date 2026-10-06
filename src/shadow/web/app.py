@@ -698,12 +698,15 @@ def practice(request: Request, segment_id: int, unit: int,
 
 def _step_counts(connection, source_id: int, text: str) -> dict[str, int]:
     """这句之前每一步各做过几次：盲听打过分、默写对过答案、跟读录过音。"""
-    counts = {"listen": 0, "drill": 0, "record": 0}
+    counts = {"listen": 0, "drill": 0, "record": 0, "perfect": 0}
     for run in db.source_runs(connection, source_id):
         if run["unit_text"] != text:
             continue
         counts["listen"] += run["blind_rating"] is not None
         counts["drill"] += run["gapfill_total"] is not None
+        counts["perfect"] += bool(run["gapfill_total"]
+                                  and run["gapfill_correct"] == run["gapfill_total"]
+                                  and not run["dictation_extras"])
         counts["record"] += bool(db.run_metrics(connection, run["id"]))
     return counts
 
@@ -797,7 +800,7 @@ def save_dictation(payload: dict = Body(...)):
     sentence = " ".join(w.text for w in words)
     run_id = _run_for(connection, segment, unit, payload.get("run_id"), words)
     db.set_dictation(connection, run_id, correct=correct, total=len(marks),
-                     unknown=unknown, replays=replays)
+                     unknown=unknown, replays=replays, extras=len(graded.extras))
     # 不会的自动进生词本；写错的可能只是手滑，由人决定
     for mark in marks:
         if mark.status == dictation.UNKNOWN:
