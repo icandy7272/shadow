@@ -210,7 +210,9 @@ if (root) {
     loops.add(finish);
 
     const playOnce = () => {
-      audio = speed.apply(new Audio(button.dataset.src));
+      // 已预载就直接用本地音频；没到齐仍同步起播，保留浏览器点击权限。
+      const src = window.ShadowAudio.peek(button.dataset.src) || button.dataset.src;
+      audio = speed.apply(new Audio(src));
       audio.addEventListener("ended", () => {
         counts.set(button, counts.get(button) + 1);
         if (label) label.textContent = `听了 ${counts.get(button)} 遍`;
@@ -693,6 +695,8 @@ if (root) {
   const redoButton = document.getElementById("redo-take");
   const startButton = document.getElementById("start-record");
   const src = `/audio/${segment}/${unit}`;
+  // 盲听、默写时就准备好，点击跟读无需再走域名和隧道。
+  window.ShadowAudio.url(src).catch(() => {});
 
   // 局域网 HTTP 下浏览器根本不给麦克风权限，点了也只会静默失败。
   // 与其让人一遍遍试，不如直接说清楚。
@@ -725,12 +729,7 @@ if (root) {
     const ctx = new Context();
     const wake = () => { ctx.resume().catch(() => {}); };   // 在点击里调用，iPhone 才放行
     wake();
-    const clip = fetch(src)
-      .then((response) => {
-        if (!response.ok) throw new Error(`原声没取到（${response.status}）`);
-        return response.arrayBuffer();
-      })
-      .then((data) => ctx.decodeAudioData(data));
+    const clip = window.ShadowAudio.decode(src, ctx);
     clip.catch(() => {});   // 先别报：等 ready() 时由调用方说清楚
 
     return {
@@ -1131,7 +1130,7 @@ if (root) {
     status.textContent = "正在准备原声 …";
     const outcome = await Promise.race([
       speaker.ready().then(() => "ok", (err) => err.message || "原声解不开"),
-      sleep(20000).then(() => "原声 20 秒还没下载完"),
+      sleep(20000).then(() => "原声加载或解码超过 20 秒"),
     ]);
     if (outcome !== "ok") {
       status.textContent = `${outcome}。检查一下网络，再点「开始」。`;

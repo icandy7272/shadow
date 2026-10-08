@@ -550,9 +550,26 @@ function pitchFigure(slots) {
 // 两条人声叠在一起会糊成一团，所以分到左右耳——耳机里能直接听出谁走在前面。
 // 两条各自跳到自己的第一个词再起播：起点对齐了，图上同一个 x 才是同一刻。
 function playback(rhythm, audio, onFrame, onStopped) {
-  const ref = new Audio(audio.ref);
-  const usr = new Audio(audio.usr);
-  [ref, usr].forEach((media) => { media.preload = "auto"; speed.follow(media); });
+  const cache = window.ShadowAudio;
+  const ref = new Audio(cache?.peek(audio.ref) || audio.ref);
+  const usr = new Audio(cache?.peek(audio.usr) || audio.usr);
+  const prepared = new Map();
+  function prepare(media, src) {
+    if (!cache) return Promise.resolve();
+    if (!prepared.has(media)) {
+      const pending = cache.url(src).then((url) => {
+        media.src = url;
+        media.preload = "auto";
+        media.load();
+      }).catch((err) => { prepared.delete(media); throw err; });
+      prepared.set(media, pending);
+    }
+    return prepared.get(media);
+  }
+  const urls = new Map([[ref, audio.ref], [usr, audio.usr]]);
+  // 展示反馈时就加载当前录音，原声复用跟读前已下载的文件。
+  [ref, usr].forEach((media) => prepare(media, urls.get(media)).catch(() => {}));
+  [ref, usr].forEach((media) => { media.preload = cache ? "none" : "auto"; speed.follow(media); });
   const offsets = new Map([[ref, audio.refOffset], [usr, audio.usrOffset]]);
   const panners = new Map();
   const primed = new WeakSet();
@@ -580,7 +597,7 @@ function playback(rhythm, audio, onFrame, onStopped) {
 
   // 元数据没到位时 currentTime 定位会被忽略，两条音轨就会各从头播，听着一前一后。
   // 等不来返回 false：宁可这次不放，也别让按钮一直停在「停」上
-  const ready = (media) => (media.readyState >= 1
+  const metadataReady = (media) => (media.readyState >= 1
     ? Promise.resolve(true)
     : new Promise((done) => {
       const giveUp = setTimeout(() => done(false), LOAD_WAIT_MS);
@@ -589,6 +606,9 @@ function playback(rhythm, audio, onFrame, onStopped) {
         done(true);
       }, { once: true });
     }));
+
+  const ready = (media) => prepare(media, urls.get(media))
+    .then(() => metadataReady(media), () => false);
 
   // 定位没落定就 play，会从旧位置开始放然后跳一下
   const settled = (media) => (media.seeking

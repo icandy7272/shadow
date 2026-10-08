@@ -3,13 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function setup({ stopDuringClip = false, stopDuringGap = false } = {}) {
+function setup({ stopDuringClip = false, stopDuringGap = false, cache = null } = {}) {
   const listeners = new Map();
   const media = [];
   let stopped = 0;
   const blank = () => listeners.get('pointerdown')?.({ target: { closest: () => null } });
   class Audio {
-    constructor() { this.readyState = 1; this.currentTime = 0; this.plays = 0; this.paused = true; media.push(this); }
+    constructor(src) { this.src = src; this.readyState = 1; this.currentTime = 0; this.plays = 0; this.paused = true; media.push(this); }
     play() {
       this.plays += 1;
       this.paused = false;
@@ -17,13 +17,14 @@ function setup({ stopDuringClip = false, stopDuringGap = false } = {}) {
       return Promise.resolve();
     }
     pause() { this.paused = true; }
+    load() { this.readyState = 1; }
   }
   class AudioContext {
     constructor() { this.state = 'running'; }
     createMediaElementSource() { return { connect() {} }; }
   }
   const context = vm.createContext({
-    Audio, window: { AudioContext }, performance,
+    Audio, window: { AudioContext, ShadowAudio: cache }, performance,
     document: { addEventListener: (type, callback) => listeners.set(type, callback) },
     speed: { follow() {}, rate: 1 },
     setTimeout: (callback, ms) => setTimeout(() => {
@@ -84,4 +85,33 @@ test('blank click while playback is preparing prevents the first clip', async ()
   assert.equal(media[0].plays - 1, 0);
   assert.ok(media.every((item) => item.paused));
   assert.equal(stopped(), 1);
+});
+
+
+test('feedback prepares both cached tracks before playback and reuses them', async () => {
+  const requests = [];
+  const { player, media } = setup({ cache: { peek: () => undefined, url: async (src) => {
+    requests.push(src); return `blob:${src}`;
+  } } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(requests, ['ref', 'usr']);
+  assert.deepEqual(media.map((item) => item.src), ['blob:ref', 'blob:usr']);
+  await player.play([player.ref, player.usr], true);
+  player.stop();
+  await player.play([player.ref, player.usr], true);
+  player.stop();
+  assert.equal(requests.length, 2);
+});
+
+test('stopping while cached audio loads prevents playback after it arrives', async () => {
+  let deliver;
+  const pending = new Promise((resolve) => { deliver = resolve; });
+  const { player, media } = setup({ cache: { peek: () => undefined, url: () => pending } });
+  assert.deepEqual(media.map((item) => item.src), ['ref', 'usr']);
+  const playing = player.play([player.ref, player.usr], true);
+  player.stop();
+  deliver('blob:ready');
+  await playing;
+  assert.ok(media.every((item) => item.paused));
+  assert.ok(media.every((item) => item.plays === 1)); // Only synchronous unlock.
 });
