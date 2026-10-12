@@ -828,3 +828,46 @@ def test_the_header_marks_the_page_you_are_on(client, tmp_path):
     assert current("/plan") == ["日课"]
     assert current("/chain") == ["日课"]
     assert current(f"/practice/{segment_id}/1") == []      # 练句子不属于哪个入口
+
+
+def test_append_takes_extends_same_round_without_duplicate_attempts(client, tmp_path, monkeypatch):
+    from shadow import review
+    segment_id = _seed(tmp_path)
+    monkeypatch.setattr(review, 'transcribe_words', lambda path: tuple(
+        Word(text=t, start=a, end=a + d)
+        for t, a, d in [('It', 0., .3), ('was', .4, .1), ('a', .5, .1), ('start.', .7, .4)]))
+    def send(count, run_id=None, token=None):
+        data = {'segment': segment_id, 'unit': 2}
+        if token is not None:
+            data['submission_id'] = token
+        if run_id is not None:
+            data.update(run_id=run_id, append=1, submission_id=token)
+        response = client.post('/api/takes', data=data,
+            files=[('files', (f'{i}.wav', _wav_bytes(), 'audio/wav')) for i in range(count)])
+        assert response.status_code == 200
+        return _stream(response)[-1]['result']
+    first = send(3, token='33333333-3333-4333-8333-333333333333')
+    initial_retry = send(3, token='33333333-3333-4333-8333-333333333333')
+    assert initial_retry['run_id'] == first['run_id']
+    fourth = send(1, first['run_id'], '11111111-1111-4111-8111-111111111111')
+    assert fourth['run_id'] == first['run_id']
+    assert fourth['count'] == 4
+    assert len(fourth['view']['takes']) == 4
+    retry = send(1, first['run_id'], '11111111-1111-4111-8111-111111111111')
+    assert retry['count'] == 4
+    fifth = send(1, first['run_id'], '22222222-2222-4222-8222-222222222222')
+    assert fifth['count'] == 5
+    connection = db.connect()
+    assert len(db.run_attempts(connection, first['run_id'])) == 5
+    assert len(db.list_runs(connection, segment_id=segment_id)) == 1
+    connection.close()
+
+
+def test_append_takes_rejects_a_round_for_another_sentence(client, tmp_path):
+    segment = _seed(tmp_path)
+    connection = db.connect()
+    run_id = db.start_run(connection, segment_id=segment, unit_index=0, unit_text='Hello there.')
+    connection.close()
+    response = client.post('/api/takes', data={'segment': segment, 'unit': 2, 'run_id': run_id, 'append': 1},
+                           files=[('files', ('a.wav', _wav_bytes(), 'audio/wav'))])
+    assert response.status_code == 400

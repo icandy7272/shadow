@@ -1088,22 +1088,25 @@ if (root) {
     };
   });
 
-  const extraState = window.ShadowExtraPractice.session();
   let extraMode = false;
-  let comparisonPanel = null;
+  let latestRun = null;
+  let takeCount = 0;
+  let submissionId = null;
   let resultFigures = [];
-  const extraButton = el("button", "primary", "加练 1 遍，并与刚才对比");
+  const extraButton = el("button", "primary", "再录 1 遍");
   extraButton.hidden = true;
   document.getElementById("rec-result").after(extraButton);
   const beginExtra = () => {
     if (startButton.disabled || recording || pending) return;
     extraMode = true;
+    submissionId = crypto.randomUUID();
     recordRound(true);
   };
   extraButton.addEventListener("click", beginExtra);
   startButton?.addEventListener("click", () => {
     if (pending) return;
     extraMode = false;
+    submissionId = crypto.randomUUID();
     recordRound(false);
   });
 
@@ -1111,7 +1114,8 @@ if (root) {
     setRecording(true);         // 连播还开着的话会录进去，别处也不许再放
     const speaker = createSpeaker();     // 趁这一下点击解锁声音，原声同时开始下载
     const takes = extra ? 1 : Math.max(1, Number(document.getElementById("takes").value) || 1);
-    const pre = extra ? 1 : Math.max(0, Number(document.getElementById("prelisten").value) || 0);
+    const pre = Math.max(0, Number(document.getElementById("prelisten").value) || 0);
+    const offset = extra ? takeCount : 0;
     startButton.disabled = true;
     // 默写的答案和释义看完了，开录时收起来：跟读时屏幕上不该有原文
     document.getElementById("step-drill").classList.add("done");
@@ -1163,14 +1167,14 @@ if (root) {
       status.classList.remove("live");
       for (let i = 1; i <= pre; i += 1) {
         await awake(speaker);
-        status.textContent = `第 ${take}/${takes} 遍 —— 先听 ${i}/${pre}`;
+        status.textContent = `第 ${offset + take}/${offset + takes} 遍 —— 先听 ${i}/${pre}`;
         await speaker.play();
         if (i < pre) await sleep(GAP_MS);      // 最后一遍的空档留给提示音
       }
       await awake(speaker);
       status.textContent = pre
-        ? `第 ${take}/${takes} 遍 —— 跟着这个节奏开口`
-        : `第 ${take}/${takes} 遍 —— 嘀一声之后开始说`;
+        ? `第 ${offset + take}/${offset + takes} 遍 —— 跟着这个节奏开口`
+        : `第 ${offset + take}/${offset + takes} 遍 —— 嘀一声之后开始说`;
       // 放完到开口，空得和前面每遍之间一样久，提示音卡在正中间
       const half = pre ? Math.max(0, (GAP_MS - BEEP_MS) / 2) : 0;
       await sleep(half);
@@ -1178,14 +1182,14 @@ if (root) {
       await sleep(half);
       // 音量条要一直读，所以 ear 一直在；会不会自动收得看那个勾
       status.textContent = ear && autoBox?.checked !== false
-        ? `第 ${take}/${takes} 遍 —— 录音中，说完停一下就自动收`
-        : `第 ${take}/${takes} 遍 —— 录音中，说完点「说完了」`;
+        ? `第 ${offset + take}/${offset + takes} 遍 —— 录音中，说完停一下就自动收`
+        : `第 ${offset + take}/${offset + takes} 遍 —— 录音中，说完点「说完了」`;
       status.classList.add("live");
       const clip = await recordOne(stream, ear, minSpoken, autoBox?.checked !== false);
 
       if (clip.dropped) {
         status.classList.remove("live");
-        status.textContent = `第 ${take} 遍作废，重来一次。`;
+        status.textContent = `第 ${offset + take} 遍作废，重来一次。`;
         await sleep(900);
         continue;
       }
@@ -1198,7 +1202,7 @@ if (root) {
           status.textContent = "连着三遍都太短。是不是「说完了」点早了？先歇一下再来。";
           break;
         }
-        status.textContent = `第 ${take} 遍只录到 ${clip.seconds.toFixed(1)} 秒，太短了`
+        status.textContent = `第 ${offset + take} 遍只录到 ${clip.seconds.toFixed(1)} 秒，太短了`
           + " —— 嘀声之后再开口，说完再点「说完了」。这一遍重来。";
         await sleep(2000);
         continue;
@@ -1207,7 +1211,7 @@ if (root) {
       blobs.push(clip.blob);
       // 每遍录完就说一句响度：太轻的话当场看见，不用等三遍录完被服务端拒收
       if (clip.loudest !== null) {
-        say(`第 ${take} 遍${verdict(clip.loudest)}`, clip.loudest < LOW_DB);
+        say(`第 ${offset + take} 遍${verdict(clip.loudest)}`, clip.loudest < LOW_DB);
       }
       take += 1;
     }
@@ -1243,7 +1247,11 @@ if (root) {
     body.append("segment", segment);
     body.append("unit", unit);
     body.append("saw_text", sawText ? "1" : "0");
-    if (runId !== null) body.append("run_id", String(runId));
+    if (extraMode && latestRun !== null) {
+      body.append("run_id", String(latestRun));
+      body.append("append", "1");
+    } else if (runId !== null) body.append("run_id", String(runId));
+    if (submissionId) body.append("submission_id", submissionId);
     blobs.forEach((blob, i) => body.append("files", blob, `take${i + 1}.webm`));
 
     let last;
@@ -1290,23 +1298,13 @@ if (root) {
     markComplete(document.getElementById("step-record"));
     document.dispatchEvent(new CustomEvent("shadow:analysed"));
     stopLoops();
-    comparisonPanel?.dispose();
     resultFigures.forEach((figures) => figures.dispose());
     resultFigures = [];
-    const oldResult = extraMode && extraState.baseline
-      ? extraState.baseline : null;
-    extraState.accept(last.result, extraMode);
+    latestRun = last.result.run_id;
+    takeCount = last.result.count;
     showResult(last.result, box);
-    extraButton.hidden = extraMode;
-    if (extraMode) {
-      comparisonPanel = window.ShadowExtraPractice.panel(extraState, beginExtra);
-      box.prepend(comparisonPanel.node);
-      const previous = el("details", "extra-before");
-      previous.append(el("summary", null, "查看加练前的完整结果"));
-      const previousBox = el("div");
-      showResult(oldResult, previousBox);
-      previous.append(previousBox); box.append(previous);
-    }
+    extraButton.hidden = false;
+    extraButton.textContent = `再录 1 遍（第 ${takeCount + 1} 遍）`;
     // 分析完滚到跟读这一步的开头：每一遍的结果和图都在它下面，不用再自己往下找。
     // 等分析的十几秒里人常切去别的标签页，页面在后台时平滑滚动不会动——那就直接跳过去
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches

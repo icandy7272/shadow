@@ -904,25 +904,48 @@ async def submit_takes(
     files: Annotated[list[UploadFile], File()],
     run_id: Annotated[int | None, Form()] = None,
     saw_text: Annotated[int, Form()] = 0,
+    append: Annotated[int, Form()] = 0,
+    submission_id: Annotated[str | None, Form()] = None,
 ):
     """转写加比对要跑十几秒，结果分行流式返回，前端拿它画进度条。"""
     connection = _db()
     try:
         ref_path, ref_words = _unit_reference(connection, segment, unit)
+        previous = []
+        if append:
+            if run_id is None or db.run_unit(connection, run_id) != (segment, unit):
+                raise HTTPException(400, "找不到要追加录音的这一轮。")
+            previous = [Path(row["audio_path"]) for row in db.run_attempts(connection, run_id)]
+            if not previous:
+                raise HTTPException(400, "这一轮还没有录音，不能追加。")
     finally:
         connection.close()
 
-    stamp = datetime.now().strftime("%m%d-%H%M%S")
+    stamp = datetime.now().strftime("%m%d-%H%M%S-%f")
+    if submission_id is not None:
+        from uuid import UUID
+        try:
+            stamp = str(UUID(submission_id))
+        except ValueError:
+            raise HTTPException(400, "录音提交编号无效。")
     paths = []
     rejected = []
     for index, upload in enumerate(files, 1):
         dest = config.attempt_audio_dir() / f"{segment}-u{unit}-{stamp}-{index}.wav"
         try:
-            media.convert_upload(await upload.read(), dest)
+            content = await upload.read()
+            check = _db()
+            try:
+                saved = check.execute("SELECT run_id FROM attempts WHERE audio_path = ? LIMIT 1",
+                                      (str(dest),)).fetchone()
+            finally:
+                check.close()
+            if saved is None:
+                media.convert_upload(content, dest)
             media.validate_attempt(dest)
         except Exception as exc:
             # 坏一遍不该让整批作废——那等于逼人从头再录三遍。剔掉继续。
-            rejected.append({"index": index, "reason": str(exc)})
+            rejected.append({"index": len(previous) + index, "reason": str(exc)})
             dest.unlink(missing_ok=True)
             continue
         paths.append(dest)
@@ -934,7 +957,8 @@ async def submit_takes(
     return StreamingResponse(
         _review_stream(segment=segment, unit=unit, ref_path=ref_path,
                        ref_words=ref_words, paths=paths, run_id=run_id,
-                       stamp=stamp, rejected=rejected, saw_text=bool(saw_text)),
+                       stamp=stamp, rejected=rejected, saw_text=bool(saw_text),
+                       previous=previous),
         media_type="application/x-ndjson",
     )
 
@@ -950,11 +974,12 @@ def _step_label(step, count: int) -> str:
 
 
 def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp,
-                   rejected=(), saw_text=False):
+                   rejected=(), saw_text=False, previous=()):
     """每一步开工前发一行进度，最后一行是 result 或 error。
 
     生成器跑在 Starlette 的线程池里，sqlite 连接不能跨线程用，写库时现开一个。
     """
+    paths = list(dict.fromkeys([*previous, *paths]))
     total = len(paths) + 1          # 原声一步，每遍一步
     try:
         steps = review_mod.run(ref_path, ref_words, paths)
@@ -974,6 +999,11 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp,
 
         connection = _db()
         try:
+            saved = connection.execute(
+                "SELECT run_id FROM attempts WHERE audio_path = ? LIMIT 1",
+                (str(result.takes[0].path),)).fetchone()
+            if saved is not None and db.run_unit(connection, saved["run_id"]) == (segment, unit):
+                run_id = saved["run_id"]
             run_id = _run_for(connection, segment, unit, run_id, ref_words)
             _store_takes(connection, run_id, result)
             db.mark_saw_text(connection, run_id, saw_text)
@@ -1009,8 +1039,7 @@ def _review_payload(result, run_id: int, *, audio: dict, takes: dict,
         "pause": None if summary.pause_ratio is None
                  else round(summary.pause_ratio.median, 2),
         "issues": [
-            {"kind": i.advice.kind, "ref_index": i.advice.ref_index,
-             "title": i.advice.title, "detail": i.advice.detail,
+            {"title": i.advice.title, "detail": i.advice.detail,
              "action": i.advice.action, "hits": i.hits, "total": i.total}
             for i in summary.issues[:MAX_ADVICE]
         ],
@@ -1019,7 +1048,10 @@ def _review_payload(result, run_id: int, *, audio: dict, takes: dict,
 
 
 def _store_takes(connection, run_id: int, result) -> None:
+    existing = {row["audio_path"] for row in db.run_attempts(connection, run_id)}
     for take in result.takes:
+        if str(take.path) in existing:
+            continue
         connection_metrics = {
             "accuracy": _accuracy(take.tokens),
             "speech_ratio": take.rhythm.speech_ratio,

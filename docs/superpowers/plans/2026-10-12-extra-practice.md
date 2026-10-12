@@ -1,13 +1,14 @@
-# Extra Practice Implementation Plan
+# Append Takes Implementation Plan
 
-**Goal:** 结果页单遍加练，保留固定基准并展示可试听的变化。
+**Goal:** 加练作为同轮的第 4、5…遍，统一沿用现有交互。
 
-**Architecture:** 复用现有录音提交接口，新增独立前端会话/比较模块。反馈数据增加稳定问题标识和逐遍问题/不可比较索引。原轮与加练轮分别保存，比较只在当前页维护。
+**Architecture:** app.js 保留最后成功的 run_id，追加单遍并沿用示范设置；app.py 验证归属，合并旧录音重新汇总，只保存新路径。UUID 提交编号防止网络重交重复追加。移除单独前后对比模块。
 
-**Tech Stack:** Python/FastAPI, vanilla JavaScript, pytest, node:test.
+**Tech Stack:** FastAPI, vanilla JavaScript, pytest, node:test.
 
-- [x] 在 tests/js/extra-practice.test.cjs 验证固定基准、单遍结论、连续加练和不可靠词。
-- [x] 增加 web/view.py 逐遍比较数据及 app.py 汇总问题标识，验证反馈接口。
-- [x] 新增 static/extra-practice.js，连接 app.js 单遍录音入口、结果保留及试听。
-- [x] 更新样式、README，执行 Python 和 JavaScript 测试以及语法检查。
-- [ ] 审查差异后提交并推送。
+- [x] 先验证追加端点从 3 遍到 4、5 遍、重交去重、只保存同一轮。
+- [x] 改造录音入口、连续编号和原结果渲染，移除独立对比模块。
+- [x] 沿用原示范播放次数并验证设置不被改写。
+- [x] 全量验证与差异检查：547 项 Python、20 项前端测试通过。
+
+发布：按项目工作流提交并推送此功能。
