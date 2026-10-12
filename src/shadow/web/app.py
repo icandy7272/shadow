@@ -1009,7 +1009,8 @@ def _review_payload(result, run_id: int, *, audio: dict, takes: dict,
         "pause": None if summary.pause_ratio is None
                  else round(summary.pause_ratio.median, 2),
         "issues": [
-            {"title": i.advice.title, "detail": i.advice.detail,
+            {"kind": i.advice.kind, "ref_index": i.advice.ref_index,
+             "title": i.advice.title, "detail": i.advice.detail,
              "action": i.advice.action, "hits": i.hits, "total": i.total}
             for i in summary.issues[:MAX_ADVICE]
         ],

@@ -667,6 +667,8 @@ function playback(rhythm, audio, onFrame, onStopped) {
   }
 
   async function play(tracks, spread) {
+    if (typeof recording !== "undefined" && recording) return;
+    if (typeof stopLoops === "function") stopLoops();
     halt();
     const mine = session;
     tracks.forEach(prime);                 // 必须在第一个 await 之前
@@ -741,6 +743,8 @@ function playback(rhythm, audio, onFrame, onStopped) {
   // 单词层级的对比：同一个词，先放原声再放你的，来回十遍。
   // 一个词只有两三百毫秒，两条叠在一起听不出什么，得挨着放。
   async function compare(slot, onSide) {
+    if (typeof recording !== "undefined" && recording) return;
+    if (typeof stopLoops === "function") stopLoops();
     if (stopSelectedWords) stopSelectedWords();
     halt();
     stopSelectedWords = stop;
@@ -774,6 +778,8 @@ function playback(rhythm, audio, onFrame, onStopped) {
 
   // 只放一条：图 1 的两行各属于一个音源，点哪行就放哪行
   async function playOne(side, at, onSide) {
+    if (typeof recording !== "undefined" && recording) return;
+    if (typeof stopLoops === "function") stopLoops();
     if (stopSelectedWords) stopSelectedWords();
     halt();
     stopSelectedWords = stop;
@@ -947,5 +953,10 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
   controls.append(tabs, bar);
   box.append(body);
   show(view.chosen);
-  return { controls, figures: box };
+  const stop = () => current?.stop();
+  if (typeof loops !== "undefined") loops.add(stop);
+  return { controls, figures: box, dispose: () => {
+    stop();
+    if (typeof loops !== "undefined") loops.delete(stop);
+  } };
 }

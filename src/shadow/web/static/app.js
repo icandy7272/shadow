@@ -1088,11 +1088,30 @@ if (root) {
     };
   });
 
-  startButton?.addEventListener("click", async () => {
+  const extraState = window.ShadowExtraPractice.session();
+  let extraMode = false;
+  let comparisonPanel = null;
+  let resultFigures = [];
+  const extraButton = el("button", "primary", "加练 1 遍，并与刚才对比");
+  extraButton.hidden = true;
+  document.getElementById("rec-result").after(extraButton);
+  const beginExtra = () => {
+    if (startButton.disabled || recording || pending) return;
+    extraMode = true;
+    recordRound(true);
+  };
+  extraButton.addEventListener("click", beginExtra);
+  startButton?.addEventListener("click", () => {
+    if (pending) return;
+    extraMode = false;
+    recordRound(false);
+  });
+
+  async function recordRound(extra) {
     setRecording(true);         // 连播还开着的话会录进去，别处也不许再放
     const speaker = createSpeaker();     // 趁这一下点击解锁声音，原声同时开始下载
-    const takes = Math.max(1, Number(document.getElementById("takes").value) || 1);
-    const pre = Math.max(0, Number(document.getElementById("prelisten").value) || 0);
+    const takes = extra ? 1 : Math.max(1, Number(document.getElementById("takes").value) || 1);
+    const pre = extra ? 1 : Math.max(0, Number(document.getElementById("prelisten").value) || 0);
     startButton.disabled = true;
     // 默写的答案和释义看完了，开录时收起来：跟读时屏幕上不该有原文
     document.getElementById("step-drill").classList.add("done");
@@ -1194,7 +1213,7 @@ if (root) {
     }
     wrapUp();      // 录完也要把上下文关掉：一次点「开始」漏一个，几轮之后浏览器就不再给了
     if (blobs.length) await submit(blobs);
-  });
+  }
 
   // 录音只存在这个页面里。服务断了、提交失败，也不能把它们扔掉——
   // 留着，恢复后点「重新提交」，不用再录一轮。
@@ -1236,7 +1255,7 @@ if (root) {
         const detail = await response.json().catch(() => ({}));
         status.textContent = "";
         box.hidden = false;
-        box.innerHTML = `<p class="bad">${detail.detail || "比对失败"}</p>`;
+        status.textContent = detail.detail || "比对失败，之前的结果仍保留。";
         return;
       }
       bar.hidden = false;
@@ -1260,8 +1279,7 @@ if (root) {
     status.textContent = "";
     box.hidden = false;
     if (!last || last.error) {
-      box.innerHTML =
-        `<p class="bad">${(last && last.error) || "比对中断了，重录一遍试试。"}</p>`;
+      status.textContent = (last && last.error) || "比对中断了，之前的结果仍保留，重录一遍试试。";
       return;
     }
     // 每遍的响度提示到这儿就过时了，结果里一遍一行都有；偏轻的警告留着，下一轮还用得上
@@ -1271,7 +1289,24 @@ if (root) {
     // 分析完了：默写那一步可以重新打开，回头看错在哪
     markComplete(document.getElementById("step-record"));
     document.dispatchEvent(new CustomEvent("shadow:analysed"));
+    stopLoops();
+    comparisonPanel?.dispose();
+    resultFigures.forEach((figures) => figures.dispose());
+    resultFigures = [];
+    const oldResult = extraMode && extraState.baseline
+      ? extraState.baseline : null;
+    extraState.accept(last.result, extraMode);
     showResult(last.result, box);
+    extraButton.hidden = extraMode;
+    if (extraMode) {
+      comparisonPanel = window.ShadowExtraPractice.panel(extraState, beginExtra);
+      box.prepend(comparisonPanel.node);
+      const previous = el("details", "extra-before");
+      previous.append(el("summary", null, "查看加练前的完整结果"));
+      const previousBox = el("div");
+      showResult(oldResult, previousBox);
+      previous.append(previousBox); box.append(previous);
+    }
     // 分析完滚到跟读这一步的开头：每一遍的结果和图都在它下面，不用再自己往下找。
     // 等分析的十几秒里人常切去别的标签页，页面在后台时平滑滚动不会动——那就直接跳过去
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -1302,6 +1337,7 @@ if (root) {
       (data.good.length ? `<p class="guessed">做对了，保持：${data.good.join(" / ")}</p>` : "");
     // 播放条摆在最前面：录完第一件想做的事是听自己刚才那遍
     const figures = renderFigures(data.view);
+    resultFigures.push(figures);
     box.prepend(figures.controls);
     box.append(figures.figures);
   }

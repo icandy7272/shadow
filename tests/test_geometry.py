@@ -180,3 +180,45 @@ def test_blocks_say_whether_the_word_was_matched():
 
     assert [b.matched for b in view.ref] == [True, False, True]
     assert [b.matched for b in view.usr] == [True, False, True]
+
+
+def test_extra_practice_marks_missing_pitch_as_unavailable(prosody):
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from shadow.analysis.diff import diff_words
+    from shadow.web.view import feedback_view
+
+    silent = replace(prosody, semitones=np.full_like(prosody.semitones, np.nan))
+    rhythm = SimpleNamespace(lags=(), ref_span=1.4, usr_span=1.8,
+                             speech_ratio=1.0, pause_ratio=None)
+    take = SimpleNamespace(tokens=diff_words([w.text for w in REF], [w.text for w in USR]),
+                           words=USR, rhythm=rhythm, prosody=silent, advice=(), path='a.wav')
+    review = SimpleNamespace(ref_words=REF, ref_prosody=prosody, shaky=frozenset({1}),
+                             takes=(take,), best=take, summary=SimpleNamespace(representative=0))
+    data = feedback_view(review, 3, audio={'ref': 'r'}, takes={'a.wav': '/take/a'})['takes'][0]
+    assert data['uncertain'] == [1]
+    assert 'pitch_off:0' in data['uncertain_issues']
+    assert 'flat_rise:0' in data['uncertain_issues']
+    assert 'flat_fall:2' in data['uncertain_issues']
+
+
+@pytest.mark.parametrize('said, expected', [
+    (['wrong', 'three', 'stories.'], 'stretched:1'),
+    (['Just', 'three', 'wrong'], 'stretched:1'),
+    (['Just', 'extra', 'three', 'stories.'], 'long_pause:0'),
+    (['Just', 'wrong', 'stories.'], 'flat_fall:2'),
+])
+def test_extra_practice_does_not_judge_unreliable_neighbor_boundaries(prosody, said, expected):
+    from types import SimpleNamespace
+    from shadow.analysis.diff import diff_words
+    from shadow.web.view import feedback_view
+
+    words = _words([(text, i * .6, .5) for i, text in enumerate(said)])
+    rhythm = SimpleNamespace(lags=(), ref_span=1.4, usr_span=1.8,
+                             speech_ratio=1.0, pause_ratio=None)
+    take = SimpleNamespace(tokens=diff_words([w.text for w in REF], said), words=words,
+                           rhythm=rhythm, prosody=prosody, advice=(), path='a.wav')
+    review = SimpleNamespace(ref_words=REF, ref_prosody=prosody, shaky=frozenset(),
+                             takes=(take,), best=take, summary=SimpleNamespace(representative=0))
+    data = feedback_view(review, 3, audio={'ref': 'r'}, takes={'a.wav': '/take/a'})['takes'][0]
+    assert expected in data['uncertain_issues']
