@@ -29,3 +29,30 @@ for (const extra of [true, false]) {
     assert.equal(settings.prelisten.value, '4');
   });
 }
+
+for (const scenario of [
+  {name: 'available', expected: 1},
+  {name: 'hidden', hidden: true, expected: 0},
+  {name: 'disabled', disabled: true, expected: 0},
+  {name: 'recording', recording: true, expected: 0},
+  {name: 'typing', typing: true, expected: 0},
+  {name: 'modifier', ctrlKey: true, expected: 0},
+  {name: 'held key', repeat: true, expected: 0},
+]) {
+  test(`N appends one take only when ${scenario.name}`, () => {
+    const source = fs.readFileSync('src/shadow/web/static/app.js', 'utf8');
+    const begin = source.indexOf('  document.addEventListener("keydown",', source.indexOf('// 一句从头到尾'));
+    const end = source.indexOf('\n  });', begin) + '\n  });'.length;
+    let handler, clicks = 0;
+    const extra = {hidden: !!scenario.hidden, disabled: !!scenario.disabled, click: () => {clicks++;}};
+    vm.runInNewContext(source.slice(begin, end), {
+      document: {addEventListener: (_, fn) => {handler = fn;},
+        getElementById: id => id === 'extra-record' ? extra : {classList: {contains: () => false}},
+        querySelectorAll: () => []},
+      physicalKey: () => 'n', recording: !!scenario.recording,
+    });
+    handler({target: {closest: () => scenario.typing}, ctrlKey: scenario.ctrlKey,
+      repeat: scenario.repeat, preventDefault() {}});
+    assert.equal(clicks, scenario.expected);
+  });
+}

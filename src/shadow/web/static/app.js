@@ -348,6 +348,10 @@ if (root) {
       if (shadowing) press(byId("start-record"));
       return;
     }
+    if (key === "n") {
+      if (shadowing && !event.repeat) press(byId("extra-record"));
+      return;
+    }
     if (key === "t") {
       if (shadowing) press(byId("peek"));
       return;
@@ -1093,7 +1097,8 @@ if (root) {
   let takeCount = 0;
   let submissionId = null;
   let resultFigures = [];
-  const extraButton = el("button", "primary", "再录 1 遍");
+  const extraButton = keyButton("primary", "再录 1 遍", "N");
+  extraButton.id = "extra-record";
   extraButton.hidden = true;
   document.getElementById("rec-result").after(extraButton);
   const beginExtra = () => {
@@ -1304,7 +1309,7 @@ if (root) {
     takeCount = last.result.count;
     showResult(last.result, box);
     extraButton.hidden = false;
-    extraButton.textContent = `再录 1 遍（第 ${takeCount + 1} 遍）`;
+    setLabel(extraButton, `再录 1 遍（第 ${takeCount + 1} 遍）`);
     // 分析完滚到跟读这一步的开头：每一遍的结果和图都在它下面，不用再自己往下找。
     // 等分析的十几秒里人常切去别的标签页，页面在后台时平滑滚动不会动——那就直接跳过去
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
