@@ -5,12 +5,12 @@ function finishState({recording=false,submitting=false,pending=[],analysis=null}
 function setDisabledIfChanged(control,value){value=Boolean(value);if(control&&control.disabled!==value)control.disabled=value;}
 if(typeof module!=='undefined')module.exports={clampNumber,canDismissDrag,finishState,setDisabledIfChanged};
 if(typeof document!=='undefined')(()=>{
- const stack=[];let scroll=0,restoring=false,skipPop=0;
+ const stack=[];let sheetSequence=0;let scroll=0,restoring=false,skipPop=0;
  function lock(){if(stack.length!==1)return;scroll=window.scrollY;document.body.style.position='fixed';document.body.style.top=`-${scroll}px`;document.body.style.width='100%';}
  function unlock(){if(stack.length)return;document.body.style.position='';document.body.style.top='';document.body.style.width='';window.scrollTo(0,scroll);}
- function open(dialog){if(!dialog||dialog.open)return;dialog.showModal();if(!stack.includes(dialog))stack.push(dialog);lock();if(!restoring)history.pushState({...history.state,shadowSheet:dialog.id},'');}
+ function open(dialog){if(!dialog||dialog.open)return;register(dialog);dialog.showModal();if(!stack.includes(dialog))stack.push(dialog);lock();if(!restoring)history.pushState({...history.state,shadowSheet:dialog.id},'');}
  function close(dialog){if(!dialog?.open||dialog.dataset.sheetLocked==='true')return;dialog.close();}
- function register(dialog){if(dialog.dataset.nativeSheet)return;dialog.dataset.nativeSheet='true';
+ function register(dialog){if(dialog.dataset.nativeSheet)return;if(!dialog.id)dialog.id=`shadow-sheet-${++sheetSequence}`;dialog.dataset.nativeSheet='true';
   const handle=document.createElement('button');handle.type='button';handle.className='sheet-grabber';handle.setAttribute('aria-label','关闭面板');handle.addEventListener('click',()=>close(dialog));dialog.prepend(handle);
   let drag=null;handle.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,time:performance.now()};handle.setPointerCapture(e.pointerId)});
   handle.addEventListener('pointermove',e=>{if(drag)dialog.style.translate=`0 ${Math.max(0,e.clientY-drag.y)}px`});

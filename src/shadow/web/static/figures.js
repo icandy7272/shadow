@@ -815,7 +815,7 @@ function playbar(rhythm, audio, figures) {
 
   bar.append(both, one, mine, speedControl(),
              el("span", "playbar-hint", "戴耳机：原声在左，你的在右"));
-  return { node: bar, player };
+  return { node: bar, player, listen: (side) => (side === "ref" ? one : mine).click() };
 }
 
 // 选中的这几个词，在两条音频里各自的起止秒数。
@@ -870,13 +870,15 @@ function renderTake(take) {
     button.setAttribute("aria-pressed",String(index===0));
     switcher.append(button);
     button.addEventListener("click",() => {
+      if (player) player.stop();
       options.forEach(([,one]) => { one.hidden=one!==panel; });
       [...switcher.children].forEach(one => one.setAttribute("aria-pressed",String(one===button)));
     });
   });
   pitch.node.hidden=true;
   node.append(switcher,rhythm.node,pitch.node);
-  return { node, bar: bar && bar.node, stop: () => player && player.stop() };
+  return { node, bar: bar && bar.node, stop: () => player && player.stop(),
+    listen: (side) => bar && bar.listen(side) };
 }
 
 
@@ -889,6 +891,91 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
   const bar = el("div", "playbar-slot");
   const body = el("div", "take-body");
   let current = null;
+  let selected = -1;
+  let menu = null;
+  let viewer = null;
+  let disposed = false;
+  const closeDialog = (dialog) => {
+    if (!dialog) return;
+    if (dialog.open) {
+      if (window.ShadowSheets?.close) window.ShadowSheets.close(dialog);
+      else dialog.close();
+    }
+  };
+  const closeViewer = () => {
+    if (!viewer) return;
+    const old = viewer;
+    viewer = null;
+    current?.stop();
+    // Restore synchronously: native close events can arrive after a take switch.
+    if (current && !disposed) {
+      body.append(current.node);
+      if (current.bar) bar.append(current.bar);
+    }
+    closeDialog(old);
+    old.remove();
+  };
+  const closeMenu = () => {
+    if (!menu) return;
+    const old = menu;
+    menu = null;
+    closeDialog(old);
+    old.remove();
+  };
+  const openDialog = (dialog) => {
+    document.body.append(dialog);
+    if (window.ShadowSheets?.open) window.ShadowSheets.open(dialog);
+    else dialog.showModal();
+  };
+  const enlarge = () => {
+    closeViewer();
+    current.stop();
+    const take = current;
+    const dialog = el("dialog", "figure-viewer settings-dialog");
+    dialog.setAttribute("aria-label", `第 ${selected + 1} 遍 · 放大图表`);
+    const header = el("div", "figure-viewer-header");
+    const done = el("button", "figure-viewer-close", "完成");
+    done.type = "button";
+    done.addEventListener("click", () => closeDialog(dialog));
+    header.append(el("h2", null, `第 ${selected + 1} 遍 · 图表`), done);
+    dialog.append(header);
+    if (take.bar) dialog.append(take.bar);
+    dialog.append(take.node);
+    viewer = dialog;
+    dialog.addEventListener("close", () => {
+      take.stop();
+      if (viewer === dialog) {
+        viewer = null;
+        if (!disposed && current === take) {
+          body.append(take.node);
+          if (take.bar) bar.append(take.bar);
+        }
+      }
+      dialog.remove();
+    });
+    openDialog(dialog);
+  };
+  const openMenu = (index) => {
+    closeMenu();
+    const dialog = el("dialog", "take-actions settings-dialog");
+    dialog.setAttribute("aria-label", `第 ${index + 1} 遍操作`);
+    dialog.append(el("h2", null, `第 ${index + 1} 遍`));
+    const action = (label, className, handler) => {
+      const button = el("button", className, label);
+      button.type = "button";
+      button.addEventListener("click", handler);
+      dialog.append(button);
+    };
+    const select = () => { if (selected !== index) show(index, true); };
+    action("查看这一遍", "take-action-view", () => { select(); closeMenu(); });
+    action("听原声", "take-action-source", () => { select(); closeMenu(); current.listen("ref"); });
+    action("听我的录音", "take-action-mine", () => { select(); closeMenu(); current.listen("usr"); });
+    action("放大图表", "take-action-enlarge", () => { select(); enlarge(); });
+    action("完成", "take-action-close", closeMenu);
+    dialog.addEventListener("close", () => { if (menu === dialog) menu = null; dialog.remove(); });
+    menu = dialog;
+    openDialog(dialog);
+  };
 
   const numbers = (take) =>
     `可懂度 ${take.accuracy}% · 发声 ${take.speech.toFixed(2)}x · `
@@ -910,6 +997,8 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
   // 点哪一行，下面的两张图和播放条就换成哪一遍。
   const rows = view.takes.map((take, index) => {
     const row = el("button", "take-row");
+    row.type = "button";
+    row.classList.toggle("representative", index === view.chosen);
     row.append(el("b", "take-name", `第 ${index + 1} 遍`),
                el("span", "take-numbers", numbers(take)),
                el("span", `take-said${take.problems.length ? "" : " ok"}`, misheardText(take)));
@@ -920,9 +1009,16 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
     return row;
   });
 
-  function show(index) {
+  function show(index, keepMenu = false) {
+    if (disposed) return;
+    closeViewer();
+    if (!keepMenu) closeMenu();
+    selected = index;
     if (current) current.stop();
-    rows.forEach((row, i) => row.classList.toggle("chosen", i === index));
+    rows.forEach((row, i) => {
+      row.classList.toggle("chosen", i === index);
+      row.setAttribute("aria-pressed", String(i === index));
+    });
     body.textContent = "";
     bar.textContent = "";
     current = renderTake(view.takes[index]);
@@ -930,13 +1026,25 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
     body.append(current.node);
   }
 
-  tabs.append(...rows);
+  rows.forEach((row, index) => {
+    const item = el("div", "take-item");
+    const more = el("button", "take-menu", "⋯");
+    more.type = "button";
+    more.setAttribute("aria-label", `第 ${index + 1} 遍操作`);
+    more.setAttribute("aria-haspopup", "dialog");
+    more.addEventListener("click", () => openMenu(index));
+    item.append(row, more);
+    tabs.append(item);
+  });
   controls.append(tabs, bar);
   box.append(body);
   show(view.chosen);
   const stop = () => current?.stop();
   if (typeof loops !== "undefined") loops.add(stop);
   return { controls, figures: box, dispose: () => {
+    closeViewer();
+    closeMenu();
+    disposed = true;
     stop();
     if (typeof loops !== "undefined") loops.delete(stop);
   } };
