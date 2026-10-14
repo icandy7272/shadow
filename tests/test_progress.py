@@ -144,3 +144,14 @@ def test_deleting_a_source_keeps_the_grid_and_streak(tmp_path, monkeypatch):
     after = progress.calendar(conn, weeks=4)
     assert after == before
     assert (after.today, after.streak) == (1, 3)
+
+
+def test_range_summary_counts_archive_and_actual_recordings(tmp_path, monkeypatch):
+    conn, segment = _seeded(tmp_path, monkeypatch)
+    _round(conn, segment, 1, 0)
+    _round(conn, segment, 2, 40)
+    today = datetime.now().astimezone().date()
+    conn.execute('INSERT INTO practice_archive (day, sentence, rounds) VALUES (?, ?, ?)', (today.isoformat(), 'archived', 4))
+    conn.commit()
+    assert progress.summary(conn, since=today) == {'sentences': 2, 'rounds': 5, 'takes': 1}
+    assert progress.summary(conn) == {'sentences': 3, 'rounds': 6, 'takes': 2}

@@ -339,7 +339,7 @@ def _sentences(connection, source_id: int) -> list[dict]:
 def home():
     """首页就是当前那份素材；一份能练的都没有，就去素材库导入。"""
     chosen = library.current(_db())
-    return RedirectResponse(f"/sources/{chosen}" if chosen else "/sources",
+    return RedirectResponse("/today" if chosen else "/sources",
                             status_code=303)
 
 
@@ -622,6 +622,11 @@ def source_page(request: Request, source_id: int):
     if source is None or source["status"] != db.STATUS_READY:
         return RedirectResponse("/sources", status_code=303)
     library.select(connection, source_id)     # 打开哪份，哪份就是当前
+    return templates.TemplateResponse(request, "index.html", _source_context(connection, source))
+
+
+def _source_context(connection, source: dict) -> dict:
+    source_id = source["id"]
     catalogue = _sentences(connection, source_id)
     states = _practice_states(connection, source_id)
     today = _today()
@@ -647,14 +652,45 @@ def source_page(request: Request, source_id: int):
     # 复习也一样：直接进最急的那句。只给筛选的话，列表上练过的句子带着原文，
     # 点进去之前就看到了，盲听白做
     review_start = catalogue[review.order[0]] if review.order else None
-    return templates.TemplateResponse(
-        request, "index.html",
-        {"catalogue": catalogue, "source": source, "next_unit": next_unit,
+    return {"catalogue": catalogue, "source": source, "next_unit": next_unit,
          "practised": sum(1 for item in catalogue if item["runs"]),
          "days": progress.calendar(connection),
          "plan": _plan_view(connection, today, review, new_today, week_count,
-                            review_start)},
-    )
+                            review_start)}
+
+
+@app.get("/today", response_class=HTMLResponse)
+def today_page(request: Request):
+    connection = _db()
+    today = _today()
+    source_id = library.current(connection)
+    source = db.get_source(connection, source_id) if source_id else None
+    context = _source_context(connection, source) if source else {
+        "source": None, "next_unit": None, "days": progress.calendar(connection),
+        "plan": _plan_view(connection, today, filters.Selection(), 0, 0)}
+    context.update({"today": today.isoformat(), "week_days": context["days"].days[-7:],
+                    "weekday_labels": ("一", "二", "三", "四", "五", "六", "日")})
+    return templates.TemplateResponse(request, "today.html", context)
+
+
+@app.get("/records", response_class=HTMLResponse)
+def records_page(request: Request, range_: str = Query("week", alias="range")):
+    connection = _db()
+    today = _today()
+    range_ = range_ if range_ in {"week", "month", "all"} else "week"
+    since = plan.week_start(today) if range_ == "week" else today.replace(day=1) if range_ == "month" else None
+    takes = []
+    for kind, spec in plan.TALKS.items():
+        for row in db.list_talks(connection, kind=kind, limit=-1):
+            if since and row["day"] < since.isoformat():
+                continue
+            takes.append({**_talk_item(row, today), "kind": kind, "title": spec.title})
+    takes.sort(key=lambda item: (item["date"], item["id"]), reverse=True)
+    days = progress.calendar(connection)
+    shown_days = [day for day in days.days if since is None or day.date >= since.isoformat()]
+    return templates.TemplateResponse(request, "records.html",
+        {"days": days, "calendar_days": shown_days, "takes": takes, "range": range_,
+         "summary": progress.summary(connection, since=since), "sources": library.cards(connection)})
 
 
 @app.get("/practice/{segment_id}/{unit}", response_class=HTMLResponse)

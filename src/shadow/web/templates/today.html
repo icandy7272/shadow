@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}今天 · Shadow{% endblock %}
+{% block content %}
+<div class="head"><div><p class="eyebrow">{{ today }}</p><h1>今天</h1></div><a class="button" href="/plan">日课安排</a></div>
+<div class="week-strip" aria-label="本周练习">{% for day in week_days %}<div class="week-day{{ ' is-today' if day.date == today }}{{ ' has-practice' if day.sentences }}{{ ' ahead' if day.future }}" title="{{ day.date }} · {{ day.sentences }} 句 · {{ day.rounds }} 轮"><span>周{{ weekday_labels[loop.index0] }}</span><b>{{ day.date[-2:]|int }}</b><small>{{ day.sentences }} 句</small></div>{% endfor %}</div>
+<section class="today-hero"><p class="eyebrow">今天的练习</p><h2>{{ plan.heading }}</h2><p>今天练了 {{ days.today }} 句 · 连续 {{ days.streak }} 天</p>
+{% if source %}<a class="hero-source" href="/sources/{{ source.id }}">{{ source.title }} →</a>
+{% if plan.review_count %}<a class="cta" href="/practice/{{ plan.review_start.segment }}/{{ plan.review_start.unit }}?from=review">开始复习 · {{ plan.review_count }} 句 →</a>{% elif next_unit %}<a class="cta" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}">开始下一句 →</a>{% else %}<a class="cta" href="/sources">选择下一份素材 →</a>{% endif %}
+{% else %}<p>还没有导入素材。先选一段你想练的内容。</p><a class="cta" href="/sources">导入素材 →</a>{% endif %}</section>
+{% include "_plan.html" %}
+{% endblock %}

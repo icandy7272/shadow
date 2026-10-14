@@ -11,52 +11,7 @@
   {% endif %}
 </div>
 
-<details class="plan" id="plan" open>
-  <summary>
-    <span class="plan-title">今天的日课 · {{ plan.heading }}</span>
-    <span class="plan-progress">{% if days.today %}今天练了 {{ days.today }} 句{% else %}今天还没练{% endif %}{% if days.streak %} · 连续 {{ days.streak }} 天{% endif %}</span>
-    {% if plan.all_done %}<span class="plan-done">做完了</span>{% endif %}
-    <span class="plan-toggle" aria-hidden="true"></span>
-  </summary>
-  <ul class="plan-steps">
-    {% for step in plan.steps %}
-    <li class="plan-step{{ ' done' if step.done }}">
-      {#- 五步都是复选框：练习记录里看得出来的先替你勾上，不认就点掉，当天记住 -#}
-      <input type="checkbox" class="plan-check" data-step="{{ step.key }}"{% if step.done %} checked{% endif %} id="plan-{{ step.key }}">
-      <div class="plan-body">
-        <label for="plan-{{ step.key }}"><b>{{ step.title }}</b><span>{{ step.detail }}</span></label>
-        {% if step.link == 'review' %}
-          {% if plan.review_count %}
-          <a class="plan-link" href="/practice/{{ plan.review_start.segment }}/{{ plan.review_start.unit }}?from=review">开始复习（{{ plan.review_count }} 句）→</a>
-          {% if plan.deferred %}<span class="plan-none">还有 {{ plan.deferred }} 句排在后面几天</span>{% endif %}
-          {% elif plan.deferred %}
-          <span class="plan-none">今天没有到期的 · 还有 {{ plan.deferred }} 句排在后面几天</span>
-          {% else %}
-          <span class="plan-none">没有要复习的</span>
-          {% endif %}
-        {% elif step.link == 'chain' %}
-          <a class="plan-link" href="/chain">把今天练过的连起来跟 →</a>
-        {% elif step.link == 'whole' %}
-          {% if plan.week_count %}
-          <a class="plan-link" href="/chain?scope=week">把本周练过的 {{ plan.week_count }} 句从头跟到尾 →</a>
-          {% else %}
-          <span class="plan-none">本周还没练过句子</span>
-          {% endif %}
-        {% elif step.link == 'talk' %}
-          <a class="plan-link" href="/talk">{% if step.key == 'free_talk' %}挑表达、说 2 分钟，录完和上周比 →{% else %}录一段复述，录完就能回听 →{% endif %}</a>
-        {% elif step.link == 'next' %}
-          {% if next_unit %}
-          <a class="plan-link" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}">开始下一句（第 {{ next_unit.number }} 句）→</a>
-          {% else %}
-          <a class="plan-link" href="/sources">这份素材练完了，去素材库换一份 →</a>
-          {% endif %}
-        {% endif %}
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
-  <p class="plan-foot"><a href="/plan">为什么这样排、时间不够时 → 完整日课</a></p>
-</details>
+{% include "_plan.html" %}
 
 <section class="streak">
   <p class="streak-head">

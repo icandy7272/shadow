@@ -117,3 +117,16 @@ def _streak(by_day: dict[str, set[str]], today: date) -> int:
         count += 1
         cursor -= timedelta(days=1)
     return count
+
+
+def summary(connection, *, since: date | None = None) -> dict[str, int]:
+    """期间练过的句次、轮次和仍保留的跟读录音；归档只保存句次和轮次。"""
+    by_day, rounds = _practised(connection)
+    start = since.isoformat() if since else ''
+    recordings = connection.execute(
+        'SELECT r.started_at, r.finished_at FROM attempts a '
+        'JOIN practice_runs r ON r.id = a.run_id')
+    takes = sum(1 for row in recordings
+                if (day := _local_day(row['finished_at'] or row['started_at'])) and day >= start)
+    return {'sentences': sum(len(sentences) for day, sentences in by_day.items() if day >= start),
+            'rounds': sum(count for day, count in rounds.items() if day >= start), 'takes': takes}

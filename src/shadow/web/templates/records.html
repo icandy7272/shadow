@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}记录 · Shadow{% endblock %}
+{% block content %}
+<div class="head"><h1>记录</h1><a class="button" href="/talk">录一段 →</a></div>
+<nav class="record-ranges" aria-label="记录范围">{% for key, label in [('week', '本周'), ('month', '本月'), ('all', '全部')] %}<a class="button{{ ' chosen' if range == key }}" href="/records?range={{ key }}"{% if range == key %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
+<div class="record-summary" data-sentences="{{ summary.sentences }}" data-rounds="{{ summary.rounds }}" data-talks="{{ takes|length }}"><div><b>{{ summary.sentences }}</b><span>练习句次</span></div><div><b>{{ summary.rounds }}</b><span>练习轮次</span></div><div><b>{{ summary.takes }}</b><span>保留的跟读录音</span></div></div>
+<p class="hint">同一句在不同日期练习分别计数。删除素材后保留句次和轮次，已删除的录音不再计数。</p>
+<section class="streak"><h2>练习日历</h2><div class="grid">{% for day in calendar_days %}<i class="d{{ day.level }}{{ ' ahead' if day.future }}" title="{{ day.date }}：{{ day.sentences }} 句 / {{ day.rounds }} 轮"></i>{% endfor %}</div><p class="hint">日历显示最近十周内所选范围的练习。每格一天，颜色越深表示练过的句子越多。已删除素材的练习也会保留。</p></section>
+<h2>口语录音 · {{ takes|length }} 段</h2>{% if not takes %}<p class="empty">还没录过。完成日课里的复述或自由说后，可以在这里回听。</p>{% endif %}
+<ol class="talk-list records-talks">{% for take in takes %}<li class="talk-take"><div class="talk-take-head"><b>{{ take.title }}</b><span class="talk-when">{{ take.date | day }} · {{ take.length }}</span><a href="/talk?kind={{ take.kind }}">继续练 →</a></div><audio controls preload="none" src="{{ take.url }}"></audio>{% if take.picks %}<p class="talk-used">用了 {{ take.picks|join(' · ') }}</p>{% endif %}</li>{% endfor %}</ol>
+{% if sources %}<h2>素材练习记录</h2><ul class="cards">{% for source in sources %}{% if source.status == 'ready' %}<li class="card"><a href="/sources/{{ source.id }}"><b>{{ source.title }}</b><p class="card-meta">练过 {{ source.practised }}/{{ source.sentences }} 句{% if source.last_practised %} · 上次 {{ source.last_practised | day }}{% endif %}</p></a></li>{% endif %}{% endfor %}</ul>{% endif %}
+{% endblock %}

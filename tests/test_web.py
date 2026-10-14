@@ -3,7 +3,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from shadow import config, db
+from shadow import config, db, library
 from shadow.models import Segment, Word
 
 
@@ -39,9 +39,17 @@ def _seed(tmp_path):
     return segment_id
 
 
+def _current_source_page(client):
+    connection = db.connect()
+    db.init_db(connection)
+    chosen = library.current(connection)
+    connection.close()
+    return client.get(f"/sources/{chosen}" if chosen else "/sources")
+
+
 def test_index_lists_units(client, tmp_path):
     segment_id = _seed(tmp_path)
-    body = client.get("/").text
+    body = _current_source_page(client).text
     assert "Hello there." in body
     assert f"/practice/{segment_id}/2" in body
 
@@ -54,20 +62,20 @@ def test_static_urls_carry_a_version_that_follows_the_files(client, tmp_path):
     _seed(tmp_path)
     from shadow.web.app import HERE
 
-    stamp = re.findall(r"app\.js\?v=(\d+)", client.get("/").text)
+    stamp = re.findall(r"app\.js\?v=(\d+)", _current_source_page(client).text)
     assert stamp and stamp[0] != "0"
 
     target = HERE / "static" / "app.js"
     os.utime(target, (int(stamp[0]) + 100, int(stamp[0]) + 100))
     try:
-        again = re.findall(r"app\.js\?v=(\d+)", client.get("/").text)
+        again = re.findall(r"app\.js\?v=(\d+)", _current_source_page(client).text)
         assert again[0] != stamp[0]
     finally:
         os.utime(target, (int(stamp[0]), int(stamp[0])))
 
 
 def test_index_is_helpful_when_empty(client):
-    assert "还没有导入素材" in client.get("/").text
+    assert "还没有导入素材" in _current_source_page(client).text
 
 
 def test_practice_page_hides_the_text_behind_locked_steps(client, tmp_path):
@@ -268,7 +276,8 @@ def test_home_goes_to_the_source_you_opened_last(client, tmp_path):
     response = client.get("/", follow_redirects=False)
 
     assert response.status_code == 303
-    assert response.headers["location"] == f"/sources/{_source_of(first)}"
+    assert response.headers["location"] == "/today"
+    assert f'href="/sources/{_source_of(first)}"' in client.get("/today").text
 
 
 def test_home_without_sources_goes_to_the_library(client):
@@ -278,7 +287,7 @@ def test_home_without_sources_goes_to_the_library(client):
 
 def test_the_index_lists_a_running_sentence_number(client, tmp_path):
     _seed(tmp_path)
-    body = client.get("/").text
+    body = _current_source_page(client).text
 
     assert "<th>片段</th>" not in body
     assert ">1</td>" in body
@@ -310,7 +319,7 @@ def test_the_list_carries_what_the_filters_need(client, tmp_path):
     client.post("/api/rating", data={"segment": segment_id, "unit": 2, "rating": 2})
     _finished_run(segment_id, 2, ["“was” 该降没降"])
 
-    body = client.get("/").text
+    body = _current_source_page(client).text
 
     assert 'data-filter="issues"' in body
     assert 'data-filter="unheard"' in body
@@ -406,7 +415,7 @@ def test_index_hides_the_text_of_unpractised_units(client, tmp_path):
     目的是避免不小心读到，不是防偷看。
     """
     segment_id = _seed(tmp_path)
-    body = client.get("/").text
+    body = _current_source_page(client).text
     assert ">4 个词</span>" in body                     # 只说几个词，不露原文
     assert body.count("It was a start.") == 1          # 只此一处
     assert 'data-text="It was a start."' in body       # 而且是在属性里
@@ -415,15 +424,15 @@ def test_index_hides_the_text_of_unpractised_units(client, tmp_path):
 def test_index_shows_the_text_once_practised(client, tmp_path):
     segment_id = _seed(tmp_path)
     client.post("/api/rating", data={"segment": segment_id, "unit": 2, "rating": 3})
-    body = client.get("/").text
+    body = _current_source_page(client).text
     assert "It was a start." in body
 
 
 def test_index_links_straight_to_the_next_unpractised_unit(client, tmp_path):
     segment_id = _seed(tmp_path)
-    assert f'class="cta" href="/practice/{segment_id}/1"' in client.get("/").text
+    assert f'class="cta" href="/practice/{segment_id}/1"' in _current_source_page(client).text
     client.post("/api/rating", data={"segment": segment_id, "unit": 1, "rating": 3})
-    assert f'class="cta" href="/practice/{segment_id}/2"' in client.get("/").text
+    assert f'class="cta" href="/practice/{segment_id}/2"' in _current_source_page(client).text
 
 
 def test_no_next_link_when_everything_is_practised(client, tmp_path):
@@ -431,7 +440,7 @@ def test_no_next_link_when_everything_is_practised(client, tmp_path):
     for unit in (1, 2):
         client.post("/api/rating",
                     data={"segment": segment_id, "unit": unit, "rating": 3})
-    assert "开始下一句" not in client.get("/").text
+    assert "开始下一句" not in _current_source_page(client).text
 
 
 def test_practice_page_offers_repeat_playback(client, tmp_path):
@@ -752,7 +761,7 @@ def test_every_page_carries_the_service_light(client, tmp_path):
 
 def test_the_light_carries_the_command_that_brings_the_service_back(client):
     """断了的时候光说「断了」没用，得告诉人怎么恢复。"""
-    body = client.get("/").text
+    body = _current_source_page(client).text
     assert "uv run shadow serve" in body
 
 
@@ -801,7 +810,7 @@ def test_a_sentence_the_audio_does_not_contain_is_not_offered(client, tmp_path):
     assert "第 2 句 / 共 2 句" in client.get(f"/practice/{segment_id}/3").text
 
     # 列表里干脆不列，也不算进句数
-    index = client.get("/").text
+    index = _current_source_page(client).text
     assert "音频里没有这句" not in index
     assert f'href="/practice/{segment_id}/2"' not in index
     assert "练过 0/2 句" in index
@@ -819,15 +828,14 @@ def test_the_header_marks_the_page_you_are_on(client, tmp_path):
     segment_id = _seed(tmp_path)
 
     def current(url):
-        body = client.get(url).text
-        return re.findall(r'<a [^>]*aria-current="page"[^>]*>([^<]+)</a>', body)
-
-    assert current("/vocab") == ["生词本"]
-    assert current("/sources") == ["素材库"]
-    assert current(f"/sources/{_source_of(segment_id)}") == ["日课"]
-    assert current("/plan") == ["日课"]
-    assert current("/chain") == ["日课"]
-    assert current(f"/practice/{segment_id}/1") == []      # 练句子不属于哪个入口
+        return re.findall(r'<a href="([^"\n]+)" aria-current="page">', client.get(url).text)
+    assert current("/vocab") == ["/vocab"]
+    assert current("/sources") == ["/sources"]
+    assert current(f"/sources/{_source_of(segment_id)}") == ["/sources"]
+    assert current("/plan") == ["/today"]
+    assert current("/chain") == ["/today"]
+    assert current("/today") == ["/today"]
+    assert current(f"/practice/{segment_id}/1") == []
 
 
 def test_append_takes_extends_same_round_without_duplicate_attempts(client, tmp_path, monkeypatch):
