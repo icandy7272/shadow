@@ -198,3 +198,7 @@ input[type="checkbox"] { accent-color:var(--accent); width:20px; height:20px; }
 .figure-tabs{display:flex;padding:4px;border-radius:11px;background:var(--line);gap:4px;margin:12px 0}
 .figure-tabs button{flex:1;background:transparent;border:0}
 .figure-tabs button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 4px #0001}
+
+#practice-dock .dock-pager{margin:0;flex:1;min-width:0}
+#practice-dock .dock-pager a.next{margin:0;padding:10px;min-height:49px;font-size:12px;background:var(--soft);color:var(--accent);text-align:center;justify-content:center;width:100%}
+#practice-dock .dock-pager[inert]{opacity:.45}
