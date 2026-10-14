@@ -202,3 +202,5 @@ input[type="checkbox"] { accent-color:var(--accent); width:20px; height:20px; }
 #practice-dock .dock-pager{margin:0;flex:1;min-width:0}
 #practice-dock .dock-pager a.next{margin:0;padding:10px;min-height:49px;font-size:12px;background:var(--soft);color:var(--accent);text-align:center;justify-content:center;width:100%}
 #practice-dock .dock-pager[inert]{opacity:.45}
+
+#practice-dock .navigation-note{flex-basis:100%;margin:0;color:var(--warn);font-size:13px}

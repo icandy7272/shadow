@@ -1244,6 +1244,7 @@ if (root) {
 
   async function submit(blobs) {
     pending = blobs;
+    root.dataset.pending = "true";
     if (resubmitButton) resubmitButton.hidden = true;
     startButton.disabled = true;
     status.textContent = "正在转写和比对，大约十几秒 …";
@@ -1264,8 +1265,12 @@ if (root) {
     try {
       const response = await fetch("/api/takes", { method: "POST", body });
       if (!response.ok) {
+        if (response.status >= 500 || response.status === 408 || response.status === 429) {
+          throw new Error(`暂时无法提交（${response.status}）`);
+        }
         // 录音本身不合格（太短、静音），重交也没用
         pending = null;
+        root.dataset.pending = "false";
         const detail = await response.json().catch(() => ({}));
         status.textContent = "";
         box.hidden = false;
@@ -1287,7 +1292,12 @@ if (root) {
       startButton.disabled = false;
     }
 
+    if (!last || (last.error && last.retryable)) {
+      lost(blobs.length);
+      return;
+    }
     pending = null;
+    root.dataset.pending = "false";
     bar.classList.remove("working");
     bar.hidden = true;
     status.textContent = "";

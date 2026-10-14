@@ -1054,7 +1054,7 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp,
                    for take in result.takes})})
     except Exception as exc:
         log.exception("片段 %s 单元 %s 的比对失败", segment, unit)
-        yield _event({"error": f"比对失败：{exc}"})
+        yield _event({"error": f"比对失败：{exc}", "retryable": True})
 
 
 def _review_payload(result, run_id: int, *, audio: dict, takes: dict,

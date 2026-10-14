@@ -879,3 +879,17 @@ def test_append_takes_rejects_a_round_for_another_sentence(client, tmp_path):
     response = client.post('/api/takes', data={'segment': segment, 'unit': 2, 'run_id': run_id, 'append': 1},
                            files=[('files', ('a.wav', _wav_bytes(), 'audio/wav'))])
     assert response.status_code == 400
+
+
+def test_analysis_exception_is_retryable_without_discarding_recordings(monkeypatch):
+    import json
+    from shadow.web import app as web
+    def failed(*args):
+        raise RuntimeError('temporary analysis failure')
+    monkeypatch.setattr(web.review_mod, 'run', failed)
+    events = list(web._review_stream(segment=1, unit=1, ref_path=None,
+                                    ref_words=(), paths=['take.webm'], run_id=None,
+                                    stamp='test'))
+    payload = json.loads(events[-1])
+    assert payload['retryable'] is True
+    assert 'temporary analysis failure' in payload['error']
