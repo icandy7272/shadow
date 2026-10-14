@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="head"><h1>素材库</h1></div>
+<div class="head"><h1>素材</h1><button type="button" class="primary" data-open-dialog="import-sheet" aria-label="导入素材">＋ 导入</button></div>
+<label class="app-search">搜索素材<input type="search" id="library-search" placeholder="标题或状态" aria-label="搜索素材"></label>
+<dialog class="settings-dialog" id="import-sheet" aria-labelledby="import-sheet-title"><div class="sheet-header"><h2 id="import-sheet-title">导入素材</h2><button type="button" data-close-dialog>完成</button></div><div class="sheet-body">
 <form id="import-form" class="import-form">
   <input type="url" name="url" required aria-label="素材链接"
          placeholder="https://www.youtube.com/watch?v=…">
@@ -8,15 +10,16 @@
 </form>
 <p class="hint" id="import-note">{% if importing %}上一份还在导入，等它完成再导入下一份。{% else %}YouTube、播客都行，60 分钟以内。下载、转写、切句要几分钟，期间可以照常练别的。{% endif %}</p>
 
+</div></dialog>
 {% if not cards %}
-  <p class="empty">还没有导入素材。在上面贴一个链接开始。</p>
+  <p class="empty">还没有导入素材。点右上角「＋ 导入」，贴一个链接开始。</p>
 {% endif %}
 <ul class="cards" id="cards">
   {% for card in cards %}
   <li class="card{{ ' current' if card.current }}" data-id="{{ card.id }}" data-status="{{ card.status }}"
       data-sentences="{{ card.sentences }}" data-rounds="{{ card.rounds }}" data-takes="{{ card.takes }}">
     <div class="card-main">
-      <p class="card-title">{{ card.title }}</p>
+      <p class="card-title">{% if card.status == 'ready' %}<a href="/sources/{{ card.id }}">{{ card.title }}</a>{% else %}{{ card.title }}{% endif %}</p>
       {% if card.status == 'ready' %}
         <p class="card-meta">{{ '%.0f'|format(card.minutes) }} 分钟 · 练过 {{ card.practised }}/{{ card.sentences }} 句{% if card.last_practised %} · 上次 {{ card.last_practised | day }}{% endif %}</p>
       {% elif card.status == 'failed' %}
@@ -25,16 +28,16 @@
         <p class="card-meta">正在导入：<span class="card-step">{{ card.step }}</span></p>
       {% endif %}
     </div>
-    <div class="card-actions">
+    <details class="card-menu"><summary aria-label="素材操作">更多操作</summary><div class="card-actions">
       {% if card.status == 'ready' %}
-        {% if card.current %}<span class="badge">正在练</span>
+        {% if card.current %}<a class="button" href="/sources/{{ card.id }}">继续练习</a>
         {% else %}<a class="button" href="/sources/{{ card.id }}">{{ '切到这份' if card.practised else '开始练' }}</a>{% endif %}
         <button type="button" data-action="delete">删除</button>
       {% elif card.status == 'failed' %}
         <button type="button" data-action="retry">重试</button>
         <button type="button" data-action="delete">删除</button>
       {% endif %}
-    </div>
+    </div></details>
   </li>
   {% endfor %}
 </ul>

@@ -1,34 +1,13 @@
 <!doctype html>
 <html lang="zh">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Shadow{% endblock %}</title>
-<link rel="stylesheet" href="/static/app.css?v={{ assets() }}">
-</head>
-<body>
-{#- 顶栏标出当前在哪一页。素材页就是首页（日课卡片在上面）；练句子不属于哪个入口 -#}
-{%- set path = request.url.path -%}
-{%- set here = 'vocab' if path == '/vocab'
-          else 'library' if path == '/sources'
-          else 'plan' if path.startswith('/sources/') or path in ('/plan', '/chain', '/talk')
-          else '' -%}
-<header><a href="/" class="home">Shadow</a>
-  {%- for key, href, label in [('plan', '/#plan', '日课'), ('library', '/sources', '素材库'), ('vocab', '/vocab', '生词本')] -%}
-  <a href="{{ href }}" class="nav"{% if here == key %} aria-current="page"{% endif %}>{{ label }}</a>
-  {%- endfor %}{% block subtitle %}{% endblock %}
-  <span id="service" class="service up" role="status" data-assets="{{ assets() }}"
-        data-start="{{ start_command }}"><i></i><span>服务在线</span></span></header>
-<div id="service-banner" class="service-banner" hidden></div>
-<main>{% block content %}{% endblock %}</main>
-<script src="/static/ui.js?v={{ assets() }}"></script>
-<script src="/static/service.js?v={{ assets() }}"></script>
-<script src="/static/audio.js?v={{ assets() }}"></script>
-<script src="/static/figures.js?v={{ assets() }}"></script>
-<script src="/static/app.js?v={{ assets() }}"></script>
-<script src="/static/library.js?v={{ assets() }}"></script>
-<script src="/static/vocab.js?v={{ assets() }}"></script>
-<script src="/static/chain.js?v={{ assets() }}"></script>
-<script src="/static/talk.js?v={{ assets() }}"></script>
-</body>
-</html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#f2f2f7"><title>{% block title %}Shadow{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css?v={{ assets() }}"><link rel="stylesheet" href="/static/mobile.css?v={{ assets() }}">
+<script>try { const t=localStorage.getItem('shadow.theme'); if(t==='light'||t==='dark') document.documentElement.dataset.theme=t; } catch (_) {}</script></head>
+{% set path=request.url.path %}{% set here='vocab' if path=='/vocab' else 'library' if path.startswith('/sources') else 'records' if path=='/records' else 'today' if path in ('/today','/plan','/chain','/talk') else '' %}
+{% macro symbol(name) %}<svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ {'today':'M3 10 12 3l9 7 M5 9v12h5v-7h4v7h5V9','library':'M4 4v16 M9 4v16 M14 4v16 M18 4l4 16','vocab':'M3 4h7l2 2 2-2h7v16h-7l-2 2-2-2H3z M12 6v16','records':'M4 20V10 M10 20V4 M16 20v-8 M22 20H2','settings':'M9 3h6l1 4 4 1v8l-4 1-1 4H9l-1-4-4-1V8l4-1z M15 12a3 3 0 1 0-6 0 3 3 0 0 0 6 0'}[name] }}"/></svg>{% endmacro %}
+<body class="app-shell{% if path.startswith('/practice/') %} practice-app{% endif %}"><header class="app-header"><a href="/today" class="home">Shadow</a>{% block subtitle %}{% endblock %}<span id="service" class="service up" role="status" data-assets="{{ assets() }}" data-start="{{ start_command }}"><i></i><span>服务在线</span></span><button class="app-settings-button" type="button" data-open-dialog="app-settings" aria-label="设置">{{ symbol('settings') }}</button></header>
+<div id="service-banner" class="service-banner" hidden></div><main>{% block content %}{% endblock %}</main>
+{% if not path.startswith('/practice/') %}<nav class="app-tabs" aria-label="主导航">{% for key,href,label in [('today','/today','今日'),('library','/sources','素材'),('vocab','/vocab','生词'),('records','/records','记录')] %}<a href="{{ href }}"{% if here==key %} aria-current="page"{% endif %}>{{ symbol(key) }}<span>{{ label }}</span></a>{% endfor %}</nav>{% endif %}
+<dialog class="settings-dialog" id="app-settings" aria-labelledby="app-settings-title"><div class="sheet-header"><h2 id="app-settings-title">设置</h2><button type="button" data-close-dialog>完成</button></div><div class="sheet-body"><p class="hint">外观</p><label class="settings-row">显示模式<select id="app-theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label><p class="hint">练习设置在跟读页调整，追加录音使用同样的设置。</p><a class="button" href="/plan">查看完整日课</a><p><a href="/sources">素材库</a> · <a href="/vocab">生词本</a> · <a href="/records">练习记录</a></p></div></dialog>
+{% for script in ['ui','service','audio','figures','app','library','vocab','chain','talk','mobile'] %}<script src="/static/{{ script }}.js?v={{ assets() }}"></script>{% endfor %}
+</body></html>

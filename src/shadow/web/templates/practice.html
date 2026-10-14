@@ -7,6 +7,9 @@
      data-min-take="{{ min_take_sec }}" data-seconds="{{ seconds }}"
      data-spoken="{{ spoken }}">
 
+  <div class="practice-context"><a class="page-back" href="/sources/{{ source_id }}">‹ 返回素材</a><span>第 {{ number }} / {{ total_units }} 句{% if queue %} · {{ queue.title }}{% endif %}</span></div>
+  <nav class="practice-steps" aria-label="练习步骤" role="tablist">
+  {% for key,label in [('listen','盲听'),('drill','默写'),('record','跟读')] %}<button type="button" role="tab" aria-controls="step-{{ key }}" data-practice-step="{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}"{% if not loop.first %} disabled{% endif %}>{{ loop.index }} {{ label }}</button>{% endfor %}</nav>
   <section class="step" id="step-listen">
     <h2><span class="n">1</span> 盲听{{ times(done_before.listen) }}</h2>
     <p class="hint">不看文字，就听。听完给自己打个分。</p>
@@ -46,6 +49,7 @@
       </div>
     </div>
     <div class="result" hidden></div>
+    <button type="button" class="primary practice-next-action" id="practice-continue" hidden>开始跟读 →</button>
   </section>
 
   <section class="step locked" id="step-record">
@@ -104,6 +108,8 @@
     <div class="result" id="rec-result" hidden></div>
   </section>
 
+  <div class="practice-actions" id="practice-dock" hidden aria-label="录音操作"></div>
+  <dialog class="settings-dialog" id="record-settings" aria-labelledby="record-settings-title"><div class="sheet-header"><h2 id="record-settings-title">录音设置</h2><button type="button" data-close-dialog>完成</button></div><div class="sheet-body"></div></dialog>
   <nav class="pager">
     {% if prev_unit %}
     <a href="/practice/{{ prev_unit.segment }}/{{ prev_unit.unit }}{{ queue.query if queue else '' }}"><kbd class="key-inline" aria-hidden="true">←</kbd> 上一句</a>

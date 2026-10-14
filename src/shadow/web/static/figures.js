@@ -1,3 +1,11 @@
+function bindPointerRange(node,hit,paint,commit){
+ let from=-1,pointer=null;node.style.touchAction="none";
+ node.addEventListener("pointerdown",event=>{if(event.button!==0||pointer!==null)return;from=hit(event);if(from<0)return;pointer=event.pointerId;node.setPointerCapture(pointer);paint([from,from]);event.preventDefault()});
+ node.addEventListener("pointermove",event=>{if(event.pointerId!==pointer||from<0)return;const to=hit(event);if(to>=0)paint([Math.min(from,to),Math.max(from,to)])});
+ node.addEventListener("pointerup",event=>{if(event.pointerId!==pointer||from<0)return;const to=hit(event),range=to<0?[from,from]:[Math.min(from,to),Math.max(from,to)];from=-1;pointer=null;paint(null);commit(range)});
+ const cancel=()=>{from=-1;pointer=null;paint(null)};node.addEventListener("pointercancel",cancel);node.addEventListener("lostpointercapture",cancel);
+}
+// ---------- Pointer range helper end ----------
 // 两张对比图，直接画进 DOM。
 //
 // 之前是服务端出 PNG 再内嵌，图里的字随图片缩放，页面一宽字就小得看不清。
@@ -167,26 +175,8 @@ function lane(role, name, blocks, spans, seconds) {
     node: row,
     tint: (range, on) => mark(on ? range : null, "hear"),
     pick(handler) {
-      let from = -1;
-      row.style.cursor = "pointer";
-      row.addEventListener("mousedown", (event) => {
-        from = blockAt(event.clientX);
-        if (from >= 0) { mark([from, from], "picked"); event.preventDefault(); }
-      });
-      row.addEventListener("mousemove", (event) => {
-        if (from < 0) return;
-        const to = blockAt(event.clientX);
-        if (to >= 0) mark([Math.min(from, to), Math.max(from, to)], "picked");
-      });
-      window.addEventListener("mouseup", (event) => {
-        if (from < 0) return;
-        const to = blockAt(event.clientX);
-        const range = to < 0 ? [from, from]
-                             : [Math.min(from, to), Math.max(from, to)];
-        from = -1;
-        mark(null, "picked");
-        handler(role, range);
-      });
+      row.style.cursor="pointer";
+      bindPointerRange(row,event=>blockAt(event.clientX),range=>mark(range,"picked"),range=>handler(role,range));
     },
   };
 }
@@ -499,30 +489,8 @@ function pitchFigure(slots) {
     node,
     onPick(handler) {
       // 拖着选一段，可以跨行。连读时单个词只有几十毫秒，拆开听不出什么，得连着放。
-      let from = -1;
-      rows.style.cursor = "pointer";
-
-      rows.addEventListener("mousedown", (event) => {
-        from = slotAt(event.clientX, event.clientY);
-        if (from >= 0) {
-          select([from, from]);
-          event.preventDefault();      // 别让拖动变成选中词标文字
-        }
-      });
-      rows.addEventListener("mousemove", (event) => {
-        if (from < 0) return;
-        const to = slotAt(event.clientX, event.clientY);
-        if (to >= 0) select([Math.min(from, to), Math.max(from, to)]);
-      });
-      window.addEventListener("mouseup", (event) => {
-        if (from < 0) return;
-        const to = slotAt(event.clientX, event.clientY);
-        const range = to < 0 ? [from, from]
-                             : [Math.min(from, to), Math.max(from, to)];
-        from = -1;
-        select(null);
-        handler(range, (side) => tint(side === null ? null : range, side));
-      });
+      rows.style.cursor="pointer";
+      bindPointerRange(rows,event=>slotAt(event.clientX,event.clientY),select,range=>handler(range,side=>tint(side===null?null:range,side)));
     },
     move(frame) {
       const at = locate(frame);
@@ -894,7 +862,20 @@ function renderTake(take) {
       player.playOne(role, at, (on) => rhythm.tint(role, range, on));
     });
   }
-  node.append(rhythm.node, pitch.node);
+  const switcher = el("div", "figure-tabs");
+  const options = [["节奏",rhythm.node],["音高",pitch.node]];
+  options.forEach(([label,panel],index) => {
+    const button = el("button",null,label);
+    button.type = "button";
+    button.setAttribute("aria-pressed",String(index===0));
+    switcher.append(button);
+    button.addEventListener("click",() => {
+      options.forEach(([,one]) => { one.hidden=one!==panel; });
+      [...switcher.children].forEach(one => one.setAttribute("aria-pressed",String(one===button)));
+    });
+  });
+  pitch.node.hidden=true;
+  node.append(switcher,rhythm.node,pitch.node);
   return { node, bar: bar && bar.node, stop: () => player && player.stop() };
 }
 

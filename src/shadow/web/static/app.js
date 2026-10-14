@@ -293,9 +293,9 @@ if (root) {
   // （练到第二步，空格该放的是第二步的重听）
   const spaceTarget = () => {
     if (recording) return document.getElementById("stop-take");
-    const both = document.querySelector("#rec-result:not([hidden]) .playbar > button");
+    const both = !document.getElementById("step-record").hidden && document.querySelector("#rec-result:not([hidden]) .playbar > button");
     if (both) return both;
-    const plays = [...document.querySelectorAll(".step:not(.locked) button.play")];
+    const plays = [...document.querySelectorAll(".step:not(.locked):not([hidden]) button.play")];
     return plays[plays.length - 1] || null;
   };
   // 「空格」小标只挂在它此刻对应的那个按钮上，别处的藏起来
@@ -333,7 +333,7 @@ if (root) {
       button.click();
     };
     // 跟读这一步还锁着的时候，它里面的东西一律不碰：「看一眼原文」提前按出来，盲听就废了
-    const shadowing = !byId("step-record").classList.contains("locked");
+    const shadowing = !byId("step-record").classList.contains("locked") && !byId("step-record").hidden;
     // 结果页的三个播放键：同时播放、只听原声、只听我的
     const [, onlyRef, onlyMine] =
       [...document.querySelectorAll("#rec-result:not([hidden]) .playbar > button")];
@@ -357,7 +357,7 @@ if (root) {
       return;
     }
     if (key === "o" || key === "m") {
-      press(key === "o" ? onlyRef : onlyMine);
+      if (shadowing) press(key === "o" ? onlyRef : onlyMine);
       return;
     }
     if (key === "k") {
@@ -381,6 +381,7 @@ if (root) {
       return;
     }
     if (/^[1-5]$/.test(key)) {
+      if (listenStep.hidden) return;
       const rating = listenStep.querySelector(`.rating button[data-rating="${key}"]`);
       if (!rating) return;
       event.preventDefault();

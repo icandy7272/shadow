@@ -8,6 +8,7 @@
 <p class="hint">词典还没装，先只记词和原句。装上就有音标和释义：在终端运行 <code>uv run shadow dict install</code></p>
 {% endif %}
 
+<label class="app-search">搜索生词<input type="search" id="vocab-search" placeholder="单词、释义或原句" aria-label="搜索生词"></label>
 {% if not items %}
   <p class="empty">生词本还是空的。默写时勾「不会」的词会自动记进来；写错的词，可以在对完答案后点「加入生词本」。</p>
 {% else %}

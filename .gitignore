@@ -13,3 +13,7 @@ dist/
 *.wav
 *.webm
 .env
+
+.test-data/
+
+.worktrees/
