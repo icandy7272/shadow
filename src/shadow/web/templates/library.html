@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="head"><h1>素材</h1><button type="button" class="primary" data-open-dialog="import-sheet" aria-label="导入素材">＋ 导入</button></div>
+<a class="grouped-row vocab-entry" href="/vocab"><div><b>生词本</b><small>回看默写中遇到的词与表达</small></div><span>›</span></a>
 <label class="app-search">搜索素材<input type="search" id="library-search" placeholder="标题或状态" aria-label="搜索素材"></label>
 <dialog class="settings-dialog" id="import-sheet" aria-labelledby="import-sheet-title"><div class="sheet-header"><h2 id="import-sheet-title">导入素材</h2><button type="button" data-close-dialog>完成</button></div><div class="sheet-body">
 <form id="import-form" class="import-form">

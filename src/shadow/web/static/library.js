@@ -39,15 +39,13 @@
       } else {
         const title = card.querySelector(".card-title").textContent.trim();
         const { sentences, rounds, takes } = card.dataset;
-        const sure = window.confirm(
-          `删除「${title}」？\n\n${sentences} 个句子、${rounds} 轮练习记录、${takes} 遍录音会全部删掉，不能恢复。`
-          + "\n打卡格子和连续天数会保留。");
+        const sure = await window.ShadowUI.confirm({title:`删除「${title}」？`, message:`${sentences} 个句子、${rounds} 轮练习记录、${takes} 遍录音会全部删掉，不能恢复。打卡格子和连续天数会保留。`,confirm:"删除素材",danger:true});
         if (!sure) return;
         await send(`/api/sources/${card.dataset.id}`, { method: "DELETE" });
       }
       window.location.reload();
     } catch (err) {
-      window.alert(err.message);
+      window.ShadowUI.toast(err.message);
     }
   });
 

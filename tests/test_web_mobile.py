@@ -60,3 +60,91 @@ def test_records_range_filters_real_archive_and_talks(client):
     entire = client.get('/records?range=all').text
     assert f'/talk/audio/{old}.webm' in entire
     assert 'data-sentences="2" data-rounds="6" data-talks="2"' in entire
+
+
+def test_native_start_and_five_slot_navigation(client, tmp_path):
+    segment = _seed(tmp_path)
+    page = client.get('/start')
+    assert page.status_code == 200
+    assert f'href="/practice/{segment}/1"' in page.text
+    for href in ('/today', '/plan', '/start', '/records', '/sources'):
+        assert f'href="{href}"' in page.text
+    assert 'data-session-start' in page.text
+    assert 'session.js' in page.text
+
+
+def test_native_settings_and_practice_session_controls(client, tmp_path):
+    segment = _seed(tmp_path)
+    assert client.get('/settings').status_code == 200
+    page = client.get(f'/practice/{segment}/1').text
+    assert 'id="practice-minimize"' in page
+    assert 'id="practice-finish"' in page
+    assert 'id="session-finish"' in page
+
+
+def test_record_day_and_plan_overview(client, tmp_path):
+    _seed(tmp_path)
+    day = datetime.now().astimezone().date().isoformat()
+    assert f'/records/day/{day}' in client.get('/today').text
+    page = client.get(f'/records/day/{day}')
+    assert page.status_code == 200
+    assert '这天还没有练习记录' in page.text
+    assert client.get('/records/day/2026-02-30').status_code == 422
+    assert client.get('/records/run/999999').status_code == 404
+    assert 'id="plan"' in client.get('/plan').text
+    assert '影子跟读日课' in client.get('/plan/guide').text
+
+
+def test_records_keep_blind_runs_and_every_attempt(client, tmp_path):
+    segment = _seed(tmp_path)
+    connection = db.connect()
+    run_ids = []
+    for index in range(8):
+        run = db.start_run(connection, segment_id=segment, unit_index=1, unit_text=f'Recorded sentence {index}')
+        db.set_blind_rating(connection, run, 3)
+        db.finish_run(connection, run)
+        run_ids.append(run)
+    for index in range(2):
+        audio = tmp_path / f'actual-{index}.wav'
+        audio.write_bytes(b'audio')
+        db.add_attempt(connection, run_id=run_ids[-1], audio_path=str(audio), asr_text=f'Actual take {index}', metrics={'accuracy': 0.8, 'speech_ratio': 1.2, 'pause_ratio': None, 'issues': [{'title': '这里停顿过长'}]})
+    connection.close()
+    recent = client.get('/records?range=all').text
+    assert recent.count('href="/records/run/') == 6
+    assert '/records?range=all&history=all' in recent
+    assert client.get('/records?range=all&history=all').text.count('href="/records/run/') == 8
+    detail = client.get(f'/records/run/{run_ids[-1]}?range=all').text
+    assert 'Recorded sentence 7' in detail
+    assert 'Actual take 0' in detail and 'Actual take 1' in detail
+    assert '/take/actual-0.wav' in detail and '/take/actual-1.wav' in detail
+    assert '识别准确率：80%' in detail
+    assert '发声时长相对原音：1.2 倍' in detail
+    assert '这里停顿过长' in detail
+    assert '<pre>' not in detail
+    assert '停顿时长相对原音：' not in detail
+    assert '?range=all' in detail
+    blind = client.get(f'/records/run/{run_ids[0]}').text
+    assert '盲听自评：3' in blind
+    assert '这轮没有跟读录音' in blind
+
+
+def test_records_talks_are_bounded_and_not_duplicated(client):
+    client.get('/sources')
+    connection = db.connect()
+    day = datetime.now().astimezone().date().isoformat()
+    for index in range(9):
+        db.add_talk(connection, day=day, kind='retell', audio_path=f'/tmp/bounded-{index}.webm', seconds=42)
+    connection.close()
+    recent = client.get('/records?range=all').text
+    assert recent.count('<audio ') == 6
+    assert 'data-talks="9"' in recent
+    full = client.get('/records?range=all&history=all').text
+    assert full.count('<audio ') == 9
+    assert '/talk/audio/bounded-0.webm' in full
+
+
+def test_empty_plan_keeps_real_today_status(client):
+    page = client.get('/plan')
+    assert page.status_code == 200
+    assert '今天还没练' in page.text
+    assert 'href="/plan/guide"' in page.text

@@ -829,10 +829,10 @@ def test_the_header_marks_the_page_you_are_on(client, tmp_path):
 
     def current(url):
         return re.findall(r'<a href="([^"\n]+)" aria-current="page">', client.get(url).text)
-    assert current("/vocab") == ["/vocab"]
+    assert current("/vocab") == ["/sources"]
     assert current("/sources") == ["/sources"]
     assert current(f"/sources/{_source_of(segment_id)}") == ["/sources"]
-    assert current("/plan") == ["/today"]
+    assert current("/plan") == ["/plan"]
     assert current("/chain") == ["/today"]
     assert current("/today") == ["/today"]
     assert current(f"/practice/{segment_id}/1") == []

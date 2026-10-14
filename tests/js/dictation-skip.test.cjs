@@ -64,7 +64,7 @@ test('skipping dictation unlocks recording without grading or discarding the dra
 test('mastered dictation advances to recording after blind rating', async () => {
   const source = fs.readFileSync('src/shadow/web/static/app.js', 'utf8');
   const start = source.indexOf('      const drill = document.getElementById("step-drill");');
-  const end = source.indexOf('\n    });', start);
+  const end = source.indexOf('\n      } finally', start);
   for (const mastered of [false, true]) {
     let skipped = false;
     let focused = false;

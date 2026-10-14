@@ -154,6 +154,7 @@ const root = document.getElementById("practice");
 // 原来页面没把这个编号传回去，每一步各开一行——「练过 N 次」被放大成三倍，
 // 今天新练的句子也被当成复习过的，占掉了当天的复习名额。
 let runId = null;
+let sessionGrading = null;
 const keepRun = (data) => { if (data && data.run_id != null) runId = data.run_id; };
 if (root) {
   const segment = root.dataset.segment;
@@ -245,6 +246,10 @@ if (root) {
   const listenStep = document.getElementById("step-listen");
   listenStep.querySelectorAll(".rating button").forEach((button) => {
     button.addEventListener("click", async () => {
+      if(root.dataset.mutating==='true'||recording)return;
+      root.dataset.mutating='true';
+      listenStep.querySelectorAll('.rating button').forEach(b=>b.disabled=true);
+      try {
       stopLoops();
       listenStep.querySelectorAll(".rating button")
         .forEach((b) => b.classList.remove("chosen"));
@@ -282,6 +287,7 @@ if (root) {
       if (window.matchMedia("(hover: hover)").matches) {
         document.getElementById("dictation-text")?.focus({ preventScroll: true });
       }
+      } finally {root.dataset.mutating='false';listenStep.querySelectorAll('.rating button').forEach(b=>b.disabled=false);}
     });
   });
 
@@ -365,9 +371,7 @@ if (root) {
       const retire = byId("retire");
       if (retire && !retire.disabled) {
         event.preventDefault();
-        if (window.confirm("这句不再练？复习和「下一句」都会跳过它，以后可以在这页恢复。")) {
-          retire.click();
-        }
+        window.ShadowUI.confirm({title:"这句不再练？",message:"复习和下一句都会跳过它，以后可以在这页恢复。",confirm:"标记熟练"}).then(sure=>{if(sure)retire.click();});
         return;
       }
       press(byId("unretire"));
@@ -454,6 +458,10 @@ if (root) {
   });
 
   submitDrill.addEventListener("click", async () => {
+    if(root.dataset.mutating==='true'||recording||submitDrill.disabled)return;
+    root.dataset.mutating='true';
+    listenStep.querySelectorAll('.rating button').forEach(b=>b.disabled=true);
+    try {
     stopLoops();
     const replayButton = drillStep.querySelector("button.play");
     const box = drillStep.querySelector(".result");
@@ -487,6 +495,7 @@ if (root) {
     }
     const graded = await response.json();
     keepRun(graded);
+    sessionGrading = graded;
     box.replaceChildren(...dictationResult(graded));
     // 框收起来，只留答案和释义；开始跟读时整步再收起
     drillStep.classList.add("graded");
@@ -494,6 +503,7 @@ if (root) {
     markComplete(drillStep);
     setFolded(false);
     document.getElementById("step-record").classList.remove("locked");
+    } finally {root.dataset.mutating='false';listenStep.querySelectorAll('.rating button').forEach(b=>b.disabled=false);}
   });
 
   // 默写收起后，点标题还能再打开：跟读分析完了，回头看默写错在哪、生词什么意思。
@@ -632,6 +642,16 @@ if (root) {
     }
     return nodes;
   }
+  window.ShadowSession?.register({
+    capture:()=>({runId,grading:sessionGrading,typed:typed.value,rating:listenStep.querySelector('.rating button.chosen')?.dataset.rating||null,activeStep:root.dataset.activeStep||'listen',steps:Object.fromEntries(['listen','drill','record'].map(id=>[id,['locked','complete','graded','skipped','done','foldable'].filter(name=>document.getElementById(`step-${id}`).classList.contains(name))]))}),
+    restore:saved=>{
+      runId=Number.isInteger(saved.runId)?saved.runId:null;typed.value=typeof saved.typed==='string'?saved.typed:'';refreshCount();sessionGrading=window.ShadowSession.validGrading(saved.grading)?saved.grading:null;
+      listenStep.querySelectorAll('.rating button').forEach(button=>button.classList.toggle('chosen',button.dataset.rating===saved.rating));
+      for(const id of ['listen','drill','record']){const step=document.getElementById(`step-${id}`),names=saved.steps?.[id];if(!Array.isArray(names))continue;for(const name of ['locked','complete','graded','skipped','done','foldable'])step.classList.toggle(name,names.includes(name));if(names.includes('complete')){const badge=step.querySelector('h2 .n');if(badge)badge.textContent='✓';}}
+      if(sessionGrading){const box=drillStep.querySelector('.result');box.hidden=false;box.replaceChildren(...dictationResult(sessionGrading));}
+      if(drillStep.classList.contains('foldable'))setFolded(drillStep.classList.contains('done'));root.dataset.activeStep=saved.activeStep||'listen';
+    }
+  });
 }
 
 // ---------- 看一眼原文 ----------
@@ -1121,19 +1141,20 @@ if (root) {
   let takeCount = 0;
   let submissionId = null;
   let resultFigures = [];
+  let sessionAnalysis = null;
   const extraButton = keyButton("primary", "再录 1 遍", "N");
   extraButton.id = "extra-record";
   extraButton.hidden = true;
   document.getElementById("rec-result").after(extraButton);
   const beginExtra = () => {
-    if (startButton.disabled || recording || pending) return;
+    if (startButton.disabled || recording || pending || root.dataset.mutating==='true') return;
     extraMode = true;
     submissionId = crypto.randomUUID();
     recordRound(true);
   };
   extraButton.addEventListener("click", beginExtra);
   startButton?.addEventListener("click", () => {
-    if (pending) return;
+    if (pending || root.dataset.mutating==='true') return;
     extraMode = false;
     submissionId = crypto.randomUUID();
     recordRound(false);
@@ -1216,6 +1237,7 @@ if (root) {
         }
         short = 0;
         blobs.push(clip.blob);
+        if(typeof window!=='undefined'&&window.ShadowSession){pending=blobs.slice();root.dataset.pending='true';try{await window.ShadowSession.saveCurrent();}catch(_){status.textContent='录音草稿没有存上，请保留此页面后重试。';}}
         // 每遍录完就说一句响度：太轻的话当场看见，不用等三遍录完被服务端拒收
         if (clip.loudest !== null) {
           say(`第 ${offset + take} 遍${verdict(clip.loudest)}`, clip.loudest < LOW_DB);
@@ -1275,8 +1297,11 @@ if (root) {
   }
 
   async function submit(blobs) {
+    root.dataset.submitting = "true";
+    try {
     pending = blobs;
     root.dataset.pending = "true";
+    if(typeof window!=='undefined'&&window.ShadowSession){try{await window.ShadowSession.saveCurrent();}catch(_){}}
     if (resubmitButton) resubmitButton.hidden = true;
     startButton.disabled = true;
     status.textContent = "正在转写和比对，大约十几秒 …";
@@ -1355,8 +1380,10 @@ if (root) {
     runId = null;
     markComplete(document.getElementById("step-record"));
     document.dispatchEvent(new CustomEvent("shadow:analysed"));
+    sessionAnalysis = last.result;
     latestRun = last.result.run_id;
     takeCount = last.result.count;
+    if(typeof window!=='undefined')window.ShadowSession?.saveCurrent().catch(()=>{});
     extraButton.hidden = false;
     setLabel(extraButton, `再录 1 遍（第 ${takeCount + 1} 遍）`);
     // 分析完滚到跟读这一步的开头：每一遍的结果和图都在它下面，不用再自己往下找。
@@ -1365,6 +1392,7 @@ if (root) {
       || document.visibilityState === "hidden";
     document.getElementById("step-record").scrollIntoView(
       { behavior: still ? "auto" : "smooth", block: "start" });
+    } finally { root.dataset.submitting = "false"; }
   }
 
   function showResult(data, box) {
@@ -1393,4 +1421,35 @@ if (root) {
     box.prepend(figures.controls);
     box.append(figures.figures);
   }
+  window.ShadowSession?.register({
+    recording:()=>recording,
+    capture:()=>({sawText,analysis:sessionAnalysis,selectedTake:[...document.querySelectorAll('#rec-result .take-row')].findIndex(row=>row.classList.contains('chosen')),latestRun,takeCount,extraMode,submissionId,pending,settings:Object.fromEntries(['takes','prelisten','auto-stop'].map(id=>{const c=document.getElementById(id);return [id,c?.type==='checkbox'?c.checked:c?.value]}))}),
+    restore:saved=>{
+      sawText=Boolean(saved.sawText);latestRun=Number.isInteger(saved.latestRun)?saved.latestRun:null;takeCount=Number.isInteger(saved.takeCount)?saved.takeCount:0;extraMode=Boolean(saved.extraMode);submissionId=typeof saved.submissionId==='string'?saved.submissionId:null;
+      pending=Array.isArray(saved.pending)&&saved.pending.length&&saved.pending.every(blob=>blob instanceof Blob)&&submissionId?saved.pending:null;root.dataset.pending=String(Boolean(pending));
+      for(const [id,value] of Object.entries(saved.settings||{})){const c=document.getElementById(id);if(c&&value!==undefined){if(c.type==='checkbox')c.checked=Boolean(value);else c.value=value;}}
+      if(saved.analysis&&validReviewResult(saved.analysis)){sessionAnalysis=saved.analysis;const box=document.getElementById('rec-result');box.hidden=false;showResult(sessionAnalysis,box);if(Number.isInteger(saved.selectedTake)&&saved.selectedTake>=0)box.querySelectorAll('.take-row')[saved.selectedTake]?.click();extraButton.hidden=false;setLabel(extraButton,`再录 1 遍（第 ${takeCount+1} 遍）`);}
+      if(pending){resubmitButton.hidden=false;status.textContent=`已恢复 ${pending.length} 遍录音，点「重新提交」继续。`;}
+    }
+  });
+
+}
+
+if(root&&window.ShadowSession){
+  root.inert=true;window.ShadowSession.restore().catch(()=>{}).finally(()=>{root.inert=false;});
+  let saving=false;const persist=()=>{if(saving||root.inert)return;saving=true;queueMicrotask(()=>{saving=false;const snapshot=window.ShadowSession.capture();if(snapshot.rating||snapshot.typed||snapshot.grading||snapshot.analysis||snapshot.pending)window.ShadowSession.save(snapshot).catch(()=>{});});};
+  root.addEventListener('input',persist);root.addEventListener('change',persist);root.addEventListener('click',persist);
+  new MutationObserver(persist).observe(root,{subtree:true,attributes:true,attributeFilter:['class','data-active-step','data-pending']});
+  document.addEventListener('click',async event=>{
+    const link=event.target.closest('a[href]');
+    if(root.dataset.mutating==='true'){event.preventDefault();return;}
+    if(!link||event.defaultPrevented||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||link.target==='_blank'||recording)return;
+    const destination=new URL(link.href,location.href);if(destination.origin!==location.origin||destination.pathname===location.pathname)return;
+    const snapshot=window.ShadowSession.capture();
+    if(!snapshot.rating&&!snapshot.typed&&!snapshot.grading&&!snapshot.analysis&&!snapshot.pending)return;
+    event.preventDefault();
+    try{await window.ShadowSession.saveCurrent();await window.ShadowSession.flush();window.location.assign(destination.href);}
+    catch(_){const note=document.getElementById('rec-status');if(note)note.textContent='练习草稿没有存上，请保留此页面后重试。';}
+  });
+  document.getElementById('practice-minimize')?.addEventListener('click',async()=>{if(recording||root.dataset.mutating==='true')return;stopLoops();try{await window.ShadowSession.saveCurrent();await window.ShadowSession.flush();window.location.assign('/today');}catch(_){const note=document.getElementById('rec-status');if(note)note.textContent='练习草稿没有存上，请保留此页面后重试。';}});
 }

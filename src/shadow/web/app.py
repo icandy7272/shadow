@@ -594,7 +594,18 @@ def talk_audio(name: str):
 
 @app.get("/plan", response_class=HTMLResponse)
 def plan_page(request: Request):
-    return templates.TemplateResponse(request, "plan.html", {})
+    connection = _db()
+    source_id = library.current(connection)
+    source = db.get_source(connection, source_id) if source_id else None
+    context = _source_context(connection, source) if source else {
+        "source": None, "days": progress.calendar(connection),
+        "plan": _plan_view(connection, _today(), filters.Selection(), 0, 0)}
+    return templates.TemplateResponse(request, "plan.html", context)
+
+
+@app.get("/plan/guide", response_class=HTMLResponse)
+def plan_guide(request: Request):
+    return templates.TemplateResponse(request, "plan-guide.html", {})
 
 
 @app.post("/api/plan")
@@ -673,8 +684,24 @@ def today_page(request: Request):
     return templates.TemplateResponse(request, "today.html", context)
 
 
+@app.get("/start", response_class=HTMLResponse)
+def start_page(request: Request):
+    connection = _db()
+    source_id = library.current(connection)
+    source = db.get_source(connection, source_id) if source_id else None
+    context = _source_context(connection, source) if source else {
+        "source": None, "next_unit": None,
+        "plan": _plan_view(connection, _today(), filters.Selection(), 0, 0)}
+    return templates.TemplateResponse(request, "start.html", context)
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request):
+    return templates.TemplateResponse(request, "settings.html", {})
+
+
 @app.get("/records", response_class=HTMLResponse)
-def records_page(request: Request, range_: str = Query("week", alias="range")):
+def records_page(request: Request, range_: str = Query("week", alias="range"), history: str = "recent"):
     connection = _db()
     today = _today()
     range_ = range_ if range_ in {"week", "month", "all"} else "week"
@@ -688,9 +715,69 @@ def records_page(request: Request, range_: str = Query("week", alias="range")):
     takes.sort(key=lambda item: (item["date"], item["id"]), reverse=True)
     days = progress.calendar(connection)
     shown_days = [day for day in days.days if since is None or day.date >= since.isoformat()]
+    timeline = _record_timeline(connection, since=since)
     return templates.TemplateResponse(request, "records.html",
         {"days": days, "calendar_days": shown_days, "takes": takes, "range": range_,
-         "summary": progress.summary(connection, since=since), "sources": library.cards(connection)})
+         "summary": progress.summary(connection, since=since), "sources": library.cards(connection),
+         "timeline": timeline if history == "all" else timeline[:6],
+         "history": history, "record_count": len(timeline)})
+
+
+def _record_timeline(connection, *, since=None, day=None):
+    items = []
+    for row in db.list_runs(connection):
+        when = progress._local_day(row["finished_at"] or row["started_at"])
+        if not when or (since and when < since.isoformat()) or (day and when != day):
+            continue
+        segment = db.get_segment(connection, row["segment_id"])
+        source = db.get_source(connection, segment["source_id"]) if segment else None
+        items.append({"kind": "run", "id": row["id"], "date": when,
+                      "title": row["unit_text"] or "练习记录", "source": source,
+                      "attempt_count": len(db.run_attempts(connection, row["id"]))})
+    for kind, spec in plan.TALKS.items():
+        for row in db.list_talks(connection, kind=kind, limit=-1):
+            if (since and row["day"] < since.isoformat()) or (day and row["day"] != day):
+                continue
+            items.append({**_talk_item(row, _today()), "kind": "talk", "title": spec.title})
+    return sorted(items, key=lambda item: (item["date"], item["id"]), reverse=True)
+
+
+@app.get("/records/day/{day}", response_class=HTMLResponse)
+def record_day(request: Request, day: str, range_: str = Query("week", alias="range")):
+    try:
+        parsed = date.fromisoformat(day)
+        if parsed.isoformat() != day:
+            raise ValueError
+    except ValueError:
+        raise HTTPException(422, "日期格式应为 YYYY-MM-DD")
+    connection = _db()
+    archive = [dict(row) for row in db.list_archive(connection) if row["day"] == day]
+    return templates.TemplateResponse(request, "record-day.html", {
+        "day": day, "timeline": _record_timeline(connection, day=day), "archive": archive,
+        "range": range_ if range_ in {"week", "month", "all"} else "week"})
+
+
+@app.get("/records/run/{run_id}", response_class=HTMLResponse)
+def record_detail(request: Request, run_id: int, range_: str = Query("week", alias="range")):
+    connection = _db()
+    run = next((dict(row) for row in db.list_runs(connection) if row["id"] == run_id), None)
+    if run is None:
+        raise HTTPException(404, "练习记录不存在或素材已删除")
+    segment = db.get_segment(connection, run["segment_id"])
+    source = db.get_source(connection, segment["source_id"]) if segment else None
+    attempts = []
+    for row in db.run_attempts(connection, run_id):
+        item = dict(row)
+        item["url"] = f"/take/{Path(row['audio_path']).name}"
+        item["available"] = Path(row["audio_path"]).is_file()
+        try:
+            item["metrics"] = json.loads(row["metrics_json"]) if row["metrics_json"] else None
+        except (TypeError, ValueError):
+            item["metrics"] = None
+        attempts.append(item)
+    return templates.TemplateResponse(request, "record-detail.html", {
+        "run": run, "source": source, "attempts": attempts,
+        "day": progress._local_day(run["finished_at"] or run["started_at"]), "range": range_ if range_ in {"week", "month", "all"} else "week"})
 
 
 @app.get("/practice/{segment_id}/{unit}", response_class=HTMLResponse)

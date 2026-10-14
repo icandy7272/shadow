@@ -11,6 +11,10 @@ function focusPracticeStep(step, desktop, controls) {
   if (step === 'record') controls.start?.focus({ preventScroll: true });
 }
 
+function sessionNavigationBusy(recording, pending, session) {
+  return Boolean(recording || session?.isMutating?.() || (pending && !session?.durable));
+}
+
 function guardPracticeNavigation(doc, win, busy, notify) {
   const block = event => {
     event.preventDefault();
@@ -32,21 +36,19 @@ function guardPracticeNavigation(doc, win, busy, notify) {
   });
 }
 
-if(typeof module!=='undefined')module.exports={nextPracticeStep,focusPracticeStep,guardPracticeNavigation};
+if(typeof module!=='undefined')module.exports={nextPracticeStep,focusPracticeStep,guardPracticeNavigation,sessionNavigationBusy};
 if(typeof document!=='undefined')(()=>{
  const theme=document.getElementById('app-theme');
  if(theme){theme.value=document.documentElement.dataset.theme||'system';theme.addEventListener('change',()=>{if(theme.value==='system')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=theme.value;try{localStorage.setItem('shadow.theme',theme.value)}catch(_){}})}
- document.addEventListener('click',event=>{const open=event.target.closest('[data-open-dialog]');if(open)document.getElementById(open.dataset.openDialog)?.showModal();const close=event.target.closest('[data-close-dialog]');if(close)close.closest('dialog')?.close()});
- document.querySelectorAll('dialog').forEach(dialog=>dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close()}));
  document.addEventListener('keydown',event=>{if(document.querySelector('dialog[open]'))event.stopImmediatePropagation()},true);
  const viewport=window.visualViewport;if(viewport){const resize=()=>{const inset=Math.max(0,window.innerHeight-viewport.height-viewport.offsetTop);document.documentElement.style.setProperty('--keyboard-inset',`${inset}px`);document.body.classList.toggle('keyboard-open',inset>100)};viewport.addEventListener('resize',resize);viewport.addEventListener('scroll',resize);resize()}
  for(const [id,selector] of [['library-search','#cards .card'],['vocab-search','#vocab .vocab-item']]){const input=document.getElementById(id);input?.addEventListener('input',()=>{const query=input.value.trim().toLocaleLowerCase();document.querySelectorAll(selector).forEach(card=>card.hidden=!card.textContent.toLocaleLowerCase().includes(query))})}
  const root=document.getElementById('practice');if(!root)return;
  const ids=['listen','drill','record'],panels=ids.map(id=>document.getElementById(`step-${id}`)),tabs=[...document.querySelectorAll('[data-practice-step]')];let active='listen';
  const dock=document.getElementById('practice-dock'),next=document.getElementById('practice-continue'),more=document.getElementById('rec-more'),settings=document.getElementById('record-settings');
- const isBusy=()=>recording||root.dataset.pending==='true';
+ const isBusy=()=>sessionNavigationBusy(recording,root.dataset.pending==='true',window.ShadowSession);
  const navigationNote=document.createElement('p');navigationNote.className='hint navigation-note';navigationNote.setAttribute('role','status');navigationNote.hidden=true;dock.append(navigationNote);
- guardPracticeNavigation(document,window,isBusy,()=>{navigationNote.textContent='录音还没有保存。请先完成录音或重新提交，再离开这句。';navigationNote.hidden=false});
+ guardPracticeNavigation(document,window,isBusy,()=>{navigationNote.textContent=root.dataset.mutating==='true'?'正在保存这一步，请稍等。':recording?'这遍还在录音，请先点击「说完了」。':'录音草稿还没有安全保存，请保留此页面并重新提交。';navigationNote.hidden=false});
  const pager=root.querySelector('.pager'),nextSentence=pager?.querySelector('a.next'),dockPager=document.createElement('nav');dockPager.className='pager dock-pager';if(nextSentence)dock.append(dockPager);
  const recSettings=more?.querySelector('.rec-settings');if(settings&&recSettings)settings.querySelector('.sheet-body').append(recSettings);
  more?.querySelector('summary')?.addEventListener('click',event=>{event.preventDefault();settings.showModal()});
@@ -59,5 +61,5 @@ if(typeof document!=='undefined')(()=>{
  const micObserver=new MutationObserver(updateMicFeedback);for(const id of ['rec-status','mic-note']){const el=document.getElementById(id);if(el)micObserver.observe(el,{childList:true,characterData:true,subtree:true})}
  let previous={listen:false,drill:false,skipped:false};
  function sync(){const status={listen:panels[0].classList.contains('complete'),drill:!panels[2].classList.contains('locked'),skipped:panels[1].classList.contains('skipped')};for(const tab of tabs){const locked=document.getElementById(`step-${tab.dataset.practiceStep}`).classList.contains('locked'),busy=isBusy();if(tab.disabled!==(locked||busy))tab.disabled=locked||busy}if(next.hidden!==!status.drill)next.hidden=!status.drill;let target=active;if(status.listen!==previous.listen||status.skipped!==previous.skipped)target=nextPracticeStep(active,status);if(typeof recording!=='undefined'&&recording)target='record';if(target!==active)show(target);if(dockPager.inert!==isBusy())dockPager.inert=isBusy();if(!isBusy()&&!navigationNote.hidden)navigationNote.hidden=true;const extra=document.getElementById('extra-record'),start=document.getElementById('start-record'),hasResult=Boolean(extra&&!extra.hidden);if(start.classList.contains('secondary-action')!==hasResult)start.classList.toggle('secondary-action',hasResult);previous=status}
- new MutationObserver(sync).observe(root,{subtree:true,attributes:true,attributeFilter:['class','hidden','disabled','data-pending'],childList:true});document.addEventListener('shadow:analysed',()=>show('record'));show('listen',false);sync();
+ new MutationObserver(sync).observe(root,{subtree:true,attributes:true,attributeFilter:['class','hidden','disabled','data-pending','data-mutating'],childList:true});document.addEventListener('shadow:session-saved',sync);document.addEventListener('shadow:analysed',()=>show('record'));document.addEventListener('shadow:session-restored',()=>{show(root.dataset.activeStep||'listen',false);sync()});show('listen',false);sync();
 })();

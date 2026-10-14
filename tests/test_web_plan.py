@@ -69,7 +69,7 @@ def test_the_home_page_shows_todays_plan(client, tmp_path):
     # 五步都是复选框：系统看得出来的先替你勾上，也能点掉
     assert body.count('class="plan-check"') == 5
     assert f'<a class="plan-link" href="/practice/{segment_id}/1"' in body
-    assert 'href="/plan"' in body
+    assert 'href="/plan/guide"' in body
 
 
 def test_saturday_shows_the_weekly_review(client, tmp_path, monkeypatch):
@@ -167,7 +167,7 @@ def test_a_sentence_practised_today_is_not_due_yet(client, tmp_path):
 
 
 def test_the_full_plan_page_is_up_to_date(client):
-    body = client.get("/plan").text
+    body = client.get("/plan/guide").text
 
     assert "影子跟读日课" in body
     assert "默写" in body

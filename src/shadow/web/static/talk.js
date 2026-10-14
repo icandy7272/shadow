@@ -78,7 +78,7 @@
     const button = event.target.closest(".talk-drop");
     if (!button) return;
     const item = button.closest(".talk-take");
-    if (!window.confirm("删除这一段录音？")) return;
+    if (!await window.ShadowUI.confirm({title:"删除这一段录音？",message:"这段录音会被删除，无法恢复。",confirm:"删除录音",danger:true})) return;
     button.disabled = true;
     try {
       const response = await fetch(`/api/talk/${item.dataset.id}`, { method: "DELETE" });
