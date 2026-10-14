@@ -733,8 +733,14 @@ if (root) {
     const Context = window.AudioContext || window.webkitAudioContext;
     const ctx = new Context();
     const wake = () => { ctx.resume().catch(() => {}); };   // 在点击里调用，iPhone 才放行
-    wake();
-    const clip = window.ShadowAudio.decode(src, ctx);
+    let clip;
+    try {
+      wake();
+      clip = window.ShadowAudio.decode(src, ctx);
+    } catch (err) {
+      ctx.close().catch(() => {});
+      throw err;
+    }
     clip.catch(() => {});   // 先别报：等 ready() 时由调用方说清楚
 
     return {
@@ -800,30 +806,39 @@ if (root) {
   async function listenTo(stream, spare) {
     const Context = window.AudioContext || window.webkitAudioContext;
     let own = new Context();
-    await own.resume().catch(() => {});
-    if (own.state !== "running") {
-      own.close().catch(() => {});
+    const closeOwn = () => {
+      const context = own;
       own = null;
-    }
-    const ctx = own || spare;
-    if (!ctx) throw new Error("开不起音频上下文");
-    const analyser = ctx.createAnalyser();
-    if (typeof analyser.getFloatTimeDomainData !== "function") {
-      if (own) own.close().catch(() => {});
-      throw new Error("这个浏览器读不到实时响度");   // 老 Safari：退回手动
-    }
-    analyser.fftSize = 1024;
-    ctx.createMediaStreamSource(stream).connect(analyser);   // 不接 destination：接了会啸叫
-    const frame = new Float32Array(analyser.fftSize);
-    return {
-      level() {
-        analyser.getFloatTimeDomainData(frame);
-        let sum = 0;
-        for (const sample of frame) sum += sample * sample;
-        return Math.sqrt(sum / frame.length);
-      },
-      close: () => { if (own) own.close().catch(() => {}); },
+      if (context) context.close().catch(() => {});
     };
+    try {
+      await own.resume().catch(() => {});
+      if (own.state !== "running") {
+        closeOwn();
+      }
+      const ctx = own || spare;
+      if (!ctx) throw new Error("开不起音频上下文");
+      const analyser = ctx.createAnalyser();
+      if (typeof analyser.getFloatTimeDomainData !== "function") {
+        closeOwn();
+        throw new Error("这个浏览器读不到实时响度");   // 老 Safari：退回手动
+      }
+      analyser.fftSize = 1024;
+      ctx.createMediaStreamSource(stream).connect(analyser);   // 不接 destination：接了会啸叫
+      const frame = new Float32Array(analyser.fftSize);
+      return {
+        level() {
+          analyser.getFloatTimeDomainData(frame);
+          let sum = 0;
+          for (const sample of frame) sum += sample * sample;
+          return Math.sqrt(sum / frame.length);
+        },
+        close: closeOwn,
+      };
+    } catch (err) {
+      closeOwn();
+      throw err;
+    }
   }
 
   // 手机不让出声时（没有点击，iPhone 会把声音挂起），让人点一下：点击里再解锁一次
@@ -848,7 +863,7 @@ if (root) {
     await tapToContinue("接着放", speaker.wake);
   };
 
-  const recordOne = (stream, ear, minSpoken, autoStop) => new Promise((resolve) => {
+  const recordOne = (stream, ear, minSpoken, autoStop) => new Promise((resolve, reject) => {
     const chunks = [];
     const recorder = new MediaRecorder(stream);
     let began = 0;
@@ -856,17 +871,25 @@ if (root) {
     let watch = 0;
     recorder.addEventListener("dataavailable", (e) => chunks.push(e.data));
     const heard = [];
-    recorder.addEventListener("stop", () => resolve({
-      blob: new Blob(chunks),
-      seconds: (performance.now() - began) / 1000,
-      dropped,
-      loudest: loudestOf(heard),
-    }));
-    const finish = () => {
+    const cleanup = () => {
       clearInterval(watch);
       stopButton.hidden = true;
-      if (redoButton) redoButton.hidden = true;
-      recorder.stop();
+      stopButton.onclick = null;
+      if (redoButton) { redoButton.hidden = true; redoButton.onclick = null; }
+    };
+    recorder.addEventListener("stop", () => {
+      cleanup();
+      resolve({ blob: new Blob(chunks), seconds: (performance.now() - began) / 1000,
+                dropped, loudest: loudestOf(heard) });
+    });
+    recorder.addEventListener("error", event => {
+      cleanup();
+      reject(event.error || new Error("麦克风或录音器中断了"));
+    });
+    const finish = () => {
+      cleanup();
+      try { if (recorder.state !== "inactive") recorder.stop(); }
+      catch (err) { reject(err); }
     };
     stopButton.hidden = false;
     stopButton.onclick = finish;
@@ -876,7 +899,7 @@ if (root) {
       // 而一遍念砸的录音会把三遍的中位数一起带偏。
       redoButton.onclick = () => { dropped = true; finish(); };
     }
-    recorder.start();
+    try { recorder.start(); } catch (err) { cleanup(); reject(err); return; }
     began = performance.now();
     if (!ear) return;
     let floor = FLOOR_CAP;
@@ -1117,112 +1140,110 @@ if (root) {
   });
 
   async function recordRound(extra) {
-    setRecording(true);         // 连播还开着的话会录进去，别处也不许再放
-    const speaker = createSpeaker();     // 趁这一下点击解锁声音，原声同时开始下载
+    setRecording(true);
+    startButton.disabled = true;
+    let speaker = null, stream = null, ear = null, meterOff = null;
+    const blobs = [];
+    let interrupted = false;
     const takes = extra ? 1 : Math.max(1, Number(document.getElementById("takes").value) || 1);
     const pre = Math.max(0, Number(document.getElementById("prelisten").value) || 0);
     const offset = extra ? takeCount : 0;
-    startButton.disabled = true;
-    // 默写的答案和释义看完了，开录时收起来：跟读时屏幕上不该有原文
-    document.getElementById("step-drill").classList.add("done");
-    let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: micWanted() });
-    } catch (err) {
-      status.textContent = "拿不到麦克风权限。浏览器地址栏左侧可以重新允许。";
-      speaker.close();
-      setRecording(false);
-      startButton.disabled = false;
-      return;
-    }
-    fillMics();          // 给过权限之后才拿得到设备名字
-    // 读不到实时响度（浏览器不给、上下文开不起来）就退回纯手动，不拦着人练。
-    // 把自动停关了也照样读：音量条得一直看得见
-    let ear = null;
-    try {
-      ear = await listenTo(stream, speaker.context);
-    } catch (err) {
-      ear = null;
-    }
-    const meterOff = ear ? watchLevel(ear) : null;
-    const wrapUp = () => {
-      setRecording(false);
-      meterOff?.();
-      stream.getTracks().forEach((t) => t.stop());
-      ear?.close();
-      speaker.close();
-      if (micMeter) micMeter.hidden = true;
-      status.classList.remove("live");
-      startButton.disabled = false;
-    };
-
-    status.textContent = "正在准备原声 …";
-    const outcome = await Promise.race([
-      speaker.ready().then(() => "ok", (err) => err.message || "原声解不开"),
-      sleep(20000).then(() => "原声加载或解码超过 20 秒"),
-    ]);
-    if (outcome !== "ok") {
-      status.textContent = `${outcome}。检查一下网络，再点「开始」。`;
-      wrapUp();
-      return;
-    }
-
-    const blobs = [];
-    let short = 0;
-    for (let take = 1; take <= takes; ) {
-      status.classList.remove("live");
-      for (let i = 1; i <= pre; i += 1) {
-        await awake(speaker);
-        status.textContent = `第 ${offset + take}/${offset + takes} 遍 —— 先听 ${i}/${pre}`;
-        await speaker.play();
-        if (i < pre) await sleep(GAP_MS);      // 最后一遍的空档留给提示音
+      // Construct synchronously inside the click, but still guarantee cleanup on failure.
+      speaker = createSpeaker();
+      document.getElementById("step-drill").classList.add("done");
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: micWanted() });
+      } catch (err) {
+        throw new Error("拿不到麦克风权限。浏览器地址栏左侧可以重新允许。");
       }
-      await awake(speaker);
-      status.textContent = pre
-        ? `第 ${offset + take}/${offset + takes} 遍 —— 跟着这个节奏开口`
-        : `第 ${offset + take}/${offset + takes} 遍 —— 嘀一声之后开始说`;
-      // 放完到开口，空得和前面每遍之间一样久，提示音卡在正中间
-      const half = pre ? Math.max(0, (GAP_MS - BEEP_MS) / 2) : 0;
-      await sleep(half);
-      await speaker.beep();
-      await sleep(half);
-      // 音量条要一直读，所以 ear 一直在；会不会自动收得看那个勾
-      status.textContent = ear && autoBox?.checked !== false
-        ? `第 ${offset + take}/${offset + takes} 遍 —— 录音中，说完停一下就自动收`
-        : `第 ${offset + take}/${offset + takes} 遍 —— 录音中，说完点「说完了」`;
-      status.classList.add("live");
-      const clip = await recordOne(stream, ear, minSpoken, autoBox?.checked !== false);
-
-      if (clip.dropped) {
-        status.classList.remove("live");
-        status.textContent = `第 ${offset + take} 遍作废，重来一次。`;
-        await sleep(900);
-        continue;
+      fillMics();
+      try { ear = await listenTo(stream, speaker.context); } catch (err) { ear = null; }
+      meterOff = ear ? watchLevel(ear) : null;
+      status.textContent = "正在准备原声 …";
+      const outcome = await Promise.race([
+        speaker.ready().then(() => "ok", err => err.message || "原声解不开"),
+        sleep(20000).then(() => "原声加载或解码超过 20 秒"),
+      ]);
+      if (outcome !== "ok") {
+        status.textContent = `${outcome}。检查一下网络，再点「开始」。`;
+        return;
       }
-
-      // 太短的就地重录这一遍。等录完三遍再由服务端拒收，等于逼人从头再来一轮。
-      if (clip.seconds < minTake) {
-        short += 1;
+      let short = 0;
+      for (let take = 1; take <= takes; ) {
         status.classList.remove("live");
-        if (short >= 3) {
-          status.textContent = "连着三遍都太短。是不是「说完了」点早了？先歇一下再来。";
-          break;
+        for (let i = 1; i <= pre; i += 1) {
+          await awake(speaker);
+          status.textContent = `第 ${offset + take}/${offset + takes} 遍 —— 先听 ${i}/${pre}`;
+          await speaker.play();
+          if (i < pre) await sleep(GAP_MS);      // 最后一遍的空档留给提示音
         }
-        status.textContent = `第 ${offset + take} 遍只录到 ${clip.seconds.toFixed(1)} 秒，太短了`
-          + " —— 嘀声之后再开口，说完再点「说完了」。这一遍重来。";
-        await sleep(2000);
-        continue;
+        await awake(speaker);
+        status.textContent = pre
+          ? `第 ${offset + take}/${offset + takes} 遍 —— 跟着这个节奏开口`
+          : `第 ${offset + take}/${offset + takes} 遍 —— 嘀一声之后开始说`;
+        // 放完到开口，空得和前面每遍之间一样久，提示音卡在正中间
+        const half = pre ? Math.max(0, (GAP_MS - BEEP_MS) / 2) : 0;
+        await sleep(half);
+        await speaker.beep();
+        await sleep(half);
+        // 音量条要一直读，所以 ear 一直在；会不会自动收得看那个勾
+        status.textContent = ear && autoBox?.checked !== false
+          ? `第 ${offset + take}/${offset + takes} 遍 —— 录音中，说完停一下就自动收`
+          : `第 ${offset + take}/${offset + takes} 遍 —— 录音中，说完点「说完了」`;
+        status.classList.add("live");
+        const clip = await recordOne(stream, ear, minSpoken, autoBox?.checked !== false);
+
+        if (clip.dropped) {
+          status.classList.remove("live");
+          status.textContent = `第 ${offset + take} 遍作废，重来一次。`;
+          await sleep(900);
+          continue;
+        }
+
+        // 太短的就地重录这一遍。等录完三遍再由服务端拒收，等于逼人从头再来一轮。
+        if (clip.seconds < minTake) {
+          short += 1;
+          status.classList.remove("live");
+          if (short >= 3) {
+            status.textContent = "连着三遍都太短。是不是「说完了」点早了？先歇一下再来。";
+            break;
+          }
+          status.textContent = `第 ${offset + take} 遍只录到 ${clip.seconds.toFixed(1)} 秒，太短了`
+            + " —— 嘀声之后再开口，说完再点「说完了」。这一遍重来。";
+          await sleep(2000);
+          continue;
+        }
+        short = 0;
+        blobs.push(clip.blob);
+        // 每遍录完就说一句响度：太轻的话当场看见，不用等三遍录完被服务端拒收
+        if (clip.loudest !== null) {
+          say(`第 ${offset + take} 遍${verdict(clip.loudest)}`, clip.loudest < LOW_DB);
+        }
+        take += 1;
       }
-      short = 0;
-      blobs.push(clip.blob);
-      // 每遍录完就说一句响度：太轻的话当场看见，不用等三遍录完被服务端拒收
-      if (clip.loudest !== null) {
-        say(`第 ${offset + take} 遍${verdict(clip.loudest)}`, clip.loudest < LOW_DB);
-      }
-      take += 1;
+    } catch (err) {
+      interrupted = true;
+      status.textContent = `录音中断：${err.message || "音频设备不可用"}。可以再点「开始」重试。`;
+    } finally {
+      const release = action => { try { action(); } catch (_) {} };
+      setRecording(false);
+      release(() => meterOff?.());
+      release(() => stream?.getTracks().forEach(track => release(() => track.stop())));
+      release(() => ear?.close());
+      release(() => speaker?.close());
+      if (micMeter) micMeter.hidden = true;
+      if (typeof stopButton !== "undefined" && stopButton) stopButton.hidden = true;
+      if (typeof redoButton !== "undefined" && redoButton) redoButton.hidden = true;
+      status.classList.remove("live");
+      startButton.disabled = false;
     }
-    wrapUp();      // 录完也要把上下文关掉：一次点「开始」漏一个，几轮之后浏览器就不再给了
-    if (blobs.length) await submit(blobs);
+    // A device failure on a later take must not throw away earlier complete takes.
+    if (blobs.length) {
+      await submit(blobs);
+      if (interrupted) document.getElementById("rec-result").prepend(
+        el("p", "bad", `本次录音中途停止，共完成了 ${blobs.length} 遍。`));
+    }
   }
 
   // 录音只存在这个页面里。服务断了、提交失败，也不能把它们扔掉——
@@ -1240,6 +1261,17 @@ if (root) {
       + "服务恢复后点「重新提交」，先别刷新页面。";
     if (resubmitButton) resubmitButton.hidden = false;
     service.check();
+  }
+
+  function validReviewResult(data) {
+    return data && Number.isInteger(data.run_id) && data.run_id > 0
+      && Number.isInteger(data.count) && data.count > 0
+      && [data.accuracy, data.speech].every(Number.isFinite)
+      && (data.pause === null || Number.isFinite(data.pause))
+      && [data.rejected, data.skipped, data.issues, data.good].every(Array.isArray)
+      && data.view && Array.isArray(data.view.takes) && data.view.takes.length > 0
+      && Number.isInteger(data.view.chosen) && data.view.chosen >= 0
+      && data.view.chosen < data.view.takes.length;
   }
 
   async function submit(blobs) {
@@ -1292,33 +1324,39 @@ if (root) {
       startButton.disabled = false;
     }
 
-    if (!last || (last.error && last.retryable)) {
+    if (!last || (last.error && last.retryable)
+        || (!last.error && !validReviewResult(last.result))) {
+      lost(blobs.length);
+      return;
+    }
+    bar.classList.remove("working");
+    bar.hidden = true;
+    status.textContent = "";
+    box.hidden = false;
+    if (last.error) {
+      pending = null;
+      root.dataset.pending = "false";
+      status.textContent = last.error;
+      return;
+    }
+    try {
+      stopLoops();
+      resultFigures.forEach(figures => figures.dispose());
+      resultFigures = [];
+      showResult(last.result, box);
+    } catch (err) {
+      // Keep the clips until both the response and its UI are usable.
       lost(blobs.length);
       return;
     }
     pending = null;
     root.dataset.pending = "false";
-    bar.classList.remove("working");
-    bar.hidden = true;
-    status.textContent = "";
-    box.hidden = false;
-    if (!last || last.error) {
-      status.textContent = (last && last.error) || "比对中断了，之前的结果仍保留，重录一遍试试。";
-      return;
-    }
-    // 每遍的响度提示到这儿就过时了，结果里一遍一行都有；偏轻的警告留着，下一轮还用得上
     if (micNote && !micNote.classList.contains("low")) say("");
-    // 这一轮到此为止。同一页上再录一轮，算新的一轮——和原来一样各记各的
     runId = null;
-    // 分析完了：默写那一步可以重新打开，回头看错在哪
     markComplete(document.getElementById("step-record"));
     document.dispatchEvent(new CustomEvent("shadow:analysed"));
-    stopLoops();
-    resultFigures.forEach((figures) => figures.dispose());
-    resultFigures = [];
     latestRun = last.result.run_id;
     takeCount = last.result.count;
-    showResult(last.result, box);
     extraButton.hidden = false;
     setLabel(extraButton, `再录 1 遍（第 ${takeCount + 1} 遍）`);
     // 分析完滚到跟读这一步的开头：每一遍的结果和图都在它下面，不用再自己往下找。

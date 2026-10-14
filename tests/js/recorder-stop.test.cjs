@@ -1,0 +1,7 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+function run(kind){const source=fs.readFileSync('src/shadow/web/static/app.js','utf8'),a=source.indexOf('  const recordOne ='),b=source.indexOf('  // 服务端按音频时长',a),timers=new Set(),stop={hidden:true},redo={hidden:true};let id=0;
+ class Recorder{constructor(){this.events={};this.state='recording'}addEventListener(n,f){this.events[n]=f}start(){queueMicrotask(()=>{this.state='inactive';if(kind==='error')this.events.error?.({error:new Error('device disconnected')});else this.events.stop()})}stop(){this.state='inactive';this.events.stop()}}
+ const ctx={MediaRecorder:Recorder,Blob,performance:{now:()=>10},stopButton:stop,redoButton:redo,loudestOf:()=>null,WATCH_MS:50,FLOOR_CAP:.01,setInterval:()=>{const n=++id;timers.add(n);return n},clearInterval:n=>timers.delete(n)};
+ const promise=vm.runInNewContext(source.slice(a,b)+'\nrecordOne({}, {level:()=>.1}, 0, true)',ctx);return {promise,timers,stop,redo};}
+test('device-driven stop clears meter timers and hides stale stop controls',async()=>{const c=run('stop');await c.promise;assert.equal(c.timers.size,0);assert.equal(c.stop.hidden,true);assert.equal(c.redo.hidden,true)});
+test('device error rejects the take and clears its timers and controls',async()=>{const c=run('error');c.promise.catch(()=>{});await new Promise(resolve=>queueMicrotask(resolve));assert.equal(c.timers.size,0);assert.equal(c.stop.hidden,true);await assert.rejects(c.promise,/device disconnected/)});
