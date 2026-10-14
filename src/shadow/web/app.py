@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
@@ -671,7 +671,7 @@ def _source_context(connection, source: dict) -> dict:
 
 
 @app.get("/today", response_class=HTMLResponse)
-def today_page(request: Request):
+def today_page(request: Request, week: int = Query(0, ge=-52, le=52)):
     connection = _db()
     today = _today()
     source_id = library.current(connection)
@@ -679,7 +679,17 @@ def today_page(request: Request):
     context = _source_context(connection, source) if source else {
         "source": None, "next_unit": None, "days": progress.calendar(connection),
         "plan": _plan_view(connection, today, filters.Selection(), 0, 0)}
-    context.update({"today": today.isoformat(), "week_days": context["days"].days[-7:],
+    start = plan.week_start(today) + timedelta(weeks=week)
+    calendar = progress.calendar(connection, weeks=max(10, 1 - min(week, 0)))
+    by_date = {day.date: day for day in calendar.days}
+    week_days = []
+    for offset in range(7):
+        selected = start + timedelta(days=offset)
+        week_days.append(by_date.get(selected.isoformat()) or progress.Day(
+            selected.isoformat(), 0, 0, 0, selected > today))
+    context.update({"today": today.isoformat(), "week_days": week_days, "week": week,
+                    "week_caption": "本周" if week == 0 else f"{start:%m/%d} — {start + timedelta(days=6):%m/%d}",
+                    "lifetime_rounds": progress.summary(connection)["rounds"],
                     "weekday_labels": ("一", "二", "三", "四", "五", "六", "日")})
     return templates.TemplateResponse(request, "today.html", context)
 

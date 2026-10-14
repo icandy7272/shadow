@@ -148,3 +148,27 @@ def test_empty_plan_keeps_real_today_status(client):
     assert page.status_code == 200
     assert '今天还没练' in page.text
     assert 'href="/plan/guide"' in page.text
+
+
+def test_today_week_navigation_preserves_today_task_and_real_archive(client):
+    client.get('/sources')
+    connection = db.connect()
+    past = datetime.now().astimezone().date() - timedelta(days=7)
+    connection.execute('INSERT INTO practice_archive (day, sentence, rounds) VALUES (?, ?, ?)', (past.isoformat(), 'Earlier sentence.', 2))
+    connection.commit()
+    connection.close()
+    page = client.get('/today?week=-1')
+    assert page.status_code == 200
+    assert f'href="/records/day/{past.isoformat()}"' in page.text
+    assert f'{past.isoformat()} · 1 句 · 2 轮' in page.text
+    assert 'href="/today?week=-2"' in page.text
+    assert 'href="/today?week=0"' in page.text
+    assert 'href="/records" class="streak-card"' in page.text
+    assert datetime.now().astimezone().date().isoformat() in page.text
+    assert client.get('/today?week=1000').status_code == 422
+
+
+def test_mobile_settings_include_optional_awake_and_touch_controls(client):
+    page = client.get('/settings').text
+    assert 'id="keep-screen-awake"' in page
+    assert 'mobile-controls.js' in page
