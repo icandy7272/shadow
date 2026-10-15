@@ -34,3 +34,9 @@
 安装配置文件需要携带入口密码或登录状态，所有页面统一使用 `crossorigin="use-credentials"` 加载 manifest。manifest 的 `scope` 为 `/`，覆盖所有底部 tab，`display` 为 `standalone`。不要把页面路径改成另一域名或为内部链接添加新窗口目标。
 
 如果之前安装时配置文件被入口认证拦截，更新后原主屏幕图标可能仍保留旧的安装信息。请先关闭该 App，用 Safari 打开 https://shadow.cheerup.tech/today 并刷新、登录，再重新添加到主屏幕；系统若提供“作为网页 App 打开”选项，保持开启。此操作不要清除网站数据。实际工具栏行为需要在 iPhone 上复核。
+
+## 正式站点切换记录 · 2026-10-15
+
+经所有者明确同意，`https://shadow.cheerup.tech` 已从 nginx Basic Auth 切换为 Shadow 应用内认证。变更前备份原站点配置，`nginx -t` 通过后重载。
+
+公网验证：`/today` 返回 303 到 `/login`；登录页返回 200；未登录的素材 API、原声音频与跟读录音返回 401，均不包含触发浏览器密码框的 `WWW-Authenticate` 头；安装清单可读取且范围为 `/`。备用密码已配置，通行密钥仍需在实际设备上绑定。本文不记录密码或会话凭据。
