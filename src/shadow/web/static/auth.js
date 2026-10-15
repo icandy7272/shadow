@@ -50,7 +50,7 @@ if(typeof window!=='undefined')(()=>{
    const description=document.createElement('p');description.textContent='登录已过期。当前页面和录音会保留，验证后可继续提交。';
    const form=document.createElement('form');form.className='auth-form';
    const key=document.createElement('button');key.type='button';key.className='primary';key.dataset.passkeyLogin='';key.textContent='使用面容／指纹登录';
-   const password=document.createElement('input');password.type='password';password.name='password';password.autocomplete='current-password';password.placeholder='备用密码';password.setAttribute('aria-label','备用密码');
+   const password=document.createElement('input');password.type='password';password.name='password';password.autocomplete='current-password';password.inputMode='numeric';password.placeholder='6 位数字备用密码';password.setAttribute('aria-label','备用密码');
    const submit=document.createElement('button');submit.type='submit';submit.textContent='使用密码登录';
    const note=document.createElement('p');note.dataset.authNote='';note.className='hint';note.setAttribute('role','status');form.append(key,password,submit,note);body.append(title,description,form);dialog.append(body);document.body.append(dialog);loginDialog=dialog;
    wireLogin(form,async()=>{password.value='';window.ShadowSheets?.close(dialog);if(dialog.open)dialog.close();window.ShadowUI?.toast('已登录，可以继续提交。');document.dispatchEvent(new Event('shadow:authenticated'))});

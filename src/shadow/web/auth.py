@@ -84,8 +84,8 @@ def settings(db):
 
 def initialize(origin: str, password: str, *, reset: bool = False):
     origin = canonical_origin(origin)
-    if not 12 <= len(password) <= 1024:
-        raise ValueError('Backup password must contain 12–1024 characters.')
+    if len(password) != 6 or not password.isascii() or not password.isdecimal():
+        raise ValueError('备用密码必须是 6 位数字（0–9）。')
     salt = secrets.token_bytes(16)
     hashed = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1)
     with connect() as db:

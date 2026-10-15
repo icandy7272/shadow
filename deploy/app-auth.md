@@ -5,7 +5,7 @@
 ## 初始化与验证
 
 1. 更新并安装依赖：`uv sync`。
-2. 在运行 Shadow 的电脑里执行 `uv run shadow auth setup --origin https://你的域名`。密码通过隐藏输入设置两遍，不要把密码放入命令、脚本或聊天。至少 12 个字符。认证数据保存在数据目录的独立 `auth.sqlite3`，不要提交或公开该文件。
+2. 在运行 Shadow 的电脑里执行 `uv run shadow auth setup --origin https://shadow.cheerup.tech`。密码通过隐藏输入设置两遍，不要把密码放入命令、脚本或聊天。必须为 6 位数字（0–9），可以以 0 开头。认证数据保存在数据目录的独立 `auth.sqlite3`，不要提交或公开该文件。
 3. 重启 Shadow，保持 nginx 原来的访问密码。若电脑本地 HTTP 页面需要登录，正式验证应从已配置的 HTTPS 域名进行，因为 Passkey 与该域名绑定，写请求也校验这个 Origin。
 4. 域名访问 `/login`，使用备用密码。登录后到设置→账号与设备绑定 Passkey；退出后用 Passkey 再登录。Cookie 默认 90 天，未选记住设备为 12 小时。签名验证使用 py_webauthn，要求真实用户验证。
 5. 已登录设备生成设备码，新设备扫码或输入码。码在 10 分钟内仅可用一次；扫码地址把码放在 URL 片段中，不放进服务器请求日志。二维码本地生成，不请求第三方服务。
@@ -21,7 +21,7 @@
 
 ## 恢复与会话
 
-遗失登录方式时，在本机执行 `uv run shadow auth reset --origin https://你的域名`，隐藏输入新的备用密码。重置会撤销全部会话、设备码、旧 Passkey；练习数据保留，之后重新绑定 Passkey。退出所有设备撤销登录和待用设备码，但保留 Passkey。
+遗失登录方式时，在本机执行 `uv run shadow auth reset --origin https://shadow.cheerup.tech`，隐藏输入新的备用密码。重置会撤销全部会话、设备码、旧 Passkey；练习数据保留，之后重新绑定 Passkey。退出所有设备撤销登录和待用设备码，但保留 Passkey。
 
 练习中 Cookie 过期时，录音不会被当作不合格而丢弃；页面内重新登录后点击重新提交，沿用原提交编号。Safari 与主屏幕 App 的存储是否共享需要实体设备确认。
 

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from shadow.web import auth
 
 ORIGIN = 'https://shadow.test'
-PASSWORD = 'this is a backup password'
+PASSWORD = '012345'
 
 
 @pytest.fixture
@@ -87,7 +87,7 @@ def test_logout_all_and_reset(client):
     client.cookies.set(auth.COOKIE, old_cookie)
     assert client.get('/api/private').status_code == 401
     login(client)
-    auth.initialize(ORIGIN, PASSWORD + 'new', reset=True)
+    auth.initialize(ORIGIN, '654321', reset=True)
     assert client.get('/api/private').status_code == 401
 
 
@@ -225,14 +225,14 @@ def test_password_verification_cannot_issue_session_across_cli_reset(client, mon
         result = original(*args, **kwargs)
         if not reset_once:
             reset_once = True
-            auth.initialize(ORIGIN, PASSWORD + ' replacement', reset=True)
+            auth.initialize(ORIGIN, '654321', reset=True)
         return result
 
     monkeypatch.setattr(auth.hashlib, 'scrypt', interrupted)
     assert login(client).status_code == 401
     with auth.connect() as db:
         assert db.execute('SELECT count(*) FROM sessions').fetchone()[0] == 0
-    assert post(client, 'password', {'password': PASSWORD + ' replacement'}).status_code == 200
+    assert post(client, 'password', {'password': '654321'}).status_code == 200
 
 
 def test_logout_all_fences_inflight_password_without_changing_passkey_user(client, monkeypatch):
@@ -257,3 +257,15 @@ def test_logout_all_fences_inflight_password_without_changing_passkey_user(clien
         assert auth.settings(db)['user'] == user
         assert db.execute('SELECT count(*) FROM sessions').fetchone()[0] == 0
     assert login(client).status_code == 200
+
+
+@pytest.mark.parametrize('value', ['', '12345', '1234567', 'abcdef', '１２３４５６', '12345 ', '123.45'])
+def test_backup_pin_requires_exactly_six_ascii_digits(client, value):
+    with pytest.raises(ValueError, match='6'):
+        auth.initialize(ORIGIN, value)
+
+
+def test_backup_pin_preserves_leading_zero(client):
+    setup()
+    assert login(client).status_code == 200
+    assert post(client, 'password', {'password': '12345'}).status_code == 401

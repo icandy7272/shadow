@@ -673,7 +673,7 @@ def cmd_auth(args: argparse.Namespace) -> int:
     import getpass
     from .web.auth import initialize
     try:
-        password = getpass.getpass("备用密码（至少 12 字符）：")
+        password = getpass.getpass("备用密码（6 位数字）：")
         confirm = getpass.getpass("再次输入备用密码：")
         if password != confirm:
             raise ValueError("两次密码不一致")
