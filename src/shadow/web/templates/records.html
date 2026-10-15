@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}记录 · Shadow{% endblock %}
 {% block content %}
-<div class="head"><h1>记录</h1><a class="button" href="/talk">录一段 →</a></div>
+<div class="head"><h1>记录</h1><a class="button" href="/talk">录一段 →</a>{{ settings_link() }}</div>
 <nav class="record-ranges" aria-label="记录范围">{% for key, label in [('week', '本周'), ('month', '本月'), ('all', '全部')] %}<a class="button{{ ' chosen' if range == key }}" href="/records?range={{ key }}"{% if range == key %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
 <div class="record-summary" data-sentences="{{ summary.sentences }}" data-rounds="{{ summary.rounds }}" data-talks="{{ takes|length }}"><div><b>{{ summary.sentences }}</b><span>练习句次</span></div><div><b>{{ summary.rounds }}</b><span>练习轮次</span></div><div><b>{{ summary.takes }}</b><span>保留的跟读录音</span></div></div>
 <p class="hint">统计与日历计入完成跟读的轮次，盲听和默写可在下方历史回看。同一句在不同日期练习分别计数，删除素材后保留句次和轮次。</p>

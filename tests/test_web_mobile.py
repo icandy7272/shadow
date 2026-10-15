@@ -69,7 +69,7 @@ def test_native_start_and_five_slot_navigation(client, tmp_path):
     assert f'href="/practice/{segment}/1"' in page.text
     for href in ('/today', '/plan', '/start', '/records', '/sources'):
         assert f'href="{href}"' in page.text
-    assert 'data-session-start' in page.text
+    assert 'data-session-resume' in page.text
     assert 'session.js' in page.text
 
 
@@ -202,3 +202,28 @@ def test_home_screen_manifest_loads_with_credentials_and_covers_all_tabs(client)
         assert scope.path == '/'
         assert urlsplit(urljoin(manifest_url, manifest['start_url'])).path.startswith(scope.path)
         assert page.startswith(scope.path)
+
+
+def test_top_level_shell_has_stable_practice_tab_and_single_title_row(client):
+    from html.parser import HTMLParser
+    class Shell(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.tabs = []
+            self.in_tabs = False
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'nav' and attrs.get('class') == 'app-tabs': self.in_tabs = True
+            if self.in_tabs and tag == 'a': self.tabs.append(attrs)
+        def handle_endtag(self, tag):
+            if tag == 'nav': self.in_tabs = False
+    for path in ('/today', '/plan', '/start', '/records', '/sources'):
+        body = client.get(path).text
+        parser = Shell(); parser.feed(body)
+        assert len(parser.tabs) == 5
+        practice = next(tab for tab in parser.tabs if tab['href'] == '/start')
+        assert 'data-session-start' not in practice
+        assert 'central-start' not in practice.get('class', '')
+        assert '>练习</span>' in body
+        assert 'class="app-shell root-page"' in body
+        assert body.count('aria-label="设置"') == 1

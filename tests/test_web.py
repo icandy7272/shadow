@@ -833,7 +833,7 @@ def test_the_header_marks_the_page_you_are_on(client, tmp_path):
     assert current("/sources") == ["/sources"]
     assert current(f"/sources/{_source_of(segment_id)}") == ["/sources"]
     assert current("/plan") == ["/plan"]
-    assert current("/chain") == ["/today"]
+    assert current("/chain") == ["/start"]
     assert current("/today") == ["/today"]
     assert current(f"/practice/{segment_id}/1") == []
 
