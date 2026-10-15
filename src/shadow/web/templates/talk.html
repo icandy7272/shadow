@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ spec.title }} · Shadow{% endblock %}
 {% block content %}
-<div class="head"><h1>{{ spec.title }}</h1></div>
+<a class="page-back" href="/start">‹ 练习</a>
+<div class="head"><h1 class="page-title">{{ spec.title }}</h1></div>
 <p class="hint">{{ spec.lede }}</p>
 
 <div class="talk" id="talk" data-kind="{{ spec.kind }}" data-seconds="{{ spec.seconds }}">

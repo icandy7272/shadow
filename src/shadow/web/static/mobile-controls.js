@@ -1,4 +1,5 @@
 /* Touch controls reuse the existing form, audio and session state. */
+function textScale(value) { const size=Number(value); return [100,125,150,200].includes(size)?size/100:1; }
 function selectOption(select, value) {
   const option = [...select.options].find(item => item.value === value && !item.disabled);
   if (select.disabled || !option) return false;
@@ -41,9 +42,11 @@ function createAwakeController({request, onError=()=>{}}) {
   }};
   return controller;
 }
-if (typeof module!=='undefined') module.exports={selectOption,practicePhase,createAwakeController};
+if (typeof module!=='undefined') module.exports={selectOption,practicePhase,createAwakeController,textScale};
 if (typeof document!=='undefined') (()=>{
   const sheets=window.ShadowSheets;
+  const textSize=document.getElementById('app-text-size');
+  if(textSize){let saved='100';try{saved=localStorage.getItem('shadow.textSize')||'100'}catch(_){}textSize.value=String(textScale(saved)*100);textSize.addEventListener('change',()=>{const scale=textScale(textSize.value);document.documentElement.style.setProperty('--text-scale',String(scale));try{localStorage.setItem('shadow.textSize',String(scale*100))}catch(_){}})}
   function picker({title,choices,current,choose}) {
     const dialog=document.createElement('dialog');
     dialog.className='settings-dialog picker-dialog';dialog.id=`picker-${Date.now()}`;
@@ -63,7 +66,7 @@ if (typeof document!=='undefined') (()=>{
     dialog.append(header,body);document.body.append(dialog);
     dialog.addEventListener('close',()=>dialog.remove(),{once:true});sheets.open(dialog);
   }
-  for (const [id,title] of [['app-theme','显示模式'],['mic','麦克风']]) {
+  for (const [id,title] of [['app-theme','显示模式'],['app-text-size','文字大小'],['mic','麦克风']]) {
     const source=document.getElementById(id);if(!source)continue;
     const button=document.createElement('button');button.type='button';button.className='picker-value';button.setAttribute('aria-haspopup','dialog');source.after(button);source.classList.add('picker-source');
     const refresh=()=>{const label=source.selectedOptions[0]?.textContent||'请选择';if(button.textContent!==`${label} ›`)button.textContent=`${label} ›`;if(button.disabled!==source.disabled)button.disabled=source.disabled;button.setAttribute('aria-label',`${title}：${label}`)};

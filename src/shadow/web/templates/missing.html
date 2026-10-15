@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}页面打不开 · Shadow{% endblock %}
 {% block content %}
-<div class="head"><h1>这个页面打不开</h1></div>
-<p class="hint">链接指向的内容已经不在了——多半是素材删掉或重新导入过，句子的编号对不上了。</p>
-<nav class="pager"><span></span><a class="next" href="/">回到首页 →</a></nav>
+<div class="head"><h1 class="page-title">这个页面打不开</h1></div>
+<section class="card empty-state"><p class="hint">链接指向的内容已经不在了——多半是素材删掉或重新导入过，句子的编号对不上了。</p>
+<a class="button primary" href="/today">回到今天</a></section>
 {% endblock %}

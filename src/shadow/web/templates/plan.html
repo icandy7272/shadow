@@ -1,5 +1,5 @@
 {% extends "base.html" %}
 {% block title %}日课安排 · Shadow{% endblock %}
-{% block content %}<div class="head"><h1>日课安排</h1><a class="button" href="/plan/guide">日课说明</a>{{ settings_link() }}</div>
+{% block content %}<div class="head"><h1 class="page-title">日课安排</h1><a class="button" href="/plan/guide">日课说明</a>{{ settings_link() }}</div>
 <p class="hint">按今天的安排练习，完成状态来自实际练习和日课勾选。</p>
 {% include "_plan.html" %}{% endblock %}

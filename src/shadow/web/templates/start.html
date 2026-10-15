@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}练习 · Shadow{% endblock %}
 {% block content %}
-<div class="head"><h1>练习</h1>{{ settings_link() }}</div>
+<div class="head"><h1 class="page-title">练习</h1>{{ settings_link() }}</div>
 <a class="resume-card" data-session-resume hidden><span class="eyebrow">进行中的练习</span><b data-session-title>继续练习</b><span>回到上次的步骤 ›</span></a>
 <p class="section-label">跟读练习</p><div class="grouped-list">
 {% if source %}<a class="grouped-row" href="/sources/{{ source.id }}"><div><b>{{ source.title }}</b><small>当前素材 · 选择句子</small></div><span>›</span></a>

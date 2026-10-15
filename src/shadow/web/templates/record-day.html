@@ -1,4 +1,4 @@
 {% extends "base.html" %}{% block title %}{{ day }} 的记录 · Shadow{% endblock %}
-{% block content %}<div class="head"><h1>{{ day }} 的记录</h1><a class="button" href="/records?range={{ range }}">返回记录</a></div>
+{% block content %}<a class="page-back" href="/records?range={{ range }}">‹ 记录</a><div class="head"><h1 class="page-title">{{ day }} 的记录</h1></div>
 {% include "_record-timeline.html" %}
-{% if archive %}<h2>已删除素材的归档</h2><ul>{% for item in archive %}<li>{{ item.sentence }} · {{ item.rounds }} 轮<p class="hint">原素材和录音已删除，仅保留练习统计。</p></li>{% endfor %}</ul>{% endif %}{% endblock %}
+{% if archive %}<h2>已删除素材的归档</h2><ul class="cards">{% for item in archive %}<li class="card">{{ item.sentence }} · {{ item.rounds }} 轮<p class="hint">原素材和录音已删除，仅保留练习统计。</p></li>{% endfor %}</ul>{% endif %}{% endblock %}

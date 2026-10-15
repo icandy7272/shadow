@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}今天 · Shadow{% endblock %}
 {% block content %}
-<div class="head"><div><p class="eyebrow">{{ today }}</p><h1>今天</h1></div><a class="button" href="/plan">日课安排</a>{{ settings_link() }}</div>
+<div class="head"><div><p class="eyebrow">{{ today }}</p><h1 class="page-title">今天</h1></div><a class="button" href="/plan">日课安排</a>{{ settings_link() }}</div>
 <nav class="week-navigation" aria-label="切换练习周">{% if week > -52 %}<a href="/today?week={{ week - 1 }}" aria-label="上一周">‹</a>{% else %}<span></span>{% endif %}<div><b>{{ week_caption }}</b>{% if week != 0 %}<a href="/today?week=0">回到本周</a>{% endif %}</div>{% if week < 52 %}<a href="/today?week={{ week + 1 }}" aria-label="下一周">›</a>{% else %}<span></span>{% endif %}</nav>
 <div class="week-strip" aria-label="{{ week_caption }}练习">{% for day in week_days %}<a href="/records/day/{{ day.date }}" class="week-day{{ ' is-today' if day.date == today }}{{ ' has-practice' if day.sentences }}{{ ' ahead' if day.future }}" title="{{ day.date }} · {{ day.sentences }} 句 · {{ day.rounds }} 轮"><span>周{{ weekday_labels[loop.index0] }}</span><b>{{ day.date[-2:]|int }}</b><small>{{ day.sentences }} 句</small></a>{% endfor %}</div>
 <section class="today-hero"><p class="eyebrow">今天的练习</p><h2>{{ plan.heading }}</h2><p>今天练了 {{ days.today }} 句 · 连续 {{ days.streak }} 天</p>

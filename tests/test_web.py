@@ -344,7 +344,7 @@ def test_a_page_that_is_gone_is_still_a_page(client, tmp_path):
         assert response.status_code == 404
         assert response.headers["content-type"].startswith("text/html")
         assert "页面打不开" in response.text
-        assert 'href="/"' in response.text
+        assert 'href="/today"' in response.text
         assert "片段" not in response.text          # 内部的说法不露到界面上
 
 

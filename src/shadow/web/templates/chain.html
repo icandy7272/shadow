@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} · Shadow{% endblock %}
 {% block content %}
-<div class="head"><h1>{{ title }}</h1></div>
+<a class="page-back" href="/start">‹ 练习</a>
+<div class="head"><h1 class="page-title">{{ title }}</h1></div>
 {% if not sentences %}
   {% if scope == 'week' %}
   <p class="empty">本周还没练过句子。先去<a href="/">练几句</a>，周六再回来从头跟一遍。</p>

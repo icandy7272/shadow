@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block title %}生词本 · Shadow{% endblock %}
 {% block content %}
-<div class="head"><h1>生词本{% if items %}<span class="count" id="vocab-count">{{ items|length }} 个词</span>{% endif %}</h1>
+<a class="page-back" href="/sources">‹ 素材</a>
+<div class="head"><h1 class="page-title">生词本{% if items %}<span class="count" id="vocab-count">{{ items|length }} 个词</span>{% endif %}</h1>
   {% if items %}<span class="vocab-sort">排序<a href="/vocab"{% if sort != 'times' %} class="chosen"{% endif %}>最近</a><a href="/vocab?sort=times"{% if sort == 'times' %} class="chosen"{% endif %}>次数</a></span>{% endif %}
 </div>
 {% if not dictionary %}
 <p class="hint">词典还没装，先只记词和原句。装上就有音标和释义：在终端运行 <code>uv run shadow dict install</code></p>
 {% endif %}
 
-<label class="app-search"><span class="search-icon" aria-hidden="true">⌕</span><input type="search" id="vocab-search" placeholder="单词、释义或原句" aria-label="搜索生词"></label>
+<label class="app-search"><svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 4.5 4.5"></path></svg><input type="search" id="vocab-search" placeholder="单词、释义或原句" aria-label="搜索生词"></label>
 {% if not items %}
   <p class="empty">生词本还是空的。默写时勾「不会」的词会自动记进来；写错的词，可以在对完答案后点「加入生词本」。</p>
 {% else %}

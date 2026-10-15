@@ -1,11 +1,12 @@
 {% extends "base.html" %}{% block title %}练习详情 · Shadow{% endblock %}
-{% block content %}<div class="head"><h1>练习详情</h1><a class="button" href="/records/day/{{ day }}?range={{ range }}">返回当天记录</a></div>
-<p>{{ day }} · {{ source.title if source else '素材已删除' }}</p><h2>{{ run.unit_text or '原句未保存' }}</h2>
+{% block content %}<a class="page-back" href="/records/day/{{ day }}?range={{ range }}">‹ 当天记录</a><div class="head"><h1 class="page-title">练习详情</h1></div>
+<section class="card record-overview"><p class="card-meta">{{ day }} · {{ source.title if source else '素材已删除' }}</p><h2>{{ run.unit_text or '原句未保存' }}</h2>
 {% if run.blind_rating is not none %}<p>盲听自评：{{ run.blind_rating }}</p>{% endif %}
 {% if run.gapfill_total is not none %}<p>默写：{{ run.gapfill_correct }} / {{ run.gapfill_total }}</p>{% endif %}
+</section>
 <h2>逐遍录音 · {{ attempts|length }} 遍</h2>
-{% for attempt in attempts %}<section class="card"><h3>第 {{ loop.index }} 遍</h3>{% if attempt.available %}<audio controls preload="none" src="{{ attempt.url }}"></audio>{% else %}<p class="hint">这遍录音文件已不可用。</p>{% endif %}{% if attempt.asr_text %}<p>识别文本：{{ attempt.asr_text }}</p>{% endif %}{% if attempt.metrics %}<div class="record-metrics">
+<div class="record-attempts">{% for attempt in attempts %}<section class="card"><h3>第 {{ loop.index }} 遍</h3>{% if attempt.available %}<audio controls preload="none" src="{{ attempt.url }}"></audio>{% else %}<p class="hint">这遍录音文件已不可用。</p>{% endif %}{% if attempt.asr_text %}<p>识别文本：{{ attempt.asr_text }}</p>{% endif %}{% if attempt.metrics %}<div class="record-metrics">
 {% if attempt.metrics.accuracy is defined and attempt.metrics.accuracy is not none %}<p>识别准确率：{{ (attempt.metrics.accuracy * 100)|round|int }}%</p>{% endif %}
 {% if attempt.metrics.speech_ratio is defined and attempt.metrics.speech_ratio is not none %}<p>发声时长相对原音：{{ attempt.metrics.speech_ratio|round(2) }} 倍</p>{% endif %}
 {% if attempt.metrics.pause_ratio is defined and attempt.metrics.pause_ratio is not none %}<p>停顿时长相对原音：{{ attempt.metrics.pause_ratio|round(2) }} 倍</p>{% endif %}
-{% if attempt.metrics.issues %}<ul>{% for issue in attempt.metrics.issues %}{% if issue.title %}<li>{{ issue.title }}</li>{% endif %}{% endfor %}</ul>{% endif %}</div>{% else %}<p class="hint">这遍没有可用的分析指标。</p>{% endif %}</section>{% else %}<p class="empty">这轮没有跟读录音；已保留盲听或默写结果。</p>{% endfor %}{% endblock %}
+{% if attempt.metrics.issues %}<ul>{% for issue in attempt.metrics.issues %}{% if issue.title %}<li>{{ issue.title }}</li>{% endif %}{% endfor %}</ul>{% endif %}</div>{% else %}<p class="hint">这遍没有可用的分析指标。</p>{% endif %}</section>{% else %}<p class="empty">这轮没有跟读录音；已保留盲听或默写结果。</p>{% endfor %}</div>{% endblock %}
