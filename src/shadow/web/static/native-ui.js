@@ -3,7 +3,9 @@ function clampNumber(value,min,max,fallback){const n=value===''?NaN:Number(value
 function canDismissDrag(dy,dx,elapsed){return dy>0&&dy>Math.abs(dx)*1.2&&(dy>=90||(dy>=30&&dy/Math.max(1,elapsed)>.6));}
 function finishState({recording=false,submitting=false,pending=[],analysis=null}={}){return submitting?'submitting':recording?'recording':pending?.length?'pending':analysis?'saved':'draft';}
 function setDisabledIfChanged(control,value){value=Boolean(value);if(control&&control.disabled!==value)control.disabled=value;}
-if(typeof module!=='undefined')module.exports={clampNumber,canDismissDrag,finishState,setDisabledIfChanged};
+function dockActionRole(id,saved=false){if(id==='stop-take')return 'stop';if(id==='next-sentence')return saved?'primary':'secondary';return ['skip-drill','extra-record','redo-take'].includes(id)?'secondary':'primary';}
+function dockMode({recording=false,stopVisible=false,submitting=false,pending=false,saved=false}={}){return recording?(stopVisible?'recording':'prelisten'):submitting?'analysing':pending?'retry':saved?'saved':'ready';}
+if(typeof module!=='undefined')module.exports={dockActionRole,dockMode,clampNumber,canDismissDrag,finishState,setDisabledIfChanged};
 if(typeof document!=='undefined')(()=>{
  const stack=[];const openers=new WeakMap(),replaced=new WeakSet();let sheetSequence=0;let scroll=0,restoring=false,skipPop=0;
  function lock(){if(stack.length!==1)return;scroll=window.scrollY;document.body.style.position='fixed';document.body.style.top=`-${scroll}px`;document.body.style.width='100%';}
@@ -59,9 +61,23 @@ if(typeof document!=='undefined')(()=>{
  const dock=document.getElementById('practice-dock');
  if(dock&&typeof ResizeObserver!=='undefined')new ResizeObserver(()=>document.documentElement.style.setProperty('--practice-dock-height',`${Math.ceil(dock.getBoundingClientRect().height)}px`)).observe(dock);
  // Keep originals in their steps so recorder shortcuts and replay counts retain their targets.
- const proxies=[];for(const [selector,stage] of [['#step-listen button.play','listen'],['#submit-drill','drill'],['#skip-drill','drill'],['#practice-continue','drill']]){const original=root.querySelector(selector);if(!original)continue;original.classList.add('dock-source-control');const proxy=original.cloneNode(true);proxy.removeAttribute('id');proxy.classList.remove('dock-source-control');proxy.dataset.dockStage=stage;proxy.addEventListener('click',()=>original.click());dock.append(proxy);proxies.push({original,proxy});}
- const syncDock=()=>{if(dock.hidden)dock.hidden=false;for(const {original,proxy}of proxies){if(proxy.hidden!==original.hidden)proxy.hidden=original.hidden;if(proxy.disabled!==original.disabled)proxy.disabled=original.disabled;if(proxy.innerHTML!==original.innerHTML)proxy.innerHTML=original.innerHTML;}setDisabledIfChanged(document.getElementById('practice-minimize'),window.ShadowSession?.isRecording()||root.dataset.mutating==='true');};
- new MutationObserver(syncDock).observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','disabled','data-active-step','data-mutating']});syncDock();
+ const proxies=[];for(const [selector,stage] of [['#step-listen button.play','listen'],['#submit-drill','drill'],['#skip-drill','drill'],['#practice-continue','drill']]){const original=root.querySelector(selector);if(!original)continue;original.classList.add('dock-source-control');const proxy=original.cloneNode(true);proxy.removeAttribute('id');proxy.classList.remove('dock-source-control');proxy.dataset.dockStage=stage;proxy.dataset.actionId=original.id||'play';proxy.addEventListener('click',()=>original.click());dock.append(proxy);proxies.push({original,proxy});}
+ const syncDock=()=>{
+  if(dock.hidden)dock.hidden=false;
+  for(const {original,proxy}of proxies){if(proxy.hidden!==original.hidden)proxy.hidden=original.hidden;if(proxy.disabled!==original.disabled)proxy.disabled=original.disabled;if(proxy.innerHTML!==original.innerHTML)proxy.innerHTML=original.innerHTML;}
+  const mode=dockMode({recording:root.dataset.recording==='true',stopVisible:!document.getElementById('stop-take')?.hidden,submitting:root.dataset.submitting==='true',pending:root.dataset.pending==='true',saved:!document.getElementById('extra-record')?.hidden});
+  if(root.dataset.dockMode!==mode)root.dataset.dockMode=mode;
+  const controls=[...dock.querySelectorAll(':scope > button,.dock-pager')];
+  for(const control of controls){
+   const id=control.classList.contains('dock-pager')?'next-sentence':control.dataset.actionId||control.id;
+   if(!id)continue;const role=dockActionRole(id,mode==='saved');if(control.dataset.actionEmphasis!==role)control.dataset.actionEmphasis=role;
+  }
+  const ordered=controls.slice().sort((a,b)=>Number(a.dataset.actionEmphasis!=='secondary')-Number(b.dataset.actionEmphasis!=='secondary'));
+  if(ordered.some((control,index)=>control!==controls[index]))for(const control of ordered)dock.append(control);
+  setDisabledIfChanged(document.getElementById('practice-minimize'),root.dataset.recording==='true'||root.dataset.mutating==='true');
+ };
+
+ new MutationObserver(syncDock).observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','disabled','data-active-step','data-mutating','data-recording','data-submitting','data-pending']});syncDock();
  const progress=root.querySelector('.session-progress');const updateProgress=()=>{const done=root.querySelectorAll('.step.complete,.step.skipped').length;progress?.setAttribute('aria-valuenow',String(done));if(progress)progress.querySelector('i').style.width=`${done/3*100}%`};new MutationObserver(updateProgress).observe(root,{subtree:true,attributes:true,attributeFilter:['class']});updateProgress();
  const elapsed=document.getElementById('session-elapsed');const tick=()=>{const start=window.ShadowSession?.snapshot()?.startedAt;if(start&&elapsed){const minutes=Math.max(0,Math.floor((Date.now()-start)/60000));elapsed.textContent=` · ${minutes} 分钟`}};setInterval(tick,15000);document.addEventListener('shadow:session-restored',tick);tick();
  const finish=document.getElementById('session-finish'),error=document.getElementById('session-finish-error'),discard=document.getElementById('session-discard'),save=document.getElementById('session-save-exit');

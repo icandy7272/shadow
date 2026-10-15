@@ -135,6 +135,7 @@ function stopLoops() {
 let recording = false;
 function setRecording(on) {
   recording = on;
+  document.getElementById("practice")?.setAttribute("data-recording",String(on));
   stopLoops();
   document.querySelectorAll("button.play").forEach((button) => {
     button.disabled = on;
