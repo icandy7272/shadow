@@ -172,3 +172,33 @@ def test_mobile_settings_include_optional_awake_and_touch_controls(client):
     page = client.get('/settings').text
     assert 'id="keep-screen-awake"' in page
     assert 'mobile-controls.js' in page
+
+
+def test_home_screen_manifest_loads_with_credentials_and_covers_all_tabs(client):
+    from html.parser import HTMLParser
+    from urllib.parse import urljoin, urlsplit
+
+    class Links(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.manifests = []
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'link' and attrs.get('rel') == 'manifest':
+                self.manifests.append(attrs)
+
+    for page in ('/today', '/plan', '/start', '/records', '/sources', '/login'):
+        parser = Links()
+        parser.feed(client.get(page).text)
+        assert len(parser.manifests) == 1
+        link = parser.manifests[0]
+        assert link.get('crossorigin') == 'use-credentials'
+        response = client.get(link['href'])
+        assert response.status_code == 200
+        manifest = response.json()
+        assert manifest['display'] == 'standalone'
+        manifest_url = str(response.url)
+        scope = urlsplit(urljoin(manifest_url, manifest['scope']))
+        assert scope.path == '/'
+        assert urlsplit(urljoin(manifest_url, manifest['start_url'])).path.startswith(scope.path)
+        assert page.startswith(scope.path)

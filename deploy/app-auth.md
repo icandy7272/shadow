@@ -28,3 +28,9 @@
 ## 复用与许可
 
 参考 openGym e348fc17c42c7e9a211c5972e573ad3698190ee2 的 Login.jsx、api/server.js 和 api/device-link.js 的认证流程。openGym 是 AGPL，Shadow 现有代码是 MIT。本实现没有复制其受许可覆盖的实现代码；直接复用兼容许可的 py_webauthn（BSD-3-Clause）与 qrcode（BSD）库，保留 Python 服务及现有部署，不增加 Node 服务。浏览器使用标准 WebAuthn API。
+
+## iPhone 主屏幕 App
+
+安装配置文件需要携带入口密码或登录状态，所有页面统一使用 `crossorigin="use-credentials"` 加载 manifest。manifest 的 `scope` 为 `/`，覆盖所有底部 tab，`display` 为 `standalone`。不要把页面路径改成另一域名或为内部链接添加新窗口目标。
+
+如果之前安装时配置文件被入口认证拦截，更新后原主屏幕图标可能仍保留旧的安装信息。请先关闭该 App，用 Safari 打开 https://shadow.cheerup.tech/today 并刷新、登录，再重新添加到主屏幕；系统若提供“作为网页 App 打开”选项，保持开启。此操作不要清除网站数据。实际工具栏行为需要在 iPhone 上复核。

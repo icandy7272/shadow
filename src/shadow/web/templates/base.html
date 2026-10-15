@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="zh">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#f2f2f7"><title>{% block title %}Shadow{% endblock %}</title>
-<link rel="manifest" href="/static/manifest.webmanifest"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+<!-- Installation metadata must include credentials while the HTTPS proxy requires login. -->
+<link rel="manifest" href="/static/manifest.webmanifest" crossorigin="use-credentials"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="/static/app.css?v={{ assets() }}"><link rel="stylesheet" href="/static/mobile.css?v={{ assets() }}">
 <script>try { const t=localStorage.getItem('shadow.theme'); if(t==='light'||t==='dark') document.documentElement.dataset.theme=t; } catch (_) {}</script></head>
 {% set path=request.url.path %}{% set here='library' if path=='/vocab' else 'library' if path.startswith('/sources') or path=='/vocab' else 'records' if path.startswith('/records') else 'plan' if path.startswith('/plan') else 'start' if path=='/start' else 'today' if path in ('/today','/chain','/talk') else '' %}
