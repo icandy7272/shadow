@@ -133,3 +133,7 @@ uv run pytest
 
 [MIT](LICENSE)。离线词典来自 [ECDICT](https://github.com/skywind3000/ECDICT)（MIT），
 安装时下载，不随仓库分发。
+
+### 手机 App 登录（可选）
+
+支持应用内 Passkey 登录、备用密码、90 天保持登录、一次性设备码和二维码，以及退出所有设备。部署时先在本机隐藏输入密码初始化，再验证 Passkey，最后替换 nginx 的浏览器密码框。完整步骤和恢复方式见 [应用认证迁移](deploy/app-auth.md)。现有本机模式保持可用；认证不会由公开网页自动创建首个所有者。

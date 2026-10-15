@@ -1322,7 +1322,7 @@ if (root) {
     try {
       const response = await fetch("/api/takes", { method: "POST", body });
       if (!response.ok) {
-        if (response.status >= 500 || response.status === 408 || response.status === 429) {
+        if (response.status >= 500 || response.status === 401 || response.status === 403 || response.status === 408 || response.status === 429) {
           throw new Error(`暂时无法提交（${response.status}）`);
         }
         // 录音本身不合格（太短、静音），重交也没用

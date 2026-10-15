@@ -669,9 +669,30 @@ def _dict_lookup(word: str | None) -> int:
     return 0
 
 
+def cmd_auth(args: argparse.Namespace) -> int:
+    import getpass
+    from .web.auth import initialize
+    try:
+        password = getpass.getpass("备用密码（至少 12 字符）：")
+        confirm = getpass.getpass("再次输入备用密码：")
+        if password != confirm:
+            raise ValueError("两次密码不一致")
+        initialize(args.origin, password, reset=args.action == "reset")
+    except (ValueError, OSError) as exc:
+        print(f"认证设置失败：{exc}", file=sys.stderr)
+        return 1
+    print("认证已设置。旧会话和 Passkey 已撤销，请使用备用密码登录并添加 Passkey。")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="shadow", description="英语影子跟读训练工具")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p_auth = sub.add_parser("auth", help="本机初始化或恢复应用认证")
+    p_auth.add_argument("action", choices=("setup", "reset"))
+    p_auth.add_argument("--origin", required=True, help="浏览器使用的 HTTPS 地址")
+    p_auth.set_defaults(func=cmd_auth)
 
     p_import = sub.add_parser("import", help="从 URL 导入素材")
     p_import.add_argument("url")

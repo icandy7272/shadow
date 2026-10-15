@@ -28,6 +28,7 @@ const service = (() => {  // eslint-disable-line no-unused-vars
     try {
       const response = await fetch("/api/health",
                                    { cache: "no-store", signal: abort.signal });
+      if(response.status===401)return {assets:light.dataset.assets};
       return response.ok ? await response.json() : null;
     } catch (err) {
       return null;

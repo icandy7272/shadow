@@ -83,6 +83,9 @@ async def _lifespan(app):
 app = FastAPI(title="Shadow", lifespan=_lifespan)
 app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
+from .auth import register_auth
+register_auth(app, templates)
+
 # 这些路径由页面里的 JS 或 <audio> 取用，出错时得回 JSON，前端要读 detail
 _MACHINE_PATHS = ("/api/", "/audio/", "/take/", "/talk/audio/", "/static/")
 

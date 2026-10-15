@@ -37,6 +37,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/shadow.example.com/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
 
+    # 旧版入口密码方案。启用应用内认证后的切换见 deploy/app-auth.md。
     auth_basic "Shadow";
     auth_basic_user_file /etc/nginx/shadow.htpasswd;
 
