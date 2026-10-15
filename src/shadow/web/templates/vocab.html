@@ -8,7 +8,7 @@
 <p class="hint">词典还没装，先只记词和原句。装上就有音标和释义：在终端运行 <code>uv run shadow dict install</code></p>
 {% endif %}
 
-<label class="app-search">搜索生词<input type="search" id="vocab-search" placeholder="单词、释义或原句" aria-label="搜索生词"></label>
+<label class="app-search"><span class="search-icon" aria-hidden="true">⌕</span><input type="search" id="vocab-search" placeholder="单词、释义或原句" aria-label="搜索生词"></label>
 {% if not items %}
   <p class="empty">生词本还是空的。默写时勾「不会」的词会自动记进来；写错的词，可以在对完答案后点「加入生词本」。</p>
 {% else %}
@@ -16,10 +16,10 @@
   {% for item in items %}
   <li class="vocab-item" data-word="{{ item.word }}">
     <div class="vocab-head">
-      <b class="vocab-word">{{ item.word }}</b>
+      <div class="vocab-identity"><b class="vocab-word">{{ item.word }}</b>
       {% if item.entry and item.entry.phonetic %}<span class="phonetic">/{{ item.entry.phonetic }}/</span>{% endif %}
       <span class="vocab-meta">记过 {{ item.times }} 次 · {{ item.first_day | day }} 起</span>
-      <button type="button" data-action="forget">记住了</button>
+      </div><button type="button" data-action="forget">记住了</button>
     </div>
     {% if item.entry and item.entry.meanings %}
     <ul class="meanings">{% for meaning in item.entry.meanings %}<li>{{ meaning }}</li>{% endfor %}</ul>

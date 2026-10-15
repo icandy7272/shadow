@@ -2,7 +2,7 @@
 {% block content %}
 <div class="head"><h1>素材</h1><button type="button" class="primary" data-open-dialog="import-sheet" aria-label="导入素材">＋ 导入</button></div>
 <a class="grouped-row vocab-entry" href="/vocab"><div><b>生词本</b><small>回看默写中遇到的词与表达</small></div><span>›</span></a>
-<label class="app-search">搜索素材<input type="search" id="library-search" placeholder="标题或状态" aria-label="搜索素材"></label>
+<label class="app-search"><span class="search-icon" aria-hidden="true">⌕</span><input type="search" id="library-search" placeholder="标题或状态" aria-label="搜索素材"></label>
 <dialog class="settings-dialog" id="import-sheet" aria-labelledby="import-sheet-title"><div class="sheet-header"><h2 id="import-sheet-title">导入素材</h2><button type="button" data-close-dialog>完成</button></div><div class="sheet-body">
 <form id="import-form" class="import-form">
   <input type="url" name="url" required aria-label="素材链接"
@@ -29,7 +29,7 @@
         <p class="card-meta">正在导入：<span class="card-step">{{ card.step }}</span></p>
       {% endif %}
     </div>
-    <details class="card-menu"><summary aria-label="素材操作">更多操作</summary><div class="card-actions">
+    <details class="card-menu"><summary aria-label="素材操作"><span aria-hidden="true">•••</span></summary><div class="card-actions">
       {% if card.status == 'ready' %}
         {% if card.current %}<a class="button" href="/sources/{{ card.id }}">继续练习</a>
         {% else %}<a class="button" href="/sources/{{ card.id }}">{{ '切到这份' if card.practised else '开始练' }}</a>{% endif %}
