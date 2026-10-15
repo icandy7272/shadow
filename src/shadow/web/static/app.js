@@ -1385,7 +1385,7 @@ if (root) {
     takeCount = last.result.count;
     if(typeof window!=='undefined')window.ShadowSession?.saveCurrent().catch(()=>{});
     extraButton.hidden = false;
-    setLabel(extraButton, `再录 1 遍（第 ${takeCount + 1} 遍）`);
+    setLabel(extraButton, `再录第 ${takeCount + 1} 遍`);
     // 分析完滚到跟读这一步的开头：每一遍的结果和图都在它下面，不用再自己往下找。
     // 等分析的十几秒里人常切去别的标签页，页面在后台时平滑滚动不会动——那就直接跳过去
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -1428,7 +1428,7 @@ if (root) {
       sawText=Boolean(saved.sawText);latestRun=Number.isInteger(saved.latestRun)?saved.latestRun:null;takeCount=Number.isInteger(saved.takeCount)?saved.takeCount:0;extraMode=Boolean(saved.extraMode);submissionId=typeof saved.submissionId==='string'?saved.submissionId:null;
       pending=Array.isArray(saved.pending)&&saved.pending.length&&saved.pending.every(blob=>blob instanceof Blob)&&submissionId?saved.pending:null;root.dataset.pending=String(Boolean(pending));
       for(const [id,value] of Object.entries(saved.settings||{})){const c=document.getElementById(id);if(c&&value!==undefined){if(c.type==='checkbox')c.checked=Boolean(value);else c.value=value;}}
-      if(saved.analysis&&validReviewResult(saved.analysis)){sessionAnalysis=saved.analysis;const box=document.getElementById('rec-result');box.hidden=false;showResult(sessionAnalysis,box);if(Number.isInteger(saved.selectedTake)&&saved.selectedTake>=0)box.querySelectorAll('.take-row')[saved.selectedTake]?.click();extraButton.hidden=false;setLabel(extraButton,`再录 1 遍（第 ${takeCount+1} 遍）`);}
+      if(saved.analysis&&validReviewResult(saved.analysis)){sessionAnalysis=saved.analysis;const box=document.getElementById('rec-result');box.hidden=false;showResult(sessionAnalysis,box);if(Number.isInteger(saved.selectedTake)&&saved.selectedTake>=0)box.querySelectorAll('.take-row')[saved.selectedTake]?.click();extraButton.hidden=false;setLabel(extraButton,`再录第 ${takeCount+1} 遍`);}
       if(pending){resubmitButton.hidden=false;status.textContent=`已恢复 ${pending.length} 遍录音，点「重新提交」继续。`;}
     }
   });

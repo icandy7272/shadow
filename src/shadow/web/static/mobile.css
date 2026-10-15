@@ -3,7 +3,7 @@
 :root { color-scheme:light; --bg:#f2f2f7; --fg:#17171b; --muted:#62626c; --line:#e5e5ec; --card:#fff; --accent:#0065d1; --warn:#dc3545; --ok:#248a3d; --soft:#e8f2ff; --chrome:rgba(255,255,255,.94); --keyboard-inset:0px; --tab-height:70px; --app-width:560px; --sheet-height:100dvh; --viewport-top:0px; --space-unit:4px; --radius-card:16px; --radius-control:12px; }
 @media(prefers-color-scheme:dark) { :root:not([data-theme="light"]) { color-scheme:dark; --bg:#09090b; --fg:#f5f5f7; --muted:#a1a1ab; --line:#34343a; --card:#1c1c1e; --accent:#0a84ff; --warn:#ff453a; --ok:#30d158; --soft:#142a42; --chrome:rgba(28,28,30,.94); } }
 :root[data-theme="dark"] { color-scheme:dark; --bg:#09090b; --fg:#f5f5f7; --muted:#a1a1ab; --line:#34343a; --card:#1c1c1e; --accent:#0a84ff; --warn:#ff453a; --ok:#30d158; --soft:#142a42; --chrome:rgba(28,28,30,.94); }
-html { font-size:calc(100% * var(--text-scale,1)); min-width:280px; scroll-padding-bottom:160px; -webkit-text-size-adjust:100%; }
+html { font-size:calc(100% * var(--text-scale,1)); min-width:280px; overscroll-behavior-y:none; scroll-padding-bottom:160px; -webkit-text-size-adjust:100%; }
 img,svg,audio { max-width:100%; }
 h1,h2,h3,p,a,button,summary { overflow-wrap:anywhere; }
 h2 { font-size:1.375rem; line-height:1.3; flex-wrap:wrap; }
@@ -11,7 +11,7 @@ h3 { font-size:1.0625rem; line-height:1.4; }
 main > h2 { margin:28px 0 12px; }
 main > p { line-height:1.6; }
 body { font:1.0625rem/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",system-ui,sans-serif; overflow-wrap:break-word; }
-.app-shell { min-height:100vh; min-height:100dvh; }
+.app-shell { overscroll-behavior-y:none; min-height:100vh; min-height:100dvh; }
 main { max-width:var(--app-width); min-width:0; padding:20px max(16px,env(safe-area-inset-right)) calc(var(--tab-height) + env(safe-area-inset-bottom) + 28px) max(16px,env(safe-area-inset-left)); }
 header.app-header { max-width:var(--app-width); margin:auto; border:0; padding:calc(8px + env(safe-area-inset-top)) 16px 0; align-items:center; flex-wrap:wrap; gap:10px; }
 .app-header .home { letter-spacing:-.6px; font-size:1.312rem; }
@@ -104,7 +104,7 @@ input[type="checkbox"] { accent-color:var(--accent); width:20px; height:20px; }
 .practice-steps { display:flex; justify-content:center; gap:8px; margin:18px 0; }
 .practice-steps button { flex:1; min-width:0; border:0; border-radius:12px; color:var(--muted); padding:10px 6px; font-size:0.8125rem; }
 .practice-steps button[aria-selected="true"] { background:var(--accent); color:#fff; }
-.practice-app main,main:has(#practice) { padding-bottom:calc(max(150px,var(--practice-dock-height,150px)) + 24px + env(safe-area-inset-bottom)); }
+.practice-app main,main:has(#practice) { padding-bottom:calc(var(--practice-dock-height,100px) + 16px); }
 .practice-app .step { padding:18px 16px; border:0; border-radius:var(--radius-card); }
 .practice-app .step h2 { font-size:1.375rem; letter-spacing:-.4px; flex-wrap:wrap; }
 .practice-app .step h2 .n { display:none; }
@@ -127,7 +127,7 @@ input[type="checkbox"] { accent-color:var(--accent); width:20px; height:20px; }
 #practice-dock .mic-note { width:100%; }
 #practice-dock .practice-next-action { flex:1; min-height:49px; display:flex; align-items:center; justify-content:center; border-radius:12px; background:var(--soft); padding:10px 12px; text-decoration:none; font-size:0.8125rem; }
 #practice-dock .extra-record,#practice-dock #extra-record,#practice-dock #start-record { background:var(--accent); color:#fff; border-color:transparent; }
-#practice-dock #start-record.secondary-action { background:var(--soft); color:var(--accent); font-size:0.8125rem; }
+
 .peek .hint { display:block; margin:8px 0; }
 .takes { border-radius:14px; overflow:hidden; gap:0; }
 .take-row { border:0; border-radius:0; padding:14px; border-bottom:1px solid var(--line); }
@@ -447,3 +447,16 @@ body:has(#login-form) main { padding-bottom:32px; }
 .pd-week b { font-size:.9375rem; }
 .pd-tier strong { font-size:1.5rem; }
 .pd-tier strong small { font-size:.8125rem; }
+
+/* One primary progression action after saving; infrequent actions live in the menu. */
+#practice > .pager,#practice > .pager-note { display:none; }
+#practice-menu #retire-row { margin:0; padding:0; }
+#practice-menu #retire-row button,#practice-menu #start-record { display:block; width:100%; border:0; border-radius:0; padding:14px 16px; min-height:52px; background:transparent; color:var(--fg); text-align:left; font-size:1rem; }
+#practice-menu #retire-row,#practice-menu #start-record { border-top:.5px solid var(--line); }
+#practice[data-saved-actions="true"] #practice-dock .dock-pager { flex:1.3; order:2; }
+#practice[data-saved-actions="true"] #practice-dock .dock-pager a.next { background:var(--accent); color:white; font-weight:600; font-size:.9375rem; }
+#practice[data-saved-actions="true"] #practice-dock #extra-record { order:1; background:var(--soft); color:var(--accent); font-size:.9375rem; }
+#practice[data-record-busy="true"] #practice-dock #extra-record { display:none; }
+#practice-dock .dock-pager a.next { font-size:.9375rem; }
+#practice-dock .dock-pager,#practice-dock #extra-record { min-width:0; }
+#practice-menu .plan-error { display:block; padding:8px 16px; }
