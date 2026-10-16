@@ -49,3 +49,23 @@ def test_search_uses_decorative_vector_and_named_input(client):
         assert inputs[0]['aria-label'] == label
         assert inputs[0]['type'] == 'search'
         assert '⌕' not in response.text
+
+
+def test_desktop_layer_and_practice_rail_share_existing_controls(client, tmp_path):
+    segment = _seed(tmp_path)
+    body = client.get(f'/practice/{segment}/1').text
+    assert '/static/desktop.css?v=' in body
+    assert 'class="practice-rail"' in body
+    assert body.count('id="practice-minimize"') == 1
+    assert body.count('id="start-record"') == 1
+    assert 'aria-label="主导航"' in body
+    assert 'href="/start" aria-current="page"' in body
+    assert 'data-route="/practice/' in body
+    login = client.get('/login').text
+    assert 'aria-label="主导航"' not in login
+
+
+def test_overview_layouts_have_independent_responsive_regions(client):
+    assert 'class="today-layout"' in client.get('/today').text
+    assert 'class="records-overview"' in client.get('/records').text
+    assert 'class="start-layout"' in client.get('/start').text

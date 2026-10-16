@@ -835,7 +835,7 @@ def test_the_header_marks_the_page_you_are_on(client, tmp_path):
     assert current("/plan") == ["/plan"]
     assert current("/chain") == ["/start"]
     assert current("/today") == ["/today"]
-    assert current(f"/practice/{segment_id}/1") == []
+    assert current(f"/practice/{segment_id}/1") == ["/start"]
 
 
 def test_append_takes_extends_same_round_without_duplicate_attempts(client, tmp_path, monkeypatch):

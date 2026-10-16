@@ -474,3 +474,5 @@ body:has(#login-form) main { padding-bottom:32px; }
 #practice[data-dock-mode="analysing"] #practice-dock > button,
 #practice[data-dock-mode="prelisten"] #practice-dock > button { display:none!important; }
 #practice[data-dock-mode="retry"] #practice-dock > button:not(#resubmit) { display:none!important; }
+
+.desktop-brand,.practice-app .app-tabs { display:none; }

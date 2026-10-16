@@ -1,0 +1,141 @@
+/* Desktop workspace. All touch/single-column behavior remains in mobile.css.
+   The breakpoint is based on available layout space, not input hardware. */
+@media (min-width: 68.75rem) {
+  .app-shell {
+    --sidebar-width:216px;
+    --desktop-width:1280px;
+    --desktop-gutter:32px;
+    --practice-rail-width:220px;
+    --workspace-gap:24px;
+    padding-left:var(--sidebar-width);
+  }
+  main {
+    width:100%; max-width:var(--desktop-width); margin:0 auto;
+    padding:36px var(--desktop-gutter) 48px;
+  }
+  .root-page main,.detail-page main { padding-top:36px; }
+  .head { margin-bottom:28px; gap:16px; }
+  .head h1 { font-size:2.125rem; }
+  .page-back { margin-bottom:16px; }
+  .app-shell .app-tabs,.app-shell.practice-app .app-tabs {
+    position:fixed; inset:0 auto 0 0; transform:none;
+    width:var(--sidebar-width); height:100dvh; padding:32px 16px;
+    display:flex; flex-direction:column; justify-content:flex-start; align-items:stretch;
+    border-top:0; border-right:1px solid var(--line); background:var(--card);
+    backdrop-filter:none; -webkit-backdrop-filter:none; gap:8px;
+  }
+  .app-tabs a {
+    flex:none; flex-direction:row; justify-content:flex-start; gap:14px;
+    min-height:48px; padding:12px 16px; border-radius:12px; font-size:1rem;
+  }
+  .app-tabs a[aria-current="page"] { background:var(--soft); }
+  .app-tabs a:hover { background:var(--bg); }
+  .app-tabs a[aria-current="page"]:hover { background:var(--soft); }
+  .desktop-brand { display:flex; align-items:center; gap:12px; padding:0 12px 28px; }
+  .desktop-brand > span { width:40px; height:40px; flex:none; display:grid; place-items:center; border-radius:12px; background:var(--accent); color:white; font-weight:700; }
+  .desktop-brand b { display:block; font-size:1.25rem; }
+  .desktop-brand > div { min-width:0; overflow-wrap:anywhere; }
+  .desktop-brand small { display:block; font-size:.75rem; color:var(--muted); margin-top:2px; }
+  .service-banner { margin:16px var(--desktop-gutter) 0; max-width:var(--desktop-width); }
+
+  /* Overviews balance a primary task with useful secondary information. */
+  .week-navigation { max-width:680px; margin:0 auto; }
+  .week-strip { max-width:680px; margin:0 auto 24px; }
+  .week-day { font-size:.8125rem; padding:8px; }
+  .today-layout { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); align-items:start; gap:28px; }
+  .today-main,.today-plan,.records-numbers,.start-layout > section { min-width:0; }
+  .today-hero { padding:28px; }
+  .today-hero h2 { font-size:1.75rem; }
+  .today-hero .cta { margin-top:12px; }
+  .today-plan .plan { margin:0; }
+  .today-plan .plan > summary { flex-direction:column; align-items:flex-start; }
+  .streak-card { margin-bottom:0; }
+  .records-overview { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:28px; align-items:start; }
+  .records-overview .record-summary { margin-top:0; }
+  .records-overview .streak { margin:0; }
+  .record-ranges { max-width:400px; }
+  .record-timeline { grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; }
+  .start-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:28px; align-items:start; }
+  .start-layout .section-label { margin-top:0; }
+  .resume-card { max-width:760px; }
+
+  /* Collections use width without turning prose into long, hard-to-read lines. */
+  #cards { grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; align-items:stretch; }
+  #cards > .card { padding:20px; align-content:start; }
+  #cards .card-title { font-size:1.125rem; line-height:1.5; }
+  .app-search { max-width:680px; }
+  .vocab-entry { max-width:680px; }
+  .vocab { grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; align-items:start; }
+  .vocab-item { padding:20px; }
+  .vocab-head { grid-template-columns:minmax(0,1fr) auto; }
+  table.units { background:var(--card); border-radius:16px; overflow:hidden; }
+  table.units th,table.units td { padding:14px 16px; }
+  table.units th:first-child,table.units td:first-child { width:56px; }
+  table.units td:nth-child(2) { width:64%; }
+  table.units td:nth-child(2) a { display:block; padding:4px 0; min-height:36px; }
+  .filters { flex-wrap:wrap; overflow:visible; gap:8px; }
+  .plan-doc { max-width:1020px; margin:auto; }
+  .plan-doc p { max-width:75ch; }
+  .talk { padding:24px; }
+  .talk .hint,.talk-picks { max-width:78ch; }
+  #talk .row { max-width:680px; }
+  .talk-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; padding:0; list-style:none; }
+  .talk-take { margin:0; }
+  .chain-item { grid-template-columns:90px minmax(0,1fr) 100px; align-items:center; }
+  .chain-item .num { grid-column:1; grid-row:1; }
+  .chain-item .chain-text { grid-column:2; grid-row:1; }
+  .chain-item .chain-go { grid-column:3; grid-row:1; justify-content:flex-end; }
+
+  /* Forms remain intentionally bounded; login never gains navigation chrome. */
+  body[data-route="/settings"] main,body[data-route="/account"] main { max-width:840px; }
+  body[data-route="/login"] { padding-left:0; }
+  body[data-route="/login"] main { max-width:500px; padding-bottom:40px; }
+  body[data-route="/login"] header { padding-top:32px; }
+  .settings-dialog { border-radius:20px; max-height:min(85dvh,800px); }
+  .sheet-grabber { display:none; }
+  .sheet-header { padding:16px 24px; }
+  .sheet-body { padding:24px; }
+
+  /* One active learning panel: the rail never contains answers or transcripts. */
+  #practice { display:grid; grid-template-columns:var(--practice-rail-width) minmax(0,1fr); column-gap:var(--workspace-gap); align-items:start; }
+  .practice-rail { grid-column:1; grid-row:1; position:sticky; top:28px; min-width:0; }
+  .session-header { flex-wrap:wrap; padding:0 0 20px; gap:8px; }
+  .session-header > div { flex:1 1 100%; order:-1; padding-bottom:12px; }
+  .session-header b { -webkit-line-clamp:4; font-size:1.125rem; }
+  .session-header small { margin-top:8px; font-size:.8125rem; }
+  .practice-steps { flex-direction:column; margin-top:20px; }
+  .practice-steps button { flex:none; text-align:left; padding:14px 16px; font-size:.9375rem; }
+  #practice > .step { grid-column:2; grid-row:1; min-width:0; margin:0; padding:28px; }
+  .practice-app .step h2 { font-size:1.5rem; margin-bottom:12px; }
+  .practice-app #step-listen > .row { padding:24px 0; }
+  .rating { gap:10px; }
+  .number-stepper input { width:2.5em!important; }
+  .rating button { min-height:100px; font-size:.875rem; }
+  #dictation-text { min-height:240px; font-size:1.125rem; line-height:1.7; }
+  .take-row { padding:16px; }
+  .result .metrics { padding:18px; font-size:.9375rem; }
+  .figure-tabs { max-width:440px; }
+  .fig-body { width:100%; }
+  #practice-dock {
+    transform:none; bottom:16px; border:1px solid var(--line); border-radius:16px;
+    left:calc(var(--sidebar-width) + max(0px,(100% - var(--sidebar-width) - var(--desktop-width)) / 2) + var(--desktop-gutter) + var(--practice-rail-width) + var(--workspace-gap));
+    width:calc(min(100% - var(--sidebar-width),var(--desktop-width)) - var(--desktop-gutter) * 2 - var(--practice-rail-width) - var(--workspace-gap));
+    padding:16px 20px; box-shadow:0 6px 30px #0001;
+  }
+  .figure-viewer.settings-dialog { inset:24px; width:calc(100% - 48px); height:calc(100dvh - 48px); max-height:calc(100dvh - 48px); border-radius:20px; padding:16px 24px; }
+  .keyboard-open .app-tabs { display:flex; }
+}
+@media (min-width:100rem) {
+  #cards { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+/* Medium windows/tablets gain space while retaining touch navigation. */
+@media (min-width:48rem) and (max-width:68.749rem) {
+  :root { --app-width:900px; }
+  main { padding-left:28px; padding-right:28px; }
+  #cards,.vocab,.record-timeline { grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:start; }
+  body[data-route="/settings"] main,body[data-route="/account"] main { max-width:760px; }
+  body[data-route="/login"] main { max-width:500px; }
+}
+@media (min-width:68.75rem) {
+  .rating .key-inline { display:grid; place-items:center; width:32px; height:28px; margin:0 auto 8px; font-size:1rem; }
+}
