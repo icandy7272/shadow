@@ -330,7 +330,7 @@ if (root) {
   // （自动收，或空格说完了）→ 空格听对比 → → 下一句。
   document.addEventListener("keydown", (event) => {
     // 焦点不在输入框里，没有正在组的字：有的输入法把 isComposing 一直带着，不能看它
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.defaultPrevented || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
     if (event.target.closest("input, textarea, select, [contenteditable]")) return;
     const key = physicalKey(event);
     const byId = (id) => document.getElementById(id);
@@ -351,6 +351,12 @@ if (root) {
       return;
     }
     if (recording && key !== " ") return;           // 录着的时候只认说完了、重来
+    if (key === "Enter") {
+      const drill = byId("step-drill");
+      if (!drill.hidden && (drill.classList.contains("graded") || drill.classList.contains("skipped"))
+          && !event.target.closest("button,a,[role=button]")) press(byId("practice-continue"));
+      return;
+    }
     if (key === "r") {
       if (shadowing) press(byId("start-record"));
       return;
@@ -399,7 +405,7 @@ if (root) {
         key === "ArrowRight" ? ".pager a.next" : ".pager a:not(.next)");
       if (!link) return;
       event.preventDefault();
-      window.location.assign(link.href);
+      link.click();
     }
   });
 

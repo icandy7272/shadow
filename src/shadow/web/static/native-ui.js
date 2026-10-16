@@ -68,7 +68,12 @@ if(typeof document!=='undefined')(()=>{
  const proxies=[];for(const [selector,stage] of [['#step-listen button.play','listen'],['#submit-drill','drill'],['#skip-drill','drill'],['#practice-continue','drill']]){const original=root.querySelector(selector);if(!original)continue;original.classList.add('dock-source-control');const proxy=original.cloneNode(true);proxy.removeAttribute('id');proxy.classList.remove('dock-source-control');proxy._shortcutSource=original;proxy.dataset.dockStage=stage;proxy.dataset.actionId=original.id||'play';proxy.addEventListener('click',()=>original.click());dock.append(proxy);proxies.push({original,proxy});}
  const syncDock=()=>{
   if(dock.hidden)dock.hidden=false;
-  for(const {original,proxy}of proxies)syncDockProxy(original,proxy);
+  for(const {original,proxy}of proxies){
+   syncDockProxy(original,proxy);
+   if(original.id==='practice-continue'&&!proxy.hidden&&root.dataset.activeStep==='drill'&&root.querySelector('#step-drill.graded')&&document.activeElement===document.getElementById('dictation-text')){
+    if(window.matchMedia('(hover: hover)').matches)proxy.focus({preventScroll:true});else document.activeElement.blur();
+   }
+  }
   const mode=dockMode({recording:root.dataset.recording==='true',stopVisible:!document.getElementById('stop-take')?.hidden,submitting:root.dataset.submitting==='true',pending:root.dataset.pending==='true',saved:!document.getElementById('extra-record')?.hidden});
   if(root.dataset.dockMode!==mode)root.dataset.dockMode=mode;
   const controls=[...dock.querySelectorAll(':scope > button,.dock-pager')];
