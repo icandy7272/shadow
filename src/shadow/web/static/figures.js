@@ -649,10 +649,14 @@ function playback(rhythm, audio, onFrame, onStopped) {
       return;
     }
 
+    // A shared lead-in keeps the first words aligned even when one file begins
+    // less than PRE_ROLL before its first word. Clamping each track separately
+    // would leave a longer silence on the other track (up to 150 ms).
+    const leadIn = Math.min(PRE_ROLL, ...tracks.map(media => Math.max(0, offsets.get(media))));
     tracks.forEach((media) => {
       const panner = panners.get(media);
       if (panner) panner.pan.value = spread ? (media === ref ? -0.8 : 0.8) : 0;
-      media.currentTime = Math.max(0, offsets.get(media) - PRE_ROLL);
+      media.currentTime = Math.max(0, offsets.get(media) - leadIn);
     });
     await Promise.all(tracks.map(settled));
     if (mine !== session) return;

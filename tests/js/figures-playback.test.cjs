@@ -3,15 +3,16 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function setup({ stopDuringClip = false, stopDuringGap = false, cache = null } = {}) {
+function setup({ stopDuringClip = false, stopDuringGap = false, cache = null, refOffset = 0, usrOffset = 0 } = {}) {
   const listeners = new Map();
   const media = [];
   let stopped = 0;
   const blank = () => listeners.get('pointerdown')?.({ target: { closest: () => null } });
   class Audio {
-    constructor(src) { this.src = src; this.readyState = 1; this.currentTime = 0; this.plays = 0; this.paused = true; media.push(this); }
+    constructor(src) { this.src = src; this.readyState = 1; this.currentTime = 0; this.plays = 0; this.starts = []; this.paused = true; media.push(this); }
     play() {
       this.plays += 1;
+      this.starts.push(this.currentTime);
       this.paused = false;
       if (stopDuringClip && this.plays === 2) queueMicrotask(blank);
       return Promise.resolve();
@@ -40,7 +41,8 @@ function setup({ stopDuringClip = false, stopDuringGap = false, cache = null } =
   });
   vm.runInContext(fs.readFileSync('src/shadow/web/static/figures.js', 'utf8'), context);
   context.onStopped = () => { stopped += 1; };
-  const player = vm.runInContext('playback({seconds: 1}, {ref: "ref", usr: "usr", refOffset: 0, usrOffset: 0}, () => {}, onStopped)', context);
+  context.testOffsets={refOffset,usrOffset};
+  const player = vm.runInContext('playback({seconds: 1}, {ref: "ref", usr: "usr", refOffset: testOffsets.refOffset, usrOffset: testOffsets.usrOffset}, () => {}, onStopped)', context);
   return { player, media, blank, stopped: () => stopped };
 }
 
@@ -114,4 +116,19 @@ test('stopping while cached audio loads prevents playback after it arrives', asy
   await playing;
   assert.ok(media.every((item) => item.paused));
   assert.ok(media.every((item) => item.plays === 1)); // Only synchronous unlock.
+});
+
+for(const [refOffset,usrOffset] of [[0,.42],[.04,.5],[.6,.02],[.4,.7]]) {
+ test(`simultaneous speech onsets share the same lead-in (${refOffset}, ${usrOffset})`,async()=>{
+  const {player,media}=setup({refOffset,usrOffset});
+  await player.play([player.ref,player.usr],true);player.stop();
+  const refLead=refOffset-media[0].starts[1],usrLead=usrOffset-media[1].starts[1];
+  assert.ok(Math.abs(refLead-usrLead)<1e-9,`unequal lead-ins: ${refLead} vs ${usrLead}`);
+  assert.ok(Math.abs(refLead-Math.min(.15,refOffset,usrOffset))<1e-9);
+ });
+}
+test('single track playback keeps its available lead-in',async()=>{
+ const {player,media}=setup({refOffset:0,usrOffset:.5});
+ await player.play([player.usr],false);player.stop();
+ assert.ok(Math.abs(media[1].starts[1]-.35)<1e-9);
 });
