@@ -5,7 +5,11 @@ function finishState({recording=false,submitting=false,pending=[],analysis=null}
 function setDisabledIfChanged(control,value){value=Boolean(value);if(control&&control.disabled!==value)control.disabled=value;}
 function dockActionRole(id,saved=false){if(id==='stop-take')return 'stop';if(id==='next-sentence')return saved?'primary':'secondary';return ['skip-drill','extra-record','redo-take'].includes(id)?'secondary':'primary';}
 function dockMode({recording=false,stopVisible=false,submitting=false,pending=false,saved=false}={}){return recording?(stopVisible?'recording':'prelisten'):submitting?'analysing':pending?'retry':saved?'saved':'ready';}
-if(typeof module!=='undefined')module.exports={dockActionRole,dockMode,clampNumber,canDismissDrag,finishState,setDisabledIfChanged};
+function syncDockProxy(original,proxy){
+ for(const key of ['hidden','disabled','innerHTML'])if(proxy[key]!==original[key])proxy[key]=original[key];
+ const space=original.classList.contains('space-target');if(proxy.classList.contains('space-target')!==space)proxy.classList.toggle('space-target',space);
+}
+if(typeof module!=='undefined')module.exports={syncDockProxy,dockActionRole,dockMode,clampNumber,canDismissDrag,finishState,setDisabledIfChanged};
 if(typeof document!=='undefined')(()=>{
  const stack=[];const openers=new WeakMap(),replaced=new WeakSet();let sheetSequence=0;let scroll=0,restoring=false,skipPop=0;
  function lock(){if(stack.length!==1)return;scroll=window.scrollY;document.body.style.position='fixed';document.body.style.top=`-${scroll}px`;document.body.style.width='100%';}
@@ -61,10 +65,10 @@ if(typeof document!=='undefined')(()=>{
  const dock=document.getElementById('practice-dock');
  if(dock&&typeof ResizeObserver!=='undefined')new ResizeObserver(()=>document.documentElement.style.setProperty('--practice-dock-height',`${Math.ceil(dock.getBoundingClientRect().height)}px`)).observe(dock);
  // Keep originals in their steps so recorder shortcuts and replay counts retain their targets.
- const proxies=[];for(const [selector,stage] of [['#step-listen button.play','listen'],['#submit-drill','drill'],['#skip-drill','drill'],['#practice-continue','drill']]){const original=root.querySelector(selector);if(!original)continue;original.classList.add('dock-source-control');const proxy=original.cloneNode(true);proxy.removeAttribute('id');proxy.classList.remove('dock-source-control');proxy.dataset.dockStage=stage;proxy.dataset.actionId=original.id||'play';proxy.addEventListener('click',()=>original.click());dock.append(proxy);proxies.push({original,proxy});}
+ const proxies=[];for(const [selector,stage] of [['#step-listen button.play','listen'],['#submit-drill','drill'],['#skip-drill','drill'],['#practice-continue','drill']]){const original=root.querySelector(selector);if(!original)continue;original.classList.add('dock-source-control');const proxy=original.cloneNode(true);proxy.removeAttribute('id');proxy.classList.remove('dock-source-control');proxy._shortcutSource=original;proxy.dataset.dockStage=stage;proxy.dataset.actionId=original.id||'play';proxy.addEventListener('click',()=>original.click());dock.append(proxy);proxies.push({original,proxy});}
  const syncDock=()=>{
   if(dock.hidden)dock.hidden=false;
-  for(const {original,proxy}of proxies){if(proxy.hidden!==original.hidden)proxy.hidden=original.hidden;if(proxy.disabled!==original.disabled)proxy.disabled=original.disabled;if(proxy.innerHTML!==original.innerHTML)proxy.innerHTML=original.innerHTML;}
+  for(const {original,proxy}of proxies)syncDockProxy(original,proxy);
   const mode=dockMode({recording:root.dataset.recording==='true',stopVisible:!document.getElementById('stop-take')?.hidden,submitting:root.dataset.submitting==='true',pending:root.dataset.pending==='true',saved:!document.getElementById('extra-record')?.hidden});
   if(root.dataset.dockMode!==mode)root.dataset.dockMode=mode;
   const controls=[...dock.querySelectorAll(':scope > button,.dock-pager')];
@@ -77,8 +81,7 @@ if(typeof document!=='undefined')(()=>{
   setDisabledIfChanged(document.getElementById('practice-minimize'),root.dataset.recording==='true'||root.dataset.mutating==='true');
  };
 
- new MutationObserver(syncDock).observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','disabled','data-active-step','data-mutating','data-recording','data-submitting','data-pending']});syncDock();
- const progress=root.querySelector('.session-progress');const updateProgress=()=>{const done=root.querySelectorAll('.step.complete,.step.skipped').length;progress?.setAttribute('aria-valuenow',String(done));if(progress)progress.querySelector('i').style.width=`${done/3*100}%`};new MutationObserver(updateProgress).observe(root,{subtree:true,attributes:true,attributeFilter:['class']});updateProgress();
+ new MutationObserver(syncDock).observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden','disabled','data-active-step','data-mutating','data-recording','data-submitting','data-pending']});syncDock();
  const elapsed=document.getElementById('session-elapsed');const tick=()=>{const start=window.ShadowSession?.snapshot()?.startedAt;if(start&&elapsed){const minutes=Math.max(0,Math.floor((Date.now()-start)/60000));elapsed.textContent=` · ${minutes} 分钟`}};setInterval(tick,15000);document.addEventListener('shadow:session-restored',tick);tick();
  const finish=document.getElementById('session-finish'),error=document.getElementById('session-finish-error'),discard=document.getElementById('session-discard'),save=document.getElementById('session-save-exit');
  document.getElementById('practice-finish')?.addEventListener('click',()=>{const session=window.ShadowSession;const state=finishState({...session?.capture(),recording:session?.isRecording(),submitting:root.dataset.submitting==='true'||root.dataset.mutating==='true'});error.textContent='';discard.dataset.confirm='false';discard.textContent='放弃未提交的录音';discard.hidden=state!=='pending';save.disabled=state==='pending'||state==='recording'||state==='submitting';document.getElementById('session-finish-note').textContent=state==='submitting'?'正在保存与分析录音，请等待结果后结束。':state==='recording'?'这遍还在录音，请先点击「说完了」。':state==='pending'?'录音尚未保存到服务。请返回重新提交；如果放弃，只删除未提交的录音，已保存的记录会保留。':state==='saved'?'这句已保存。追加的每一遍都记在同一轮中。': '已保存的盲听和默写记录会保留，结束后将清除这次草稿。';const data=session?.capture()?.analysis;const summary=document.getElementById('session-summary');summary.replaceChildren();if(data)for(const [v,label]of [[data.count,'录音遍数'],[`${data.accuracy}%`,'中位可懂度'],[data.issues.length,'待改问题']]){const item=document.createElement('div'),b=document.createElement('b'),span=document.createElement('span');b.textContent=v;span.textContent=label;item.append(b,span);summary.append(item)}open(finish)});

@@ -8,3 +8,14 @@ test('navigation keys are protected but typing arrows remain normal',()=>{const 
 test('refresh or closing a page warns until pending audio is saved',()=>{const h=harness();const e=event({});h.windowEvents.beforeunload(e);assert.equal(e.prevented,true);h.setBusy(false);const done=event({});h.windowEvents.beforeunload(done);assert.equal(done.prevented,false)});
 
 test('rubber-band scrolling and browser zoom never look like a software keyboard',()=>{const {keyboardInset}=require('../../src/shadow/web/static/mobile.js');assert.equal(keyboardInset({innerHeight:844,viewportHeight:844,offsetTop:-280,editing:false,scale:1}),0);assert.equal(keyboardInset({innerHeight:844,viewportHeight:700,offsetTop:-200,editing:false,scale:1}),0);assert.equal(keyboardInset({innerHeight:844,viewportHeight:420,offsetTop:0,editing:true,scale:2}),0);assert.equal(keyboardInset({innerHeight:844,viewportHeight:510,offsetTop:0,editing:true,scale:1}),334);assert.equal(keyboardInset({innerHeight:844,viewportHeight:800,offsetTop:0,editing:true,scale:1}),0)});
+test('every actual step transition stops playback before hiding the old panel',()=>{
+ const fs=require('node:fs'),vm=require('node:vm');const source=fs.readFileSync('src/shadow/web/static/mobile.js','utf8');
+ const begin=source.indexOf(' function show('),end=source.indexOf('\n document.addEventListener',begin);
+ for(const initial of ['listen','drill','record'])for(const target of ['listen','drill','record']){
+  const calls=[],ids=['listen','drill','record'];const panels=ids.map(()=>({hidden:false,classList:{contains:()=>false}}));
+  const context={ids,panels,active:initial,root:{dataset:{},scrollIntoView(){}},nextSentence:null,tabs:[],dock:{hidden:false},
+   document:{getElementById:id=>panels[ids.indexOf(id.replace('step-',''))]},stopLoops:()=>calls.push('stop'),window:{matchMedia:()=>({matches:false})},focusPracticeStep:()=>{}};
+  vm.runInNewContext(source.slice(begin,end)+`;show('${target}',false);`,context);
+  assert.equal(calls.length,initial===target?0:1,`${initial} to ${target}`);assert.equal(context.root.dataset.activeStep,target);
+ }
+});

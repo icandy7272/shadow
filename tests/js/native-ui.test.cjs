@@ -11,3 +11,18 @@ test('busy control synchronization does not retrigger identical disabled mutatio
 test('all practice phases use one action hierarchy, with destructive stop on primary side',()=>{const {dockActionRole}=require('../../src/shadow/web/static/native-ui.js');for(const id of ['submit-drill','practice-continue','start-record','resubmit','play'])assert.equal(dockActionRole(id,false),'primary');for(const id of ['skip-drill','extra-record','redo-take'])assert.equal(dockActionRole(id,true),'secondary');assert.equal(dockActionRole('next-sentence',true),'primary');assert.equal(dockActionRole('next-sentence',false),'secondary');assert.equal(dockActionRole('stop-take',false),'stop')});
 
 test('recording lifecycle overrides saved results and pending clips in the action bar',()=>{const {dockMode}=require('../../src/shadow/web/static/native-ui.js');assert.equal(dockMode({recording:true,stopVisible:true,pending:true,saved:true}),'recording');assert.equal(dockMode({recording:true,stopVisible:false,saved:true}),'prelisten');assert.equal(dockMode({submitting:true,pending:true,saved:true}),'analysing');assert.equal(dockMode({pending:true,saved:true}),'retry');assert.equal(dockMode({saved:true}),'saved');assert.equal(dockMode({}),'ready')});
+test('dock playback proxy keeps the current space shortcut and disabled state',()=>{
+ const {syncDockProxy}=require('../../src/shadow/web/static/native-ui.js');
+ const classes=new Set();const proxy={hidden:false,disabled:false,innerHTML:'old',classList:{contains:key=>classes.has(key),toggle:(key,want)=>want?classes.add(key):classes.delete(key)}};
+ const original={hidden:false,disabled:false,innerHTML:'play <kbd>Space</kbd>',classList:{contains:key=>key==='space-target'}};
+ syncDockProxy(original,proxy);assert.equal(classes.has('space-target'),true);assert.equal(proxy.innerHTML,original.innerHTML);
+ original.disabled=true;original.classList.contains=()=>false;syncDockProxy(original,proxy);assert.equal(proxy.disabled,true);assert.equal(classes.has('space-target'),false);
+});
+test('space target marks both original and dock proxy without oscillation',()=>{
+ const fs=require('node:fs'),vm=require('node:vm');const source=fs.readFileSync('src/shadow/web/static/app.js','utf8');
+ const begin=source.indexOf('  const markSpace = () => {'),end=source.indexOf('\n  };',begin)+5;
+ function button(){const values=new Set();return {classList:{contains:k=>values.has(k),toggle:(k,want)=>want?values.add(k):values.delete(k)}}}
+ const original=button(),proxy=button(),other=button();proxy._shortcutSource=original;
+ vm.runInNewContext(source.slice(begin,end)+';markSpace();markSpace();',{spaceTarget:()=>original,root:{querySelectorAll:()=>[original,proxy,other]}});
+ assert.equal(original.classList.contains('space-target'),true);assert.equal(proxy.classList.contains('space-target'),true);assert.equal(other.classList.contains('space-target'),false);
+});

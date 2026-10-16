@@ -309,7 +309,7 @@ if (root) {
   const markSpace = () => {
     const target = spaceTarget();
     root.querySelectorAll("button").forEach((button) => {
-      const want = button === target;
+      const want = button === target || button._shortcutSource === target;
       // 只在变了的时候改：改 class 会再触发一次观察，不变就不改，免得来回打转
       if (button.classList.contains("space-target") !== want) {
         button.classList.toggle("space-target", want);
