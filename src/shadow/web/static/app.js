@@ -1165,6 +1165,8 @@ if (root) {
     setRecording(true);
     startButton.disabled = true;
     let speaker = null, stream = null, ear = null, meterOff = null;
+    let preparingEar = null, released = false;
+    status.textContent = "正在启动麦克风 …";
     const blobs = [];
     let interrupted = false;
     const takes = extra ? 1 : Math.max(1, Number(document.getElementById("takes").value) || 1);
@@ -1180,8 +1182,13 @@ if (root) {
         throw new Error("拿不到麦克风权限。浏览器地址栏左侧可以重新允许。");
       }
       fillMics();
-      try { ear = await listenTo(stream, speaker.context); } catch (err) { ear = null; }
-      meterOff = ear ? watchLevel(ear) : null;
+      // Level analysis can warm up during the early previews. The final preview
+      // still waits for it so nothing can delay the cue-to-record rhythm.
+      preparingEar = listenTo(stream, speaker.context).then(analyser => {
+        if (released) { analyser?.close(); return; }
+        ear = analyser;
+        meterOff = ear ? watchLevel(ear) : null;
+      }).catch(() => {});
       status.textContent = "正在准备原声 …";
       const outcome = await Promise.race([
         speaker.ready().then(() => "ok", err => err.message || "原声解不开"),
@@ -1191,10 +1198,12 @@ if (root) {
         status.textContent = `${outcome}。检查一下网络，再点「开始」。`;
         return;
       }
+      if (pre === 0) await preparingEar;
       let short = 0;
       for (let take = 1; take <= takes; ) {
         status.classList.remove("live");
         for (let i = 1; i <= pre; i += 1) {
+          if (i === pre) await preparingEar;
           await awake(speaker);
           status.textContent = `第 ${offset + take}/${offset + takes} 遍 —— 先听 ${i}/${pre}`;
           await speaker.play();
@@ -1250,6 +1259,7 @@ if (root) {
       status.textContent = `录音中断：${err.message || "音频设备不可用"}。可以再点「开始」重试。`;
     } finally {
       const release = action => { try { action(); } catch (_) {} };
+      released = true;
       setRecording(false);
       release(() => meterOff?.());
       release(() => stream?.getTracks().forEach(track => release(() => track.stop())));
