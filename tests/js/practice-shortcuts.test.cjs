@@ -14,3 +14,10 @@ test('Enter continues from completed dictation only, never skips a sentence',()=
  assert.equal(run('Enter').navigated,0);
 });
 test('arrow navigation clicks the link so draft saving and guards also run',()=>{const state=run('ArrowRight');assert.equal(state.navigated,1);assert.equal(state.assigned,0)});
+test('continue enters recording and starts it synchronously in the same user gesture',()=>{
+ const mobile=fs.readFileSync('src/shadow/web/static/mobile.js','utf8');const begin=mobile.indexOf("next.addEventListener('click'");const end=mobile.indexOf('\n',begin);
+ for(const blocked of [false,true]){
+  let click;const calls=[];vm.runInNewContext(mobile.slice(begin,end),{next:{addEventListener:(_,fn)=>click=fn},isBusy:()=>blocked,startControl:{disabled:false,click:()=>calls.push('start')},panels:[null,null,{classList:{contains:()=>false}}],show:()=>calls.push('record')});
+  click();assert.deepEqual(calls,blocked?[]:['record','start']);
+ }
+});
