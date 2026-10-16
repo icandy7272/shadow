@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Generator, Sequence
@@ -59,7 +60,7 @@ class Review:
 
 
 def run(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
-        *, transcribe=None) -> Generator[Step, None, "Review | None"]:
+        *, transcribe=None, cache=None) -> Generator[Step, None, "Review | None"]:
     """跑完整条链路，每一步开工前先 yield 一个 Step，最后 return 结果。
 
     做成生成器而不是回调：回调没法把进度往上抛给正在流式输出的调用方，
@@ -72,24 +73,37 @@ def run(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
     # 默认值必须在运行时解析：写成默认参数的话，绑定发生在函数定义时，
     # 事后 patch 模块属性就盖不住了。
     transcribe = transcribe or transcribe_words
-    total = len(paths) + 1
-
-    yield Step(stage="reference", done=0, total=total)
-    ref_prosody = analyse(ref_path)
-    # 首词起点常被转写往前铺到片段开头，对到真正的发声点上
-    ref_words = snap_first_word(ref_words, ref_prosody)
-    # 库内文本来自长上下文转写，可能把缩读还原成完整形式，与音频对不上。
-    # 这些词不能用来判用户对错。
-    shaky = unreliable_indices(
-        [w.text for w in ref_words],
-        [w.text for w in transcribe(ref_path)],
-    )
+    ref_key = cache.key(ref_path, json.dumps([(w.text, w.start, w.end) for w in ref_words])) if cache else None
+    reference = cache.get(ref_key) if cache else None
+    if not (isinstance(reference, tuple) and len(reference) == 3):
+        reference = None
+    keys = {path: cache.key(path, ref_key) for path in paths} if cache else {}
+    cached = {path: cache.get(keys[path]) for path in paths} if cache else {}
+    cached = {path: value for path, value in cached.items()
+              if isinstance(value, Take) and value.path == path}
+    total = int(reference is None) + sum(path not in cached for path in paths)
+    done = 0
+    if reference is None:
+        yield Step(stage="reference", done=done, total=total)
+        ref_prosody = analyse(ref_path)
+        ref_words = snap_first_word(ref_words, ref_prosody)
+        shaky = unreliable_indices(
+            [w.text for w in ref_words], [w.text for w in transcribe(ref_path)],
+        )
+        if cache:
+            cache.put(ref_key, (ref_prosody, tuple(ref_words), shaky))
+        done += 1
+    else:
+        ref_prosody, ref_words, shaky = reference
 
     takes: list[Take] = []
-    metrics: list[TakeMetrics] = []
     skipped: list[tuple[int, str, float]] = []
     for index, path in enumerate(paths, 1):
-        yield Step(stage="take", done=index, total=total, index=index)
+        if path in cached:
+            takes.append(cached[path])
+            continue
+        yield Step(stage="take", done=done, total=total, index=index)
+        done += 1
         words = transcribe(path)
         prosody = analyse(path)
         drift = alignment_drift(words, prosody)
@@ -106,11 +120,15 @@ def run(ref_path: Path, ref_words: Sequence[Word], paths: Sequence[Path],
             ref_words=ref_words, usr_words=words, tokens=tokens, rhythm=rhythm,
             ref_prosody=ref_prosody, usr_prosody=prosody,
         )
-        takes.append(Take(path, words, tokens, rhythm, prosody, advice))
-        metrics.append(TakeMetrics(
-            accuracy=diff_accuracy(tokens), speech_ratio=rhythm.speech_ratio,
-            pause_ratio=rhythm.pause_ratio, advice=advice,
-        ))
+        take = Take(path, words, tokens, rhythm, prosody, advice)
+        takes.append(take)
+        if cache:
+            cache.put(keys[path], take)
+
+    metrics = [TakeMetrics(accuracy=diff_accuracy(take.tokens),
+                           speech_ratio=take.rhythm.speech_ratio,
+                           pause_ratio=take.rhythm.pause_ratio, advice=take.advice)
+               for take in takes]
 
     if not metrics:
         return None

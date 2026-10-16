@@ -841,9 +841,12 @@ def test_the_header_marks_the_page_you_are_on(client, tmp_path):
 def test_append_takes_extends_same_round_without_duplicate_attempts(client, tmp_path, monkeypatch):
     from shadow import review
     segment_id = _seed(tmp_path)
-    monkeypatch.setattr(review, 'transcribe_words', lambda path: tuple(
-        Word(text=t, start=a, end=a + d)
-        for t, a, d in [('It', 0., .3), ('was', .4, .1), ('a', .5, .1), ('start.', .7, .4)]))
+    transcribed = []
+    def transcribe(path):
+        transcribed.append(path)
+        return tuple(Word(text=t, start=a, end=a + d) for t, a, d in
+                     [('It', 0., .3), ('was', .4, .1), ('a', .5, .1), ('start.', .7, .4)])
+    monkeypatch.setattr(review, 'transcribe_words', transcribe)
     def send(count, run_id=None, token=None):
         data = {'segment': segment_id, 'unit': 2}
         if token is not None:
@@ -855,16 +858,25 @@ def test_append_takes_extends_same_round_without_duplicate_attempts(client, tmp_
         assert response.status_code == 200
         return _stream(response)[-1]['result']
     first = send(3, token='33333333-3333-4333-8333-333333333333')
+    assert len(transcribed) == 4
+    transcribed.clear()
     initial_retry = send(3, token='33333333-3333-4333-8333-333333333333')
     assert initial_retry['run_id'] == first['run_id']
+    assert transcribed == []
     fourth = send(1, first['run_id'], '11111111-1111-4111-8111-111111111111')
+    assert len(transcribed) == 1
+    assert '11111111' in transcribed[0].name
+    transcribed.clear()
     assert fourth['run_id'] == first['run_id']
     assert fourth['count'] == 4
     assert len(fourth['view']['takes']) == 4
     retry = send(1, first['run_id'], '11111111-1111-4111-8111-111111111111')
     assert retry['count'] == 4
+    assert transcribed == []
     fifth = send(1, first['run_id'], '22222222-2222-4222-8222-222222222222')
     assert fifth['count'] == 5
+    assert len(transcribed) == 1
+    assert '22222222' in transcribed[0].name
     connection = db.connect()
     assert len(db.run_attempts(connection, first['run_id'])) == 5
     assert len(db.list_runs(connection, segment_id=segment_id)) == 1
@@ -884,7 +896,7 @@ def test_append_takes_rejects_a_round_for_another_sentence(client, tmp_path):
 def test_analysis_exception_is_retryable_without_discarding_recordings(monkeypatch):
     import json
     from shadow.web import app as web
-    def failed(*args):
+    def failed(*args, **kwargs):
         raise RuntimeError('temporary analysis failure')
     monkeypatch.setattr(web.review_mod, 'run', failed)
     events = list(web._review_stream(segment=1, unit=1, ref_path=None,

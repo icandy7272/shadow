@@ -1116,16 +1116,17 @@ def _review_stream(*, segment, unit, ref_path, ref_words, paths, run_id, stamp,
     生成器跑在 Starlette 的线程池里，sqlite 连接不能跨线程用，写库时现开一个。
     """
     paths = list(dict.fromkeys([*previous, *paths]))
-    total = len(paths) + 1          # 原声一步，每遍一步
     try:
-        steps = review_mod.run(ref_path, ref_words, paths)
+        from ..review_cache import AnalysisCache
+        steps = review_mod.run(ref_path, ref_words, paths,
+                               cache=AnalysisCache(config.data_dir() / "analysis-cache"))
         while True:
             try:
                 step = next(steps)
             except StopIteration as stop:
                 result = stop.value
                 break
-            yield _event({"done": step.done, "total": total,
+            yield _event({"done": step.done, "total": step.total,
                           "label": _step_label(step, len(paths))})
 
         if result is None:
