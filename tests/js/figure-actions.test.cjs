@@ -22,3 +22,9 @@ test('late viewer close event cannot restore a stale take after switching',()=>{
 test('mine action and view action select their take without creating extra playback',()=>{const {result,dialogs,takes}=setup();result.controls.querySelectorAll('.take-menu')[0].click();dialogs.at(-1).querySelectorAll('.take-action-mine')[0].click();assert.equal(takes.at(-1).side,'usr');const selected=takes.at(-1);result.controls.querySelectorAll('.take-menu')[0].click();dialogs.at(-1).querySelectorAll('.take-action-view')[0].click();assert.equal(takes.at(-1),selected);});
 
 test('fullscreen moves the same playback bar and restores it on closing',()=>{const {result,dialogs,takes}=setup();result.controls.querySelectorAll('.take-menu')[1].click();dialogs.at(-1).querySelectorAll('.take-action-enlarge')[0].click();const viewer=dialogs.at(-1),take=takes.at(-1);assert.equal(take.bar.parentNode,viewer);assert.equal(result.controls.querySelectorAll('.playbar-slot')[0].children.length,0);const stops=take.stops;viewer.close();assert.equal(take.bar.parentNode,result.controls.querySelectorAll('.playbar-slot')[0]);assert.ok(take.stops>stops);});
+test('take action sheet uses one padded header with close action and a separate action list',()=>{
+ const {result,dialogs}=setup();result.controls.querySelectorAll('.take-menu')[0].click();const menu=dialogs.at(-1);
+ const header=menu.querySelectorAll('.sheet-header')[0],body=menu.querySelectorAll('.action-list')[0];
+ assert.ok(header);assert.ok(body);assert.equal(header.querySelectorAll('.take-action-close').length,1);
+ assert.equal(body.querySelectorAll('.grouped-row').length,4);assert.equal(body.querySelectorAll('.take-action-close').length,0);
+});

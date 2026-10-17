@@ -241,7 +241,8 @@ input[type="checkbox"] { accent-color:var(--accent); width:20px; height:20px; }
 .session-header button { padding:8px; min-width:44px; border:0; background:transparent; color:var(--accent); }
 #practice-finish { border-radius:22px; background:var(--soft); font-size:0.8125rem; }
 
-.sheet-grabber { display:block; margin:0 auto; min-height:32px; height:32px; width:64px; padding:0; border:0; background:transparent; touch-action:none; font-size:0; }
+.sheet-grabber { display:none; margin:0 auto; min-height:32px; height:32px; width:64px; padding:0; border:0; background:transparent; touch-action:none; font-size:0; }
+@media(max-width:600px){.sheet-grabber { display:block; }}
 .sheet-grabber::after { content:''; display:block; width:36px; height:5px; border-radius:5px; background:var(--muted); opacity:.45; margin:auto; }
 
 .rec-settings { display:grid; width:100%; gap:0!important; }
@@ -305,7 +306,15 @@ input[role="switch"]:disabled { opacity:.45; }
 .take-item .take-row { flex:1; min-width:0; text-align:left; }
 .take-menu { min-width:44px; width:44px; padding:8px; color:var(--accent); background:var(--card); border:0; }
 .take-row.representative .take-pick { color:var(--accent); }
-.take-actions button { display:block; width:100%; text-align:left; border:0; border-radius:0; border-bottom:.5px solid var(--line); }
+.settings-dialog .action-list { margin:0; padding:0 16px calc(16px + env(safe-area-inset-bottom)); border-radius:0; background:transparent; }
+.action-list > .grouped-row + .grouped-row { border-top:.5px solid var(--line); }
+.settings-dialog .action-list > [data-action="delete"] { color:var(--warn); }
+.action-list > button.danger { margin:0; }
+.settings-dialog .sheet-header h2 { min-width:0; overflow-wrap:anywhere; }
+.settings-dialog .sheet-header > button { flex:none; min-width:44px; min-height:44px; }
+.settings-dialog .sheet-body > :first-child { margin-top:0; }
+.session-replacement .sheet-body > button { width:100%; margin-top:12px; }
+.session-replacement .sheet-body > p { margin-top:0; }
 .figure-viewer.settings-dialog { width:100%; max-width:100%; height:100dvh; max-height:100dvh; border-radius:0; inset:0; margin:0; padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
 .figure-viewer .sheet-grabber { display:none; }
 .figure-viewer-header { display:flex; align-items:center; justify-content:space-between; gap:12px; position:sticky; top:0; background:var(--bg); z-index:2; padding:12px 0; }

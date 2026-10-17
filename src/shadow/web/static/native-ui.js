@@ -27,6 +27,20 @@ if(typeof document!=='undefined')(()=>{
  }
  function close(dialog){if(!dialog?.open||dialog.dataset.sheetLocked==='true')return;dialog.close();}
  function register(dialog){if(dialog.dataset.nativeSheet)return;if(!dialog.id)dialog.id=`shadow-sheet-${++sheetSequence}`;dialog.dataset.nativeSheet='true';
+  // Normalize legacy and dynamically-created sheets before they are displayed.
+  let header=dialog.querySelector('.sheet-header,.figure-viewer-header');
+  if(!header){
+   header=document.createElement('div');header.className='sheet-header';
+   const title=dialog.querySelector('h2')||document.createElement('h2');
+   if(!title.textContent)title.textContent=dialog.getAttribute('aria-label')||'操作';
+   if(!title.id)title.id=dialog.id+'-title';dialog.setAttribute('aria-labelledby',title.id);
+   header.append(title);
+   if(dialog.dataset.sheetLocked!=='true'&&!dialog.classList.contains('confirm-dialog')&&dialog.id!=='auth-expired'){
+    const done=document.createElement('button');done.type='button';done.textContent='完成';done.addEventListener('click',()=>close(dialog));header.append(done);
+   }
+   dialog.prepend(header);
+  }else header.classList.add('sheet-header');
+
   const handle=document.createElement('button');handle.type='button';handle.className='sheet-grabber';handle.setAttribute('aria-label','关闭面板');handle.addEventListener('click',()=>close(dialog));dialog.prepend(handle);
   let drag=null;handle.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,time:performance.now()};handle.setPointerCapture(e.pointerId)});
   handle.addEventListener('pointermove',e=>{if(drag)dialog.style.translate=`0 ${Math.max(0,e.clientY-drag.y)}px`});
@@ -52,7 +66,7 @@ if(typeof document!=='undefined')(()=>{
   toast(message){let box=document.getElementById('app-toast');if(!box){box=document.createElement('div');box.id='app-toast';box.className='app-toast';box.setAttribute('role','status');document.body.append(box)}clearTimeout(box._timer);box.textContent=message;box.hidden=false;box._timer=setTimeout(()=>box.hidden=true,4000)},
   confirm({title,message,confirm='确认',danger=false}){return new Promise(resolve=>{const dialog=document.createElement('dialog');dialog.className='settings-dialog confirm-dialog';dialog.id=`confirm-${Date.now()}`;const body=document.createElement('div');body.className='sheet-body';const heading=document.createElement('h2');heading.textContent=title;heading.id=dialog.id+'-title';dialog.setAttribute('aria-labelledby',heading.id);const p=document.createElement('p');p.textContent=message;const yes=document.createElement('button');yes.type='button';yes.className=danger?'danger':'primary';yes.textContent=confirm;const no=document.createElement('button');no.type='button';no.textContent='取消';let result=false;yes.addEventListener('click',()=>{result=true;close(dialog)});no.addEventListener('click',()=>close(dialog));dialog.addEventListener('close',()=>{resolve(result);dialog.remove()},{once:true});body.append(heading,p,yes,no);dialog.append(body);document.body.append(dialog);register(dialog);open(dialog)})}
  };
- document.querySelectorAll('.card-menu').forEach((menu,index)=>{const summary=menu.querySelector('summary');summary?.addEventListener('click',event=>{event.preventDefault();const dialog=document.createElement('dialog');dialog.id=`source-menu-${index}`;dialog.className='settings-dialog';dialog.setAttribute('aria-label','素材操作');const body=document.createElement('div');body.className='sheet-body grouped-list';for(const original of menu.querySelectorAll('.card-actions > *')){const item=original.cloneNode(true);item.classList.add('grouped-row');if(item.tagName==='BUTTON')item.addEventListener('click',()=>{original.click()});body.append(item)}dialog.append(body);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});register(dialog);open(dialog)})});
+ document.querySelectorAll('.card-menu').forEach((menu,index)=>{const summary=menu.querySelector('summary');summary?.addEventListener('click',event=>{event.preventDefault();const dialog=document.createElement('dialog');dialog.id=`source-menu-${index}`;dialog.className='settings-dialog';dialog.setAttribute('aria-label','素材操作');const body=document.createElement('div');body.className='sheet-body action-list';for(const original of menu.querySelectorAll('.card-actions > *')){const item=original.cloneNode(true);item.classList.add('grouped-row');if(item.tagName==='BUTTON')item.addEventListener('click',()=>{original.click()});body.append(item)}dialog.append(body);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});register(dialog);open(dialog)})});
 
  const viewport=window.visualViewport;function sizeSheets(){document.documentElement.style.setProperty('--sheet-height',`${viewport?.height||window.innerHeight}px`);document.documentElement.style.setProperty('--viewport-top',`${viewport?.offsetTop||0}px`)}viewport?.addEventListener('resize',sizeSheets);viewport?.addEventListener('scroll',sizeSheets);sizeSheets();
  // Give number fields an explicit touch target, keeping the original input and events.

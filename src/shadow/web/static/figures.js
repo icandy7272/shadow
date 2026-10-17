@@ -937,7 +937,7 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
     const take = current;
     const dialog = el("dialog", "figure-viewer settings-dialog");
     dialog.setAttribute("aria-label", `第 ${selected + 1} 遍 · 放大图表`);
-    const header = el("div", "figure-viewer-header");
+    const header = el("div", "figure-viewer-header sheet-header");
     const done = el("button", "figure-viewer-close", "完成");
     done.type = "button";
     done.addEventListener("click", () => closeDialog(dialog));
@@ -963,19 +963,24 @@ function renderFigures(view) {  // eslint-disable-line no-unused-vars
     closeMenu();
     const dialog = el("dialog", "take-actions settings-dialog");
     dialog.setAttribute("aria-label", `第 ${index + 1} 遍操作`);
-    dialog.append(el("h2", null, `第 ${index + 1} 遍`));
+    const header = el("div", "sheet-header");
+    const done = el("button", "take-action-close", "完成");
+    done.type = "button";
+    done.addEventListener("click", closeMenu);
+    header.append(el("h2", null, `第 ${index + 1} 遍`), done);
+    const actions = el("div", "sheet-body action-list");
+    dialog.append(header, actions);
     const action = (label, className, handler) => {
-      const button = el("button", className, label);
+      const button = el("button", `${className} grouped-row`, label);
       button.type = "button";
       button.addEventListener("click", handler);
-      dialog.append(button);
+      actions.append(button);
     };
     const select = () => { if (selected !== index) show(index, true); };
     action("查看这一遍", "take-action-view", () => { select(); closeMenu(); });
     action("听原声", "take-action-source", () => { select(); closeMenu(); current.listen("ref"); });
     action("听我的录音", "take-action-mine", () => { select(); closeMenu(); current.listen("usr"); });
     action("放大图表", "take-action-enlarge", () => { select(); enlarge(); });
-    action("完成", "take-action-close", closeMenu);
     dialog.addEventListener("close", () => { if (menu === dialog) menu = null; dialog.remove(); });
     menu = dialog;
     openDialog(dialog);

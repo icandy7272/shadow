@@ -55,7 +55,7 @@ if (typeof document!=='undefined') (()=>{
     dialog.setAttribute('aria-labelledby',heading.id);
     const close=document.createElement('button');close.type='button';close.textContent='取消';close.dataset.closeDialog='';
     header.append(heading,close);
-    const body=document.createElement('div');body.className='sheet-body grouped-list';body.setAttribute('role','listbox');body.setAttribute('aria-label',title);
+    const body=document.createElement('div');body.className='sheet-body action-list';body.setAttribute('role','listbox');body.setAttribute('aria-label',title);
     for (const item of choices) {
       const row=document.createElement('button');row.type='button';row.className='grouped-row picker-option';row.disabled=Boolean(item.disabled);
       row.setAttribute('role','option');row.setAttribute('aria-selected',String(item.value===current));
