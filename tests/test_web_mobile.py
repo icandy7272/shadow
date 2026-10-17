@@ -227,3 +227,19 @@ def test_top_level_shell_has_stable_practice_tab_and_single_title_row(client):
         assert '>练习</span>' in body
         assert 'class="app-shell root-page"' in body
         assert body.count('aria-label="设置"') == 1
+
+
+def test_today_calendar_shows_history_and_links_to_each_day(client):
+    client.get('/today')
+    connection = db.connect()
+    day = datetime.now().astimezone().date().isoformat()
+    connection.execute('INSERT INTO practice_archive (day, sentence, rounds) VALUES (?, ?, ?)',
+                       (day, 'Calendar history.', 2))
+    connection.commit()
+    connection.close()
+    page = client.get('/today').text
+    assert '<h2>练习日历</h2>' in page
+    assert f'href="/records/day/{day}?range=all"' in page
+    assert f'{day}：1 句 / 2 轮' in page
+    assert '日历显示最近十周的练习' in page
+    assert client.get('/today?week=-3').text.count('<h2>练习日历</h2>') == 1
