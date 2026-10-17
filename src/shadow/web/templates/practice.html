@@ -8,7 +8,7 @@
      data-spoken="{{ spoken }}">
 
   <aside class="practice-rail" aria-label="练习进度与操作"><div class="session-header"><button id="practice-minimize" type="button" aria-label="收起练习">⌄</button><div><b>{{ source }}</b><small>第 {{ number }} / {{ total_units }} 句{% if queue %} · {{ queue.title }}{% endif %}<span id="session-elapsed"></span></small></div><button type="button" data-open-dialog="practice-menu" aria-label="更多练习操作">•••</button><button id="practice-finish" type="button">结束</button></div>
-  <dialog class="settings-dialog" id="practice-menu" aria-labelledby="practice-menu-title"><div class="sheet-header"><h2 id="practice-menu-title">练习操作</h2><button data-close-dialog type="button">完成</button></div><div class="sheet-body grouped-list"><a class="grouped-row" href="/sources/{{ source_id }}">返回素材 <span>›</span></a><button class="grouped-row" type="button" data-open-dialog="record-settings">录音设置 <span>›</span></button><a class="grouped-row" href="/settings">全局设置 <span>›</span></a></div></dialog>
+  <dialog class="settings-dialog" id="practice-menu" aria-labelledby="practice-menu-title"><div class="sheet-header"><h2 id="practice-menu-title">练习操作</h2><button data-close-dialog type="button">完成</button></div><div class="sheet-body practice-menu-list"><a class="grouped-row" href="/sources/{{ source_id }}">返回素材 <span>›</span></a><button class="grouped-row" type="button" data-open-dialog="record-settings">录音设置 <span>›</span></button><a class="grouped-row" href="/settings">全局设置 <span>›</span></a></div></dialog>
   <dialog class="settings-dialog" id="session-finish" aria-labelledby="session-finish-title"><div class="sheet-header"><h2 id="session-finish-title">结束这次练习？</h2><button data-close-dialog type="button">取消</button></div><div class="sheet-body"><p id="session-finish-note">已保存的练习记录会保留。你也可以收起练习，稍后继续。</p><div id="session-summary" class="record-summary"></div><button class="primary" id="session-save-exit" type="button">完成，回到今日</button><button class="danger" id="session-discard" type="button" hidden>放弃未提交的录音</button><p class="hint" id="session-finish-error" role="status"></p></div></dialog>
   <nav class="practice-steps" aria-label="练习步骤" role="tablist">
   {% for key,label in [('listen','盲听'),('drill','默写'),('record','跟读')] %}<button type="button" role="tab" aria-controls="step-{{ key }}" data-practice-step="{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}"{% if not loop.first %} disabled{% endif %}>{{ loop.index }} {{ label }}</button>{% endfor %}</nav></aside>
@@ -128,15 +128,15 @@
     <a class="next" href="/sources/{{ source_id }}">这份素材练完了，回列表 <kbd class="key-inline" aria-hidden="true">→</kbd></a>
     {% endif %}
   </nav>
-  <p class="retire-row" id="retire-row">
+  <div class="retire-row" id="retire-row">
     {%- if retired %}
-    已标为不再练：复习和「下一句」都会跳过这句 · <button type="button" id="unretire" class="link-button">恢复练习<kbd class="key" aria-hidden="true">K</kbd></button>
+    <button type="button" id="unretire" class="link-button">恢复练习<kbd class="key" aria-hidden="true">K</kbd></button><p class="retirement-note">已标为不再练：复习和“下一句”都会跳过这句。</p>
     {%- else %}
     <button type="button" id="retire" title="复习和「下一句」都跳过这句；以后想练，在这页点「恢复练习」">这句熟了，不再练<kbd class="key" aria-hidden="true">K</kbd></button>
     {%- endif %}
-  </p>
+  </div>
   {% if queue %}
-  <p class="pager-note">正在按「{{ queue.title }}」往下练 · <a href="/practice/{{ segment }}/{{ unit }}">改回原文顺序</a></p>
+  <p class="pager-note"><span>正在按「{{ queue.title }}」往下练</span><a href="/practice/{{ segment }}/{{ unit }}">改回原文顺序</a></p>
   {% endif %}
 
 </div>
