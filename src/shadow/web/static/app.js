@@ -299,9 +299,23 @@ if (root) {
   // 录音中是「说完了」；出了结果是「同时播放」；否则是最后展开的那一步的播放键
   // （练到第二步，空格该放的是第二步的重听）
   const spaceTarget = () => {
-    if (recording) return document.getElementById("stop-take");
-    const both = !document.getElementById("step-record").hidden && document.querySelector("#rec-result:not([hidden]) .playbar > button");
-    if (both) return both;
+    if (recording) {
+      const stop = document.getElementById("stop-take");
+      return stop && !stop.hidden ? stop : null;
+    }
+    if (root.dataset.submitting === 'true' || root.dataset.pending === 'true'
+        || root.dataset.mutating === 'true') return null;
+    const record = document.getElementById("step-record");
+    if (!record.hidden && !record.classList.contains("locked")) {
+      if (!document.getElementById("rec-result").hidden)
+        return document.querySelector("#rec-result:not([hidden]) .playbar > button");
+      return document.getElementById("start-record");
+    }
+    const drill = document.getElementById("step-drill");
+    if (!drill.hidden && (drill.classList.contains("graded") || drill.classList.contains("skipped"))) {
+      const next = document.getElementById("practice-continue");
+      return next && !next.hidden ? next : null;
+    }
     const plays = [...document.querySelectorAll(".step:not(.locked):not([hidden]) button.play")];
     return plays[plays.length - 1] || null;
   };
@@ -322,7 +336,7 @@ if (root) {
     clearTimeout(marking);
     marking = setTimeout(markSpace, 0);
   }).observe(root, { subtree: true, childList: true, attributes: true,
-                     attributeFilter: ["class", "hidden", "disabled"] });
+                     attributeFilter: ["class", "hidden", "disabled", "data-recording", "data-active-step", "data-pending", "data-submitting", "data-mutating"] });
   markSpace();
 
   //
@@ -388,6 +402,7 @@ if (root) {
     if (key === " ") {
       // 录着的时候是「说完了」（别的时候不放音——原声正按节奏走着）；
       // 出了结果是对比着听：录完第一件想做的事是听自己刚才那遍
+      event.preventDefault();
       press(spaceTarget());
       return;
     }

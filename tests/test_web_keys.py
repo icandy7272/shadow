@@ -33,9 +33,9 @@ def test_every_step_on_the_practice_page_shows_its_key_on_the_button(client, tmp
 
     assert _keys_on(body, "submit-drill") == ["回车"]
     assert _keys_on(body, "skip-drill") == ["空白时回车"]
-    assert _keys_on(body, "practice-continue") == ["Enter"]
+    assert _keys_on(body, "practice-continue") == ["空格"]
     assert "开始跟读 →" not in body
-    assert _keys_on(body, "start-record") == ["R"]
+    assert _keys_on(body, "start-record") == ["空格"]
     assert _keys_on(body, "stop-take") == ["空格"]
     # Esc 键可能是坏的：重来用删除键（删掉这一遍），重听用 Tab（光标在默写框里）
     assert _keys_on(body, "redo-take") == ["⌫"]

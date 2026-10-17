@@ -21,3 +21,15 @@ test('continue enters recording and starts it synchronously in the same user ges
   click();assert.deepEqual(calls,blocked?[]:['record','start']);
  }
 });
+test('space chooses the current phase action and never starts during prelisten or analysis',()=>{
+ const begin=source.indexOf('  const spaceTarget = () => {'),end=source.indexOf('\n  };',begin)+5;
+ for(const scenario of ['listen','drill','graded','ready','saved','recording','prelisten','analysis','pending']){
+  const play={id:'play'},start={id:'start'},next={id:'next',hidden:false},stop={id:'stop',hidden:scenario==='prelisten'},both={id:'both'};
+  const isRecord=['ready','saved','recording','prelisten','analysis','pending'].includes(scenario);
+  const record={hidden:!isRecord,classList:{contains:()=>false}};
+  const drill={hidden:isRecord||scenario==='listen',classList:{contains:n=>n==='graded'&&scenario==='graded'}};
+  const context={recording:['recording','prelisten'].includes(scenario),root:{dataset:{submitting:String(scenario==='analysis'),pending:String(scenario==='pending')}},document:{getElementById:id=>({'step-record':record,'step-drill':drill,'start-record':start,'practice-continue':next,'stop-take':stop,'rec-result':{hidden:scenario!=='saved'}}[id]),querySelector:()=>scenario==='saved'?both:null,querySelectorAll:()=>[play]}};
+  const target=vm.runInNewContext(source.slice(begin,end)+';spaceTarget()',context);
+  const wanted={listen:play,drill:play,graded:next,ready:start,saved:both,recording:stop,prelisten:null,analysis:null,pending:null}[scenario];assert.equal(target,wanted,scenario);
+ }
+});
