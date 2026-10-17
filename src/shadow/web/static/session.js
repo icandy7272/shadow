@@ -20,6 +20,13 @@
       &&[data.rejected,data.skipped,data.issues,data.good].every(Array.isArray)&&data.view&&Array.isArray(data.view.takes)
       &&data.view.takes.length>0&&Number.isInteger(data.view.chosen)&&data.view.chosen>=0&&data.view.chosen<data.view.takes.length);
   }
+  function expiredCompletedSnapshot(saved, now) {
+    if(!completedSnapshot(saved))return false;
+    const timestamp=Number.isFinite(saved.updatedAt)?saved.updatedAt:saved.startedAt;
+    if(!Number.isFinite(timestamp))return false;
+    const day=value=>{const date=new Date(value);return new Date(date.getFullYear(),date.getMonth(),date.getDate()).getTime()};
+    return day(timestamp)<day(now);
+  }
   function indexedStore(indexedDB) {
     const opened = new Promise((resolve, reject) => {
       if (!indexedDB) return reject(new Error('浏览器无法保存练习草稿'));
@@ -47,8 +54,8 @@
     });};
     return {get:url=>transact('readonly',s=>s.get(url)),put:(value,revision)=>change(value.url,revision,s=>s.put(value)),delete:(url,revision)=>change(url,revision,s=>s.delete(url))};
   }
-  function createSession({url,origin,store,pointer,onSaved=()=>{}}) {
-    url = practiceURL(url,origin); let chain=Promise.resolve(), value=null, revision=0, replacementAllowed=false, storageRevision=0, startedAt=Date.now();
+  function createSession({url,origin,store,pointer,onSaved=()=>{},now=()=>Date.now()}) {
+    url = practiceURL(url,origin); let chain=Promise.resolve(), value=null, revision=0, replacementAllowed=false, storageRevision=0, startedAt=now();
     const api={durable:false,error:null,ready:null,conflict:null,ending:false,ended:false,allowReplacement(){replacementAllowed=true;},
       save(snapshot){
         if(api.ending||api.ended)return Promise.resolve(null);
@@ -71,7 +78,7 @@
         }).catch(error=>{api.ending=false;api.ended=false;api.error=error;throw error;});chain=operation;return operation;
       }
     };
-    api.ready=Promise.resolve().then(async()=>{let previous;try{previous=JSON.parse(pointer?.getItem?.(POINTER)||'null')}catch(_){}const priorURL=previous?.version===1&&practiceURL(previous.url,origin);if(priorURL&&priorURL!==url){const retained=await store.get(priorURL);if(retained?.version===1&&retained.url===priorURL&&!completedSnapshot(retained))api.conflict=retained;}return store.get(url);}).then(saved=>{if(saved?.version===1&&saved.url===url){if(Number.isInteger(saved.storageRevision)||typeof saved.storageRevision==='string')storageRevision=saved.storageRevision;if(Number.isFinite(saved.startedAt))startedAt=saved.startedAt;if(revision===0){value=saved;api.durable=true;}return saved}return null}).catch(error=>{api.error=error;return null});
+    api.ready=Promise.resolve().then(async()=>{let previous;try{previous=JSON.parse(pointer?.getItem?.(POINTER)||'null')}catch(_){}const priorURL=previous?.version===1&&practiceURL(previous.url,origin);if(priorURL&&priorURL!==url){const retained=await store.get(priorURL);if(retained?.version===1&&retained.url===priorURL&&!completedSnapshot(retained))api.conflict=retained;}return store.get(url);}).then(saved=>{if(saved?.version===1&&saved.url===url){if(Number.isInteger(saved.storageRevision)||typeof saved.storageRevision==='string')storageRevision=saved.storageRevision;if(expiredCompletedSnapshot(saved,now()))return null;if(Number.isFinite(saved.startedAt))startedAt=saved.startedAt;if(revision===0){value=saved;api.durable=true;}return saved}return null}).catch(error=>{api.error=error;return null});
     return api;
   }
   if(typeof module!=='undefined')module.exports={practiceURL,createSession,indexedStore,validGrading};
@@ -79,7 +86,7 @@
   let pointer;try{pointer=window.localStorage}catch(_){}
   const store=indexedStore(window.indexedDB);
   // Check the authoritative snapshot before advertising Resume.
-  const updateLinks=async()=>{let p;try{p=JSON.parse(pointer?.getItem(POINTER)||'null')}catch(_){}const url=p?.version===1&&practiceURL(p.url,location.origin);if(!url)return;try{const saved=await store.get(url);if(saved?.version!==1||saved.url!==url)return;document.querySelectorAll('[data-session-start],[data-session-resume]').forEach(link=>{link.href=url;link.dataset.resume='true';link.classList.add('is-resume');link.hidden=false;link.setAttribute('aria-label','继续练习');const title=link.querySelector('[data-session-title]');if(title)title.textContent=saved.title||'继续练习';else{const label=link.querySelector('[data-session-label],span');if(label)label.textContent='继续';else link.textContent='继续';}})}catch(_){}};
+  const updateLinks=async()=>{let p;try{p=JSON.parse(pointer?.getItem(POINTER)||'null')}catch(_){}const url=p?.version===1&&practiceURL(p.url,location.origin);if(!url)return;try{const saved=await store.get(url);if(saved?.version!==1||saved.url!==url||completedSnapshot(saved))return;document.querySelectorAll('[data-session-start],[data-session-resume]').forEach(link=>{link.href=url;link.dataset.resume='true';link.classList.add('is-resume');link.hidden=false;link.setAttribute('aria-label','继续练习');const title=link.querySelector('[data-session-title]');if(title)title.textContent=saved.title||'继续练习';else{const label=link.querySelector('[data-session-label],span');if(label)label.textContent='继续';else link.textContent='继续';}})}catch(_){}};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',updateLinks);else updateLinks();
   const url=practiceURL(location.href,location.origin);if(!url)return;
   const api=createSession({url,origin:location.origin,store,pointer,onSaved:saved=>{updateLinks();document.dispatchEvent(new CustomEvent('shadow:session-saved',{detail:saved}));}});
