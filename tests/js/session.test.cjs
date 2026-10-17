@@ -30,3 +30,12 @@ test('same-day completed result and older pending recordings remain resumable',a
   const s=session.createSession({url:saved.url,origin:'https://shadow.test',now:()=>now,store:{get:async()=>saved},pointer:{getItem:()=>null}});assert.equal(await s.ready,saved);
  }
 });
+test('explicit start ignores even recently autosaved completed result but preserves pending audio',async()=>{
+ const url='/practice/2/7?from=review';const saved={version:1,url,storageRevision:'revision',updatedAt:Date.now(),startedAt:Date.now()-90000000,activeStep:'record',analysis:{run_id:7,count:3,accuracy:90,speech:1,pause:null,rejected:[],skipped:[],issues:[],good:[],view:{takes:[{}],chosen:0}}};
+ for(const pending of [null,[new Blob(['unsent'])]]){
+  let value={...saved,pending};const store={get:async()=>value,put:async item=>{value=item}};const s=session.createSession({url,origin:'https://shadow.test',fresh:true,store,pointer:{getItem:()=>null}});
+  assert.equal(await s.ready,pending?value:null);if(!pending){const again=session.createSession({url,origin:'https://shadow.test',store,pointer:{getItem:()=>null}});assert.equal((await again.ready).activeStep,'listen');assert.equal(again.snapshot().analysis,undefined);}
+ }
+ assert.equal(session.practiceURL(url+'&start=1','https://shadow.test'),url);
+ assert.equal(session.practiceURL(url+'&start=invalid','https://shadow.test'),null);
+});

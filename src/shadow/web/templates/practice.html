@@ -117,7 +117,7 @@
     <a href="/practice/{{ prev_unit.segment }}/{{ prev_unit.unit }}{{ queue.query if queue else '' }}"><kbd class="key-inline" aria-hidden="true">←</kbd> 上一句</a>
     {% else %}<span></span>{% endif %}
     {% if next_unit and queue %}
-    <a class="next" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}{{ queue.query }}"
+    <a class="next" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}{{ queue.query }}{{ '&start=1' if queue.name == 'review' else '' }}"
        >{{ queue.label }}（第 {{ next_unit.number }} 句 · 还剩 {{ queue.remaining }} 句）<kbd class="key-inline" aria-hidden="true">→</kbd></a>
     {% elif next_unit %}
     <a class="next" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}"

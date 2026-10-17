@@ -5,7 +5,7 @@
 <a class="resume-card" data-session-resume hidden><span class="eyebrow">进行中的练习</span><b data-session-title>继续练习</b><span>回到上次的步骤 ›</span></a>
 <div class="start-layout"><section><p class="section-label">跟读练习</p><div class="grouped-list">
 {% if source %}<a class="grouped-row" href="/sources/{{ source.id }}"><div><b>{{ source.title }}</b><small>当前素材 · 选择句子</small></div><span>›</span></a>
-{% if plan.review_count %}<a class="grouped-row" href="/practice/{{ plan.review_start.segment }}/{{ plan.review_start.unit }}?from=review"><div><b>复习</b><small>{{ plan.review_count }} 句待复习</small></div><span>›</span></a>{% endif %}
+{% if plan.review_count %}<a class="grouped-row" href="/practice/{{ plan.review_start.segment }}/{{ plan.review_start.unit }}?from=review&amp;start=1"><div><b>复习</b><small>{{ plan.review_count }} 句待复习</small></div><span>›</span></a>{% endif %}
 {% if next_unit %}<a class="grouped-row" href="/practice/{{ next_unit.segment }}/{{ next_unit.unit }}"><div><b>练习新句子</b><small>从下一句开始</small></div><span>›</span></a>{% endif %}
 {% else %}<a class="grouped-row" href="/sources"><div><b>导入一份素材</b><small>选一段你想模仿的声音</small></div><span>＋</span></a>{% endif %}</div>
 </section><section><p class="section-label">口语练习</p><div class="grouped-list"><a class="grouped-row" href="/chain"><div><b>整段跟读</b><small>把练过的句子连起来</small></div><span>›</span></a><a class="grouped-row" href="/talk?kind=retell"><div><b>复述</b><small>用自己的话说一遍</small></div><span>›</span></a><a class="grouped-row" href="/talk?kind=free_talk"><div><b>自由说</b><small>试着用上学过的表达</small></div><span>›</span></a></div>

@@ -5,8 +5,10 @@
     try {
       const url = new URL(value, origin);
       if (url.origin !== origin || !/^\/practice\/[1-9]\d*\/[1-9]\d*$/.test(url.pathname) || url.hash) return null;
-      if ([...url.searchParams.keys()].some(key => key !== 'from') || url.searchParams.getAll('from').length > 1) return null;
+      if ([...url.searchParams.keys()].some(key => !['from','start'].includes(key)) || url.searchParams.getAll('from').length > 1) return null;
       if(url.searchParams.has('from')&&!['review','fresh','issues','unheard'].includes(url.searchParams.get('from')))return null;
+      if(url.searchParams.has('start')&&(url.searchParams.getAll('start').length!==1||url.searchParams.get('start')!=='1'))return null;
+      url.searchParams.delete('start');
       return url.pathname + url.search;
     } catch (_) { return null; }
   }
@@ -54,7 +56,7 @@
     });};
     return {get:url=>transact('readonly',s=>s.get(url)),put:(value,revision)=>change(value.url,revision,s=>s.put(value)),delete:(url,revision)=>change(url,revision,s=>s.delete(url))};
   }
-  function createSession({url,origin,store,pointer,onSaved=()=>{},now=()=>Date.now()}) {
+  function createSession({url,origin,store,pointer,onSaved=()=>{},now=()=>Date.now(),fresh=false}) {
     url = practiceURL(url,origin); let chain=Promise.resolve(), value=null, revision=0, replacementAllowed=false, storageRevision=0, startedAt=now();
     const api={durable:false,error:null,ready:null,conflict:null,ending:false,ended:false,allowReplacement(){replacementAllowed=true;},
       save(snapshot){
@@ -78,7 +80,7 @@
         }).catch(error=>{api.ending=false;api.ended=false;api.error=error;throw error;});chain=operation;return operation;
       }
     };
-    api.ready=Promise.resolve().then(async()=>{let previous;try{previous=JSON.parse(pointer?.getItem?.(POINTER)||'null')}catch(_){}const priorURL=previous?.version===1&&practiceURL(previous.url,origin);if(priorURL&&priorURL!==url){const retained=await store.get(priorURL);if(retained?.version===1&&retained.url===priorURL&&!completedSnapshot(retained))api.conflict=retained;}return store.get(url);}).then(saved=>{if(saved?.version===1&&saved.url===url){if(Number.isInteger(saved.storageRevision)||typeof saved.storageRevision==='string')storageRevision=saved.storageRevision;if(expiredCompletedSnapshot(saved,now()))return null;if(Number.isFinite(saved.startedAt))startedAt=saved.startedAt;if(revision===0){value=saved;api.durable=true;}return saved}return null}).catch(error=>{api.error=error;return null});
+    api.ready=Promise.resolve().then(async()=>{let previous;try{previous=JSON.parse(pointer?.getItem?.(POINTER)||'null')}catch(_){}const priorURL=previous?.version===1&&practiceURL(previous.url,origin);if(priorURL&&priorURL!==url){const retained=await store.get(priorURL);if(retained?.version===1&&retained.url===priorURL&&!completedSnapshot(retained))api.conflict=retained;}return store.get(url);}).then(saved=>{if(saved?.version===1&&saved.url===url){if(Number.isInteger(saved.storageRevision)||typeof saved.storageRevision==='string')storageRevision=saved.storageRevision;if(fresh&&completedSnapshot(saved)){if(revision===0)return api.save({activeStep:'listen'}).then(()=>null);return null;}if(expiredCompletedSnapshot(saved,now()))return null;if(Number.isFinite(saved.startedAt))startedAt=saved.startedAt;if(revision===0){value=saved;api.durable=true;}return saved}return null}).catch(error=>{api.error=error;return null});
     return api;
   }
   if(typeof module!=='undefined')module.exports={practiceURL,createSession,indexedStore,validGrading};
@@ -89,7 +91,9 @@
   const updateLinks=async()=>{let p;try{p=JSON.parse(pointer?.getItem(POINTER)||'null')}catch(_){}const url=p?.version===1&&practiceURL(p.url,location.origin);if(!url)return;try{const saved=await store.get(url);if(saved?.version!==1||saved.url!==url||completedSnapshot(saved))return;document.querySelectorAll('[data-session-start],[data-session-resume]').forEach(link=>{link.href=url;link.dataset.resume='true';link.classList.add('is-resume');link.hidden=false;link.setAttribute('aria-label','继续练习');const title=link.querySelector('[data-session-title]');if(title)title.textContent=saved.title||'继续练习';else{const label=link.querySelector('[data-session-label],span');if(label)label.textContent='继续';else link.textContent='继续';}})}catch(_){}};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',updateLinks);else updateLinks();
   const url=practiceURL(location.href,location.origin);if(!url)return;
-  const api=createSession({url,origin:location.origin,store,pointer,onSaved:saved=>{updateLinks();document.dispatchEvent(new CustomEvent('shadow:session-saved',{detail:saved}));}});
+  const fresh=new URL(location.href).searchParams.get('start')==='1';
+  if(fresh)history.replaceState(history.state,'',url);
+  const api=createSession({url,fresh,origin:location.origin,store,pointer,onSaved:saved=>{updateLinks();document.dispatchEvent(new CustomEvent('shadow:session-saved',{detail:saved}));}});
   api.validGrading=validGrading;
   const adapters=[];api.register=adapter=>adapters.push(adapter);
   api.capture=()=>Object.assign({startedAt:api.snapshot()?.startedAt||Date.now(),title:document.querySelector('#practice .session-header b')?.textContent||'继续练习'},...adapters.map(adapter=>adapter.capture()));

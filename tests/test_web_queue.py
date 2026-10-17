@@ -83,7 +83,7 @@ def test_review_goes_to_the_next_sentence_that_is_due(client, seg):
 
     body = _page(client, seg, 1, "?from=review")
 
-    assert f'href="/practice/{seg}/4?from=review"' in body
+    assert f'href="/practice/{seg}/4?from=review&amp;start=1"' in body
     assert "复习下一句（第 4 句 · 还剩 1 句）" in body
     assert f'href="/practice/{seg}/2' not in body
     assert f'href="/practice/{seg}/3' not in body
@@ -96,7 +96,7 @@ def test_review_comes_back_round_to_the_ones_before(client, seg):
 
     body = _page(client, seg, 4, "?from=review")
 
-    assert f'class="next" href="/practice/{seg}/1?from=review"' in body
+    assert f'class="next" href="/practice/{seg}/1?from=review&amp;start=1"' in body
 
 
 def test_the_last_one_due_leads_back_to_the_list(client, seg):

@@ -151,9 +151,9 @@ def test_the_most_urgent_sentence_is_first_in_the_queue(client, tmp_path):
     assert _rows(body) == {1: (True, 2), 2: (True, 1)}
     # 日课卡片直接进最急的那句：原来只能筛出列表，列表上练过的句子带着原文，
     # 点进去之前就看到了，盲听白做
-    assert f'class="plan-link" href="/practice/{segment_id}/2?from=review"' in body
+    assert f'class="plan-link" href="/practice/{segment_id}/2?from=review&amp;start=1"' in body
     onwards = client.get(f"/practice/{segment_id}/2?from=review").text
-    assert f'href="/practice/{segment_id}/1?from=review"' in onwards
+    assert f'href="/practice/{segment_id}/1?from=review&amp;start=1"' in onwards
 
 
 def test_a_sentence_practised_today_is_not_due_yet(client, tmp_path):
