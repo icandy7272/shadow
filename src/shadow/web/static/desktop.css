@@ -49,7 +49,8 @@
   .today-hero .cta { margin-top:12px; }
   .today-plan .plan { margin:0; }
   .today-plan .plan > summary { flex-direction:column; align-items:flex-start; }
-  .streak-card { margin-bottom:0; }
+  .today-main { gap:24px; }
+  .streak { padding:20px; }
   .records-overview { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:28px; align-items:start; }
   .records-overview .record-summary { margin-top:0; }
   .records-overview .streak { margin:0; }

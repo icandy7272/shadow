@@ -63,6 +63,8 @@ input[type="checkbox"] { accent-color:var(--accent); width:20px; height:20px; }
 .records-card,.streak,.plan,.card,.vocab-item,.talk-record,.talk-take,.detail-card { background:var(--card); border-radius:var(--radius-card); border:0; }
 .records-card { padding:20px; margin-bottom:16px; }
 .streak { padding:16px; overflow-x:auto; margin-bottom:20px; }
+.streak > h2 { margin:0 0 12px; }
+.streak > .hint { margin:12px 0 0; }
 .grid { max-width:100%; grid-auto-columns:minmax(0,11px); }
 .plan { overflow:hidden; margin-bottom:20px; }
 .plan > summary { min-height:62px; padding:17px; }
@@ -315,6 +317,8 @@ input[role="switch"]:disabled { opacity:.45; }
 .week-navigation > a,.week-navigation > span { width:44px; height:44px; display:grid; place-items:center; text-decoration:none; font-size:1.625rem; }
 .week-navigation > div { text-align:center; display:flex; align-items:center; gap:10px; font-size:0.8125rem; }
 .week-navigation > div a { font-size:0.75rem; min-height:44px; display:grid; place-items:center; }
+.today-main { display:grid; gap:20px; min-width:0; }
+.today-main > :is(.today-hero,.streak-card,.streak) { margin:0; }
 .streak-card { display:flex; gap:10px; justify-content:space-between; align-items:center; background:var(--card); border-radius:14px; margin:0 0 20px; padding:18px 16px; color:var(--fg); text-decoration:none; }
 .streak-card > div { flex:1; }
 .streak-card b { display:block; font-size:1.562rem; font-variant-numeric:tabular-nums; }
