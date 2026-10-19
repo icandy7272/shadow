@@ -12,7 +12,7 @@ for (const extra of [true, false]) {
     const speaker = {ready: async () => {}, context: {}, close() {}, play: async () => {heard++;}, beep: async () => {}};
     const classes = {add() {}, remove() {}};
     await vm.runInNewContext(`${source.slice(begin, end)}\nrecordRound(extra)`, {
-      extra, takeCount: 3, startButton: {}, setRecording() {}, createSpeaker: () => speaker,
+      extra, takeCount: 3, startButton: {}, setRecording() {}, captureAudioSession:()=>()=>{},createSpeaker: () => speaker,
       document: {getElementById: id => settings[id] || {classList: classes}},
       navigator: {mediaDevices: {getUserMedia: async () => ({getTracks: () => [{stop() {}}]})}},
       micWanted: () => ({}), status: {classList: classes}, fillMics() {},

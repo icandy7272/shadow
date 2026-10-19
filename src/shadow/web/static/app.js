@@ -843,30 +843,34 @@ if (root) {
   const PEAK_DECAY = 0.995;    // 峰值慢慢往下掉：一声咳嗽不该把门限顶住整遍
   const QUIET = 0.005;         // 再低就是数字静音了
 
-  // 上下文在 getUserMedia 之后单独开一个：iPhone 上先开上下文、后拿麦克风，
-  // 分析器常年读到 0。开不起来（点击的额度已经用掉了）就借放音那个。
+  // iOS needs the capture analyser initialized after microphone access.
+  // Keep that workaround; stabilize the shared system audio session instead.
+  // This analyser never routes microphone samples to the speaker.
   async function listenTo(stream, spare) {
     const Context = window.AudioContext || window.webkitAudioContext;
     let own = new Context();
+    let input = null, analyser = null;
     const closeOwn = () => {
+      try { input?.disconnect(); analyser?.disconnect(); } catch (_) {}
       const context = own;
       own = null;
       if (context) context.close().catch(() => {});
     };
     try {
-      await own.resume().catch(() => {});
-      if (own.state !== "running") {
+      if (own) await own.resume().catch(() => {});
+      if (own && own.state !== "running") {
         closeOwn();
       }
       const ctx = own || spare;
       if (!ctx) throw new Error("开不起音频上下文");
-      const analyser = ctx.createAnalyser();
+      analyser = ctx.createAnalyser();
       if (typeof analyser.getFloatTimeDomainData !== "function") {
         closeOwn();
         throw new Error("这个浏览器读不到实时响度");   // 老 Safari：退回手动
       }
       analyser.fftSize = 1024;
-      ctx.createMediaStreamSource(stream).connect(analyser);   // 不接 destination：接了会啸叫
+      input = ctx.createMediaStreamSource(stream);
+      input.connect(analyser);   // 不接 destination：接了会啸叫
       const frame = new Float32Array(analyser.fftSize);
       return {
         level() {
@@ -1103,9 +1107,9 @@ if (root) {
     const id = micSelect?.value || readMic();
     return {
       ...(id ? { deviceId: { exact: id } } : {}),
-      // 开降噪：生活噪音一旦超过门限就会被当成发声起点，整段测量跟着前移。
-      // 但不开自动增益——它会在静音处把底噪顶上来，正好帮倒忙。
-      noiseSuppression: true, echoCancellation: true, autoGainControl: false,
+      // Reference playback finishes before recording: no simultaneous call audio.
+      // Avoid voice-call processing that can change routing and color pronunciation.
+      noiseSuppression: false, echoCancellation: false, autoGainControl: false,
     };
   };
 
@@ -1121,9 +1125,11 @@ if (root) {
     markTesting(true);
     say("说句话看看 …");
     let stream;
+    const restoreAudioSession = captureAudioSession(navigator);
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: micWanted() });
     } catch (err) {
+      restoreAudioSession();
       markTesting(false);
       say("拿不到麦克风权限。浏览器地址栏左侧可以重新允许。", true);
       return;
@@ -1133,6 +1139,7 @@ if (root) {
     try { ear = await listenTo(stream, null); } catch (err) { ear = null; }
     if (!ear) {
       stream.getTracks().forEach((track) => track.stop());
+      restoreAudioSession();
       markTesting(false);
       say("这个浏览器读不到实时音量，直接录一遍看看吧。", true);
       return;
@@ -1149,6 +1156,7 @@ if (root) {
       clearTimeout(stopAt);
       ear.close();
       stream.getTracks().forEach((track) => track.stop());
+      restoreAudioSession();
       if (micMeter) micMeter.hidden = true;
       markTesting(false);
       testing = null;
@@ -1187,6 +1195,7 @@ if (root) {
     startButton.disabled = true;
     let speaker = null, stream = null, ear = null, meterOff = null;
     let preparingEar = null, released = false;
+    let restoreAudioSession = () => {};
     status.textContent = "正在启动麦克风 …";
     const blobs = [];
     let interrupted = false;
@@ -1194,7 +1203,8 @@ if (root) {
     const pre = Math.max(0, Number(document.getElementById("prelisten").value) || 0);
     const offset = extra ? takeCount : 0;
     try {
-      // Construct synchronously inside the click, but still guarantee cleanup on failure.
+      // Stabilize the route before constructing playback in this user gesture.
+      restoreAudioSession = captureAudioSession(navigator);
       speaker = createSpeaker();
       document.getElementById("step-drill").classList.add("done");
       try {
@@ -1286,6 +1296,7 @@ if (root) {
       release(() => stream?.getTracks().forEach(track => release(() => track.stop())));
       release(() => ear?.close());
       release(() => speaker?.close());
+      release(restoreAudioSession);
       if (micMeter) micMeter.hidden = true;
       if (typeof stopButton !== "undefined" && stopButton) stopButton.hidden = true;
       if (typeof redoButton !== "undefined" && redoButton) redoButton.hidden = true;

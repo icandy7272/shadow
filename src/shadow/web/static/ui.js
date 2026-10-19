@@ -133,3 +133,17 @@ function speedControl(store = speed) {  // eslint-disable-line no-unused-vars
   refresh(store.rate);
   return box;
 }
+
+// Select the recording route before opening the mic/context; restore only our own change.
+function captureAudioSession(nav) {
+  let session, previous;
+  try {
+    session = nav.audioSession;
+    if (!session) return () => {};
+    previous = session.type;
+    session.type = 'play-and-record';
+  } catch (_) { return () => {}; }
+  return () => {
+    try { if (session.type === 'play-and-record') session.type = previous; } catch (_) {}
+  };
+}
