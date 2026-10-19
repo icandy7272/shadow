@@ -82,7 +82,7 @@ def _span(group: Sequence[Word]) -> float:
     return group[-1].end - group[0].start
 
 
-def _split_overlong(group: list[Word], max_sec: float) -> list[list[Word]]:
+def _split_overlong(group: list[Word], max_sec: float, *, avoid_temporal: bool = True) -> list[list[Word]]:
     """单句超过上限时在内部断开，递归到不超限为止。"""
     if _span(group) <= max_sec or len(group) < 2 * config.UNIT_MIN_WORDS:
         return [group]
@@ -103,7 +103,7 @@ def _split_overlong(group: list[Word], max_sec: float) -> list[list[Word]]:
         after = group[i - 1].text
         before = group[i].text.strip("\"'").lower()
         return (
-            1 if _CLAUSE_END.search(after) else 0,
+            1 if _CLAUSE_END.search(after) and not (avoid_temporal and after.rstrip(",;:").lower() in {"years", "months", "weeks", "days", "hours", "minutes"}) else 0,
             1 if before in _SEAM_WORDS else 0,
             group[i].start - group[i - 1].end,
             -abs(i - middle),
@@ -111,7 +111,8 @@ def _split_overlong(group: list[Word], max_sec: float) -> list[list[Word]]:
 
     best_index = max(candidates, key=score)
     head, tail = group[:best_index], group[best_index:]
-    return _split_overlong(head, max_sec) + _split_overlong(tail, max_sec)
+    return (_split_overlong(head, max_sec, avoid_temporal=avoid_temporal)
+            + _split_overlong(tail, max_sec, avoid_temporal=avoid_temporal))
 
 
 def split_into_units(
@@ -142,5 +143,8 @@ def split_into_units(
 
     units: list[list[Word]] = []
     for group in merged:
-        units.extend(_split_overlong(group, max_sec))
+        revised = _split_overlong(group, max_sec)
+        legacy = _split_overlong(group, max_sec, avoid_temporal=False)
+        # Existing URLs and recordings use ordinal unit IDs. Never shift later IDs.
+        units.extend(revised if len(revised) == len(legacy) else legacy)
     return tuple(tuple(unit) for unit in units)

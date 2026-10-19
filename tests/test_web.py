@@ -905,3 +905,14 @@ def test_analysis_exception_is_retryable_without_discarding_recordings(monkeypat
     payload = json.loads(events[-1])
     assert payload['retryable'] is True
     assert 'temporary analysis failure' in payload['error']
+
+
+def test_append_rejects_old_recordings_when_sentence_boundary_changed(client, tmp_path):
+    segment = _seed(tmp_path)
+    connection = db.connect()
+    run = db.start_run(connection, segment_id=segment, unit_index=1, unit_text='Old sentence boundary')
+    connection.close()
+    response = client.post('/api/takes', data={'segment': segment, 'unit': 1, 'run_id': run, 'append': 1},
+                           files=[('files', ('take.wav', b'not used', 'audio/wav'))])
+    assert response.status_code == 400
+    assert '断句已修正' in response.json()['detail']

@@ -873,7 +873,8 @@ def _run_for(connection, segment: int, unit: int, run_id, words):
     都另开一行，免得写进别处的记录里。
     """
     if (isinstance(run_id, int) and not isinstance(run_id, bool)
-            and db.run_unit(connection, run_id) == (segment, unit)):
+            and db.run_unit(connection, run_id) == (segment, unit)
+            and connection.execute("SELECT unit_text FROM practice_runs WHERE id = ?", (run_id,)).fetchone()["unit_text"] == " ".join(w.text for w in words)):
         return run_id
     return db.start_run(connection, segment_id=segment, unit_index=unit,
                         unit_text=" ".join(w.text for w in words))
@@ -1051,6 +1052,9 @@ async def submit_takes(
         if append:
             if run_id is None or db.run_unit(connection, run_id) != (segment, unit):
                 raise HTTPException(400, "找不到要追加录音的这一轮。")
+            prior_text = connection.execute("SELECT unit_text FROM practice_runs WHERE id = ?", (run_id,)).fetchone()["unit_text"]
+            if prior_text != " ".join(word.text for word in ref_words):
+                raise HTTPException(400, "这句的断句已修正，请开始新一轮跟读；旧录音仍保留在记录中。")
             previous = [Path(row["audio_path"]) for row in db.run_attempts(connection, run_id)]
             if not previous:
                 raise HTTPException(400, "这一轮还没有录音，不能追加。")

@@ -202,3 +202,9 @@ def test_a_sentence_that_simply_ends_in_a_preposition_is_fine():
 
     assert not ends_mid_phrase(_sentence("for the deposits to buy food with."))
     assert not ends_mid_phrase(_sentence("as the years roll on."))
+
+
+def test_temporal_comma_does_not_leave_the_main_clause_for_the_next_unit():
+    words = _sentence('We worked hard and in ten years, Apple had grown from just the two of us in a garage into a two billion dollar company with over four thousand employees.')
+    units = split_into_units(words, max_sec=6.0)
+    assert not any(unit[-1].text == 'years,' for unit in units)
