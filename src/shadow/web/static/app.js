@@ -1194,32 +1194,27 @@ if (root) {
     setRecording(true);
     startButton.disabled = true;
     let speaker = null, stream = null, ear = null, meterOff = null;
-    let preparingEar = null, released = false;
+    let restoreCaptureSession = () => {};
+    const releaseCapture = () => {
+      try { meterOff?.(); } catch (_) {}
+      try { ear?.close(); } catch (_) {}
+      stream?.getTracks().forEach(track => { try { track.stop(); } catch (_) {} });
+      restoreCaptureSession();
+      stream = ear = meterOff = null;
+      restoreCaptureSession = () => {};
+    };
     let restoreAudioSession = () => {};
-    status.textContent = "正在启动麦克风 …";
+    status.textContent = "正在准备原声 …";
     const blobs = [];
     let interrupted = false;
     const takes = extra ? 1 : Math.max(1, Number(document.getElementById("takes").value) || 1);
     const pre = Math.max(0, Number(document.getElementById("prelisten").value) || 0);
     const offset = extra ? takeCount : 0;
     try {
-      // Stabilize the route before constructing playback in this user gesture.
-      restoreAudioSession = captureAudioSession(navigator);
+      // Reference audio must use the normal playback route, without an active mic.
+      restoreAudioSession = captureAudioSession(navigator, "playback");
       speaker = createSpeaker();
       document.getElementById("step-drill").classList.add("done");
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: micWanted() });
-      } catch (err) {
-        throw new Error("拿不到麦克风权限。浏览器地址栏左侧可以重新允许。");
-      }
-      fillMics();
-      // Level analysis can warm up during the early previews. The final preview
-      // still waits for it so nothing can delay the cue-to-record rhythm.
-      preparingEar = listenTo(stream, speaker.context).then(analyser => {
-        if (released) { analyser?.close(); return; }
-        ear = analyser;
-        meterOff = ear ? watchLevel(ear) : null;
-      }).catch(() => {});
       status.textContent = "正在准备原声 …";
       const outcome = await Promise.race([
         speaker.ready().then(() => "ok", err => err.message || "原声解不开"),
@@ -1229,22 +1224,32 @@ if (root) {
         status.textContent = `${outcome}。检查一下网络，再点「开始」。`;
         return;
       }
-      if (pre === 0) await preparingEar;
       let short = 0;
       for (let take = 1; take <= takes; ) {
         status.classList.remove("live");
         for (let i = 1; i <= pre; i += 1) {
-          if (i === pre) await preparingEar;
           await awake(speaker);
           status.textContent = `第 ${offset + take}/${offset + takes} 遍 —— 先听 ${i}/${pre}`;
           await speaker.play();
           if (i < pre) await sleep(GAP_MS);      // 最后一遍的空档留给提示音
         }
+        // Open capture only after the last reference ends. Device preparation
+        // happens before the cue, so it cannot eat the beginning of the take.
+        status.textContent = "正在准备录音，听到提示音后开口 …";
+        restoreCaptureSession = captureAudioSession(navigator);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: micWanted() });
+        } catch (_) {
+          throw new Error("拿不到麦克风权限。浏览器地址栏左侧可以重新允许。");
+        }
+        fillMics();
+        try { ear = await listenTo(stream, speaker.context); } catch (_) { ear = null; }
+        meterOff = ear ? watchLevel(ear) : null;
         await awake(speaker);
         status.textContent = pre
           ? `第 ${offset + take}/${offset + takes} 遍 —— 跟着这个节奏开口`
           : `第 ${offset + take}/${offset + takes} 遍 —— 嘀一声之后开始说`;
-        // 放完到开口，空得和前面每遍之间一样久，提示音卡在正中间
+        // 麦克风就绪后才发提示音；设备切换耗时不能占用提示音后的开口时间
         const half = pre ? Math.max(0, (GAP_MS - BEEP_MS) / 2) : 0;
         await sleep(half);
         await speaker.beep();
@@ -1254,7 +1259,12 @@ if (root) {
           ? `第 ${offset + take}/${offset + takes} 遍 —— 录音中，说完停一下就自动收`
           : `第 ${offset + take}/${offset + takes} 遍 —— 录音中，说完点「说完了」`;
         status.classList.add("live");
-        const clip = await recordOne(stream, ear, minSpoken, autoBox?.checked !== false);
+        let clip;
+        try {
+          clip = await recordOne(stream, ear, minSpoken, autoBox?.checked !== false);
+        } finally {
+          releaseCapture();
+        }
 
         if (clip.dropped) {
           status.classList.remove("live");
@@ -1290,11 +1300,8 @@ if (root) {
       status.textContent = `录音中断：${err.message || "音频设备不可用"}。可以再点「开始」重试。`;
     } finally {
       const release = action => { try { action(); } catch (_) {} };
-      released = true;
       setRecording(false);
-      release(() => meterOff?.());
-      release(() => stream?.getTracks().forEach(track => release(() => track.stop())));
-      release(() => ear?.close());
+      release(releaseCapture);
       release(() => speaker?.close());
       release(restoreAudioSession);
       if (micMeter) micMeter.hidden = true;
