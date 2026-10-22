@@ -9,3 +9,7 @@ test('visible transition while stale acquisition is releasing reacquires the loc
 test('failed acquisition does not loop retries automatically',async()=>{let requests=0;const controller=createAwakeController({request:async()=>{requests++;throw Error('denied')}});await controller.update(true);assert.equal(requests,1)});
 
 test('text scale accepts supported accessibility sizes and rejects arbitrary values',()=>{const {textScale}=require('../../src/shadow/web/static/mobile-controls.js');assert.equal(textScale('200'),2);assert.equal(textScale('125'),1.25);assert.equal(textScale('999'),1);assert.equal(textScale(null),1);assert.equal(textScale('__proto__'),1);assert.equal(textScale('toString'),1)});
+test('background analysis does not replace the dictation phase label',()=>{
+ const {practicePhase}=require('../../src/shadow/web/static/mobile-controls.js');
+ assert.equal(practicePhase({step:'drill',submitting:true,pending:true}),'默写');
+});

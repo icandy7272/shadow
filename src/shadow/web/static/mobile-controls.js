@@ -11,6 +11,7 @@ function selectOption(select, value) {
 }
 function practicePhase({recording=false, submitting=false, pending=false, saved=false, step='listen'}={}) {
   if (recording) return '正在练习';
+  if (step === 'drill') return '默写';
   if (submitting) return '分析中';
   if (pending) return '等待提交';
   if (step === 'record' && saved) return '已保存';

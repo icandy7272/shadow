@@ -3,7 +3,7 @@ function result(){return {run_id:4,count:3,accuracy:90,speech:1,pause:null,rejec
 function setup(fetch){
  const source=fs.readFileSync('src/shadow/web/static/app.js','utf8'),a=source.indexOf('  function lost(count)'),b=source.indexOf('  function showResult(',a);
  const classes={add(){},remove(){},contains(){return false}};
- const context={root:{dataset:{}},pending:null,resubmitButton:{hidden:true},startButton:{},status:{},bar:{classList:classes},fill:{style:{}},FormData:class{append(){}},segment:1,unit:1,sawText:false,extraMode:false,latestRun:null,runId:null,submissionId:null,fetch,service:{check(){}},readEvents:async()=>({result:result()}),micNote:null,markComplete(){},stopLoops(){},resultFigures:[],extraButton:{},setLabel(){},showResult(){},window:{matchMedia:()=>({matches:true})},CustomEvent:class{},document:{getElementById:()=>({scrollIntoView(){}}),dispatchEvent(){}}};
+ const context={root:{dataset:{}},pending:null,resubmitButton:{hidden:true},startButton:{},status:{},bar:{classList:classes},fill:{style:{}},FormData:class{append(){}},segment:1,unit:1,sawText:false,extraMode:false,latestRun:null,runId:4,submissionId:null,fetch,service:{check(){}},readEvents:async()=>({result:result()}),micNote:null,markComplete(){},stopLoops(){},resultFigures:[],extraButton:{},setLabel(){},showResult(){},window:{matchMedia:()=>({matches:true})},CustomEvent:class{},document:{getElementById:()=>({scrollIntoView(){}}),dispatchEvent(){}}};
  vm.runInNewContext(source.slice(a,b),context);return context;
 }
 test('waiting upload and failed connection keep pending audio available for retry',async()=>{let reject;const c=setup(()=>new Promise((_,r)=>reject=r)),audio=[{}];const submitted=c.submit(audio);assert.equal(c.root.dataset.pending,'true');reject(new Error('offline'));await submitted;assert.equal(c.pending,audio);assert.equal(c.root.dataset.pending,'true');assert.equal(c.resubmitButton.hidden,false)});
@@ -23,11 +23,34 @@ test('saved blind shadowing retains its round for the following dictation',async
  const c=setup(async()=>({ok:true}));let completed=0,advanced=0;
  c.markComplete=()=>completed++;c.document.dispatchEvent=()=>advanced++;
  await c.submit([{}]);
- assert.equal(c.runId,4);assert.equal(completed,1);assert.equal(advanced,1);
+ assert.equal(c.runId,4);assert.equal(completed,1);assert.equal(advanced,2);
  assert.notEqual(c.root.dataset.answersRevealed,'true');
 });
 test('failed shadowing never completes or advances to dictation',async()=>{
  const c=setup(async()=>({ok:false,status:500}));let completed=0,advanced=0;
- c.markComplete=()=>completed++;c.document.dispatchEvent=()=>advanced++;
+ c.markComplete=()=>completed++;c.document.dispatchEvent=e=>{if(e.type==='shadow:analysed')advanced++};
  await c.submit([{}]);assert.equal(completed,0);assert.equal(advanced,0);
+});
+
+test('durably saved recording unlocks dictation while analysis is still pending',async()=>{
+ let finish;const c=setup(()=>new Promise(resolve=>finish=resolve));c.runId=4;const events=[];
+ c.document.dispatchEvent=e=>events.push(e.type);
+ c.CustomEvent=class{constructor(type){this.type=type}};
+ const task=c.submit([{}]);
+ assert.ok(events.includes('shadow:recorded'));assert.equal(c.root.dataset.submitting,'true');
+ assert.equal(c.root.dataset.analysisReady,undefined);
+ finish({ok:true});await task;
+});
+test('analysis completion does not stop dictation playback or scroll the page',async()=>{
+ const c=setup(async()=>({ok:true}));let stopped=0,scrolled=0;
+ c.stopLoops=()=>stopped++;c.document.getElementById=()=>({scrollIntoView(){scrolled++}});
+ await c.submit([{}]);assert.equal(stopped,0);assert.equal(scrolled,0);
+});
+test('failed local audio save waits for server success before opening dictation',async()=>{
+ let finish;const c=setup(()=>new Promise(resolve=>finish=resolve)),events=[];
+ c.window.ShadowSession={saveCurrent:async()=>{throw Error('storage full')}};
+ c.CustomEvent=class{constructor(type){this.type=type}};c.document.dispatchEvent=e=>events.push(e.type);
+ const task=c.submit([{}]);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(events.includes('shadow:recorded'),false);
+ finish({ok:true});await task;assert.equal(events.includes('shadow:recorded'),true);
 });

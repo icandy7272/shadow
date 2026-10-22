@@ -3,8 +3,8 @@ const {nextPracticeStep,answersRevealed}=require('../../src/shadow/web/static/mo
 test('rating advances to blind shadowing before dictation',()=>{
  assert.equal(nextPracticeStep('listen',{listen:true,record:false,drill:false}),'record');
 });
-test('saved shadowing advances to dictation until answers are revealed',()=>{
- assert.equal(nextPracticeStep('record',{listen:true,record:true,drill:false}),'drill');
+test('analysis completion preserves the current tab; recorded event owns the initial transition',()=>{
+ assert.equal(nextPracticeStep('record',{listen:true,record:true,drill:false}),'record');
  assert.equal(nextPracticeStep('record',{listen:true,record:true,drill:true}),'record');
 });
 test('revisiting completed listening does not jump',()=>{

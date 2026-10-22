@@ -880,6 +880,17 @@ def _run_for(connection, segment: int, unit: int, run_id, words):
                         unit_text=" ".join(w.text for w in words))
 
 
+@app.post("/api/practice-run")
+def reserve_practice_run(payload: dict = Body(...)):
+    try:
+        segment, unit = int(payload["segment"]), int(payload["unit"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(400, "练习编号的格式不对。")
+    connection = _db()
+    _, words = _unit_words(connection, segment, unit)
+    return {"run_id": _run_for(connection, segment, unit, payload.get("run_id"), words)}
+
+
 @app.post("/api/rating")
 def save_rating(segment: int = Form(...), unit: int = Form(...),
                 rating: int = Form(...), run_id: int | None = Form(None)):

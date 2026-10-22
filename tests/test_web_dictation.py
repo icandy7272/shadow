@@ -190,3 +190,12 @@ def test_extra_words_and_resubmitting_same_run_do_not_count_twice(client, tmp_pa
     _post(client, segment_id, "It was a start.", run_id=first["run_id"])
     _post(client, segment_id, "It was a start extra.")
     assert 'data-auto-skip="false"' in client.get(f"/practice/{segment_id}/2").text
+
+
+def test_reserve_round_before_parallel_recording_and_dictation(client, tmp_path):
+    segment_id = _seed(tmp_path)
+    response = client.post('/api/practice-run', json={'segment': segment_id, 'unit': 2})
+    assert response.status_code == 200
+    run_id = response.json()['run_id']
+    assert _post(client, segment_id, 'It was a start.', run_id=run_id).json()['run_id'] == run_id
+    assert client.post('/api/practice-run', json={'segment': segment_id, 'unit': 2, 'run_id': run_id}).json()['run_id'] == run_id

@@ -89,7 +89,7 @@ if(typeof document!=='undefined')(()=>{
     if(window.matchMedia('(hover: hover)').matches)proxy.focus({preventScroll:true});else document.activeElement.blur();
    }
   }
-  const mode=dockMode({recording:root.dataset.recording==='true',stopVisible:!document.getElementById('stop-take')?.hidden,submitting:root.dataset.submitting==='true',pending:root.dataset.pending==='true',saved:!document.getElementById('extra-record')?.hidden});
+  const mode=dockMode({recording:root.dataset.recording==='true',stopVisible:!document.getElementById('stop-take')?.hidden,submitting:root.dataset.activeStep==='record'&&root.dataset.submitting==='true',pending:root.dataset.activeStep==='record'&&root.dataset.pending==='true',saved:!document.getElementById('extra-record')?.hidden});
   if(root.dataset.dockMode!==mode)root.dataset.dockMode=mode;
   const controls=[...dock.querySelectorAll(':scope > button,.dock-pager')];
   for(const control of controls){

@@ -17,10 +17,10 @@ for (const extra of [true, false]) {
       document: {getElementById: id => settings[id] || {classList: classes}},
       navigator: {mediaDevices: {getUserMedia: async () => ({getTracks: () => [{stop() {}}]})}},
       micWanted: () => ({}), status: {classList: classes}, fillMics() {},
-      listenTo: async () => null, watchLevel() {}, micMeter: null, autoBox: {checked: true},
+      listenTo: async () => ({level:()=>.001,close(){}}), watchLevel() {}, micMeter: null, autoBox: {checked: true},
       sleep: async () => {}, awake: async () => {}, GAP_MS: 100, BEEP_MS: 20,
       minTake: .1, minSpoken: .1,
-      recordOne: async () => {recorded++; return {blob: {}, seconds: 1, loudest: null};},
+      recordOne: async (_stream,ear) => {assert.equal(ear.noiseFloor,.001,'room noise is calibrated before recording starts');recorded++; return {blob: {}, seconds: 1, loudest: null};},
       submit: async blobs => {submitted = blobs.length;},
     });
     assert.equal(folded,false,'recording must not fold an unattempted dictation');

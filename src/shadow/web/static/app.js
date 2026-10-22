@@ -157,6 +157,18 @@ const root = document.getElementById("practice");
 let runId = null;
 let sessionGrading = null;
 const keepRun = (data) => { if (data && data.run_id != null) runId = data.run_id; };
+let reservingRun = null;
+async function ensurePracticeRun() {
+  if (runId !== null) return runId;
+  if (!reservingRun) reservingRun = (async () => {
+    const response = await fetch('/api/practice-run', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({segment:Number(root.dataset.segment),unit:Number(root.dataset.unit)})});
+    if(!response.ok)throw new Error('练习轮次暂时无法保存，请重试。');
+    const data=await response.json();
+    if(!Number.isInteger(data.run_id)||data.run_id<=0)throw new Error('练习轮次保存失败。');
+    keepRun(data);return runId;
+  })().finally(()=>{reservingRun=null});
+  return reservingRun;
+}
 if (root) {
   const segment = root.dataset.segment;
   const unit = root.dataset.unit;
@@ -294,8 +306,7 @@ if (root) {
       const stop = document.getElementById("stop-take");
       return stop && !stop.hidden ? stop : null;
     }
-    if (root.dataset.submitting === 'true' || root.dataset.pending === 'true'
-        || root.dataset.mutating === 'true') return null;
+    if (root.dataset.mutating === 'true' || (root.dataset.activeStep !== 'drill' && (root.dataset.submitting === 'true' || root.dataset.pending === 'true'))) return null;
     const record = document.getElementById("step-record");
     if (!record.hidden && !record.classList.contains("locked")) {
       if (root.dataset.answersRevealed !== "true" && record.classList.contains("complete"))
@@ -492,6 +503,7 @@ if (root) {
     submitDrill.disabled = true;
     let response;
     try {
+      if(runId === null)await ensurePracticeRun();
       response = await fetch("/api/dictation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -860,7 +872,7 @@ if (root) {
   const FLOOR_CAP = 0.01;      // 本底最高按这个算
   const OF_PEAK = 0.07;        // 门限也不低于自己嗓门峰值的这一截
   const PEAK_DECAY = 0.995;    // 峰值慢慢往下掉：一声咳嗽不该把门限顶住整遍
-  const QUIET = 0.005;         // 再低就是数字静音了
+  const QUIET = 0.0025;         // 再低就是数字静音了
 
   // iOS needs the capture analyser initialized after microphone access.
   // Keep that workaround; stabilize the shared system audio session instead.
@@ -967,7 +979,8 @@ if (root) {
     try { recorder.start(); } catch (err) { cleanup(); reject(err); return; }
     began = performance.now();
     if (!ear) return;
-    let floor = FLOOR_CAP;
+    const ambientFloor = Number.isFinite(ear.noiseFloor) ? ear.noiseFloor : null;
+    let floor = ambientFloor ?? FLOOR_CAP;
     let peak = 0;
     let spoke = 0;
     let hushFrom = 0;
@@ -976,12 +989,14 @@ if (root) {
       const now = performance.now();
       heard.push(levelDb(level));     // 音量条由外面那个循环一直画，这里只记这一遍多响
       if (!autoStop) return;
-      if (now - began < CALIBRATE_MS) {
+      if (ambientFloor === null && now - began < CALIBRATE_MS) {
         floor = Math.min(floor, level);
         return;
       }
       peak = Math.max(level, peak * PEAK_DECAY);
-      if (level > Math.max(floor * 3, peak * OF_PEAK, QUIET)) {
+      // Use room noise measured before the cue, so immediate speech cannot
+      // contaminate calibration and quiet background is not counted as speech.
+      if (level > Math.max(floor * 1.5, peak * OF_PEAK, QUIET)) {
         spoke += WATCH_MS;
         hushFrom = 0;
         return;
@@ -992,7 +1007,10 @@ if (root) {
       if (now - hushFrom < HUSH_MS) return;
       // 卡在句子中间的停顿不该算说完，所以看的是「真出过声的时长」够不够，
       // 不是「开录到现在多久」——犹豫再久也攒不出说话时间来
-      if (spoke >= minSpoken && now - began >= Math.max(minTotal, minTake * 1000)) finish();
+      // A shorter blind attempt cannot accumulate more speech once silent.
+      // Give it a longer pause grace period, then stop instead of waiting forever.
+      const enoughSpeech = spoke >= minSpoken || now - hushFrom >= HUSH_MS * 2;
+      if (enoughSpeech && now - began >= Math.max(minTotal, minTake * 1000)) finish();
     }, WATCH_MS);
   });
 
@@ -1203,7 +1221,7 @@ if (root) {
   };
   extraButton.addEventListener("click", beginExtra);
   startButton?.addEventListener("click", () => {
-    if (pending || root.dataset.mutating==='true') return;
+    if (pending || root.dataset.submitting==='true' || root.dataset.mutating==='true') return;
     extraMode = false;
     if(root.dataset.answersRevealed === "true")runId = null;
     submissionId = crypto.randomUUID();
@@ -1264,6 +1282,11 @@ if (root) {
         }
         fillMics();
         try { ear = await listenTo(stream, speaker.context); } catch (_) { ear = null; }
+        if(ear && typeof ear.level === 'function' && autoBox?.checked !== false){
+          const ambient=[];
+          for(let sample=0;sample<5;sample++){await sleep(50);ambient.push(ear.level());}
+          ear.noiseFloor=Math.min(...ambient);
+        }
         meterOff = ear ? watchLevel(ear) : null;
         await awake(speaker);
         status.textContent = pre
@@ -1371,7 +1394,14 @@ if (root) {
     try {
     pending = blobs;
     root.dataset.pending = "true";
-    if(typeof window!=='undefined'&&window.ShadowSession){try{await window.ShadowSession.saveCurrent();}catch(_){}}
+    let recordingDurable = true;
+    if(typeof window!=='undefined'&&window.ShadowSession){try{await window.ShadowSession.saveCurrent();}catch(_){recordingDurable=false;}}
+    // Never move away from capture until audio is saved locally or on the server.
+    if(recordingDurable)document.dispatchEvent(new CustomEvent("shadow:recorded"));
+    if(runId === null){
+      try{await ensurePracticeRun();if(typeof window!=='undefined')await window.ShadowSession?.saveCurrent();}
+      catch(_){lost(blobs.length);return;}
+    }
     if (resubmitButton) resubmitButton.hidden = true;
     startButton.disabled = true;
     status.textContent = "正在转写和比对，大约十几秒 …";
@@ -1435,7 +1465,6 @@ if (root) {
       return;
     }
     try {
-      stopLoops();
       resultFigures.forEach(figures => figures.dispose());
       resultFigures = [];
       showResult(last.result, box);
@@ -1449,20 +1478,16 @@ if (root) {
     if (micNote && !micNote.classList.contains("low")) say("");
     runId = last.result.run_id;
     markComplete(document.getElementById("step-record"));
+    if(!recordingDurable)document.dispatchEvent(new CustomEvent("shadow:recorded"));
     document.dispatchEvent(new CustomEvent("shadow:analysed"));
     sessionAnalysis = last.result;
+    root.dataset.analysisReady = "true";
     latestRun = last.result.run_id;
     takeCount = last.result.count;
     if(typeof window!=='undefined')window.ShadowSession?.saveCurrent().catch(()=>{});
     extraButton.hidden = false;
     setLabel(extraButton, `再录第 ${takeCount + 1} 遍`);
-    // 分析完滚到跟读这一步的开头：每一遍的结果和图都在它下面，不用再自己往下找。
-    // 等分析的十几秒里人常切去别的标签页，页面在后台时平滑滚动不会动——那就直接跳过去
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      || document.visibilityState === "hidden";
-    document.getElementById(root.dataset.answersRevealed === "true" ? "step-record" : "step-drill").scrollIntoView(
-      { behavior: still ? "auto" : "smooth", block: "start" });
-    } finally { root.dataset.submitting = "false"; }
+    } finally { root.dataset.submitting = "false";startButton.disabled=false; }
   }
 
   function showResult(data, box) {
@@ -1498,7 +1523,7 @@ if (root) {
       sawText=Boolean(saved.sawText);latestRun=Number.isInteger(saved.latestRun)?saved.latestRun:null;takeCount=Number.isInteger(saved.takeCount)?saved.takeCount:0;extraMode=Boolean(saved.extraMode);submissionId=typeof saved.submissionId==='string'?saved.submissionId:null;
       pending=Array.isArray(saved.pending)&&saved.pending.length&&saved.pending.every(blob=>blob instanceof Blob)&&submissionId?saved.pending:null;root.dataset.pending=String(Boolean(pending));
       for(const [id,value] of Object.entries(saved.settings||{})){const c=document.getElementById(id);if(c&&value!==undefined){if(c.type==='checkbox')c.checked=Boolean(value);else c.value=value;}}
-      if(saved.analysis&&validReviewResult(saved.analysis)){sessionAnalysis=saved.analysis;const box=document.getElementById('rec-result');box.hidden=false;showResult(sessionAnalysis,box);if(Number.isInteger(saved.selectedTake)&&saved.selectedTake>=0)box.querySelectorAll('.take-row')[saved.selectedTake]?.click();extraButton.hidden=false;setLabel(extraButton,`再录第 ${takeCount+1} 遍`);}
+      if(saved.analysis&&validReviewResult(saved.analysis)){root.dataset.analysisReady="true";sessionAnalysis=saved.analysis;const box=document.getElementById('rec-result');box.hidden=false;showResult(sessionAnalysis,box);if(Number.isInteger(saved.selectedTake)&&saved.selectedTake>=0)box.querySelectorAll('.take-row')[saved.selectedTake]?.click();extraButton.hidden=false;setLabel(extraButton,`再录第 ${takeCount+1} 遍`);}
       if(pending){resubmitButton.hidden=false;status.textContent=`已恢复 ${pending.length} 遍录音，点「重新提交」继续。`;}
     }
   });
