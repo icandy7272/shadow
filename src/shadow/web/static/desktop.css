@@ -81,10 +81,6 @@
   #talk .row { max-width:680px; }
   .talk-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; padding:0; list-style:none; }
   .talk-take { margin:0; }
-  .chain-item { grid-template-columns:90px minmax(0,1fr) 100px; align-items:center; }
-  .chain-item .num { grid-column:1; grid-row:1; }
-  .chain-item .chain-text { grid-column:2; grid-row:1; }
-  .chain-item .chain-go { grid-column:3; grid-row:1; justify-content:flex-end; }
 
   /* Forms remain intentionally bounded; login never gains navigation chrome. */
   body[data-route="/settings"] main,body[data-route="/account"] main { max-width:840px; }

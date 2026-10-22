@@ -3,7 +3,7 @@
   function sectionFor(path) {
     if (path === '/today') return 'today';
     if (path === '/plan' || path === '/plan/guide') return 'plan';
-    if (['/start','/chain','/talk'].includes(path)) return 'start';
+    if (['/start','/talk'].includes(path)) return 'start';
     if (/^\/records(?:\/|$)/.test(path)) return 'records';
     if (path === '/vocab' || /^\/sources(?:\/|$)/.test(path)) return 'library';
     return null;

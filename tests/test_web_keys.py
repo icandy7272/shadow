@@ -55,14 +55,9 @@ def test_every_step_on_the_practice_page_shows_its_key_on_the_button(client, tmp
     assert "快捷键：" not in body
 
 
-def test_the_other_pages_put_space_on_their_button(client, tmp_path):
-    segment_id = _seed(tmp_path)
-    _practised(segment_id, 1, on=MONDAY)
-
-    chain = client.get("/chain").text
+def test_talk_pages_put_space_on_their_button(client):
     talk = client.get("/talk?kind=retell").text
 
-    assert _keys_on(chain, "chain-play") == ["空格"]
     assert _keys_on(talk, "talk-start") == ["空格"]
     assert _keys_on(talk, "talk-stop") == ["空格"]
-    assert "快捷键：" not in chain + talk
+    assert "快捷键：" not in talk

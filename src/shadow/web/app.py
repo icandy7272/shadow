@@ -392,7 +392,7 @@ def _plan_progress(connection, today: date) -> tuple[filters.Selection, int]:
 
 
 def _plan_view(connection, today: date, review: filters.Selection,
-               new_today: int, week_count: int, review_start: dict | None = None) -> dict:
+               new_today: int, review_start: dict | None = None) -> dict:
     """首页日课卡片要的东西：今天是星期几、哪几步、做完了哪些、该复习几句、顺延几句。
 
     能从练习记录里看出来的几步自己划掉；剩下的测不出来，还是手动勾。
@@ -406,11 +406,11 @@ def _plan_view(connection, today: date, review: filters.Selection,
     return {"heading": plan.heading(weekday), "steps": steps,
             "all_done": all(step["done"] for step in steps),
             "review_count": len(review.order), "deferred": len(review.deferred),
-            "review_start": review_start, "week_count": week_count}
+            "review_start": review_start}
 
 
 def _practised_since(connection, since: date) -> list[dict]:
-    """当前素材上从某天起练过的句子，按原文顺序。连起来跟和自由说都要它。"""
+    """当前素材上从某天起练过的句子，按原文顺序，供自由说挑选表达。"""
     source_id = library.current(connection)
     if source_id is None:
         return []
@@ -419,43 +419,10 @@ def _practised_since(connection, since: date) -> list[dict]:
             if (states.get(item["text"], filters.NEVER).last_day or date.min) >= since]
 
 
-CHAIN_GAP_SEC = 0.6     # 两句之间留一口气，和 chain.js 里的一致；估时长要算上
-
-
-def _chain_view(scope: str, today: date) -> dict:
-    """连着跟的两种口径：今天练过的（串起来）、本周练过的（整段跟读）。
-
-    同一件事、同一个页面，差别只在筛哪一段时间、跟几遍。
-    """
-    if scope == "week":
-        return {"scope": "week", "step": "whole", "title": "整段跟读",
-                "since": plan.week_start(today), "rounds": plan.WHOLE_ROUNDS,
-                "lede": "本周练过的句子从头跟到尾，中间不停下来改。单句练的是「像」，"
-                        "整段练的是「不断」。",
-                "other": {"href": "/chain", "label": "只连今天练过的 · 串起来 →"}}
-    return {"scope": "today", "step": "chain", "title": "串起来",
-            "since": today, "rounds": plan.CHAIN_ROUNDS,
-            "lede": "今天练过的几句连着跟，中间不停下来改——这一步练的是把单句接成一段话的"
-                    "节奏，错一两个词没关系。",
-            "other": {"href": "/chain?scope=week", "label": "本周练过的都连上 · 整段跟读 →"}}
-
-
-@app.get("/chain", response_class=HTMLResponse)
-def chain_page(request: Request, scope: str = Query("today")):
-    """练过的句子连着放——日课里的「串起来」和周六的「整段跟读」。
-
-    单句练得再准，接成一段话时节奏还是断的：这一步只放音，不比对，中间不停。
-    """
-    connection = _db()
-    today = _today()
-    view = _chain_view("week" if scope == "week" else "today", today)
-    sentences = _practised_since(connection, view["since"])
-    seconds = sum(item["seconds"] + CHAIN_GAP_SEC for item in sentences) * view["rounds"]
-    return templates.TemplateResponse(
-        request, "chain.html",
-        {**view, "sentences": sentences, "minutes": max(1, round(seconds / 60)),
-         # 跟完了自己在日课里划掉；不是今天的步骤就别勾（周六没有「串起来」这一步）
-         "tick": view["step"] if plan.is_step(today.weekday(), view["step"]) else ""})
+@app.get("/chain")
+def chain_page():
+    """旧的连续播放入口退回练习首页。"""
+    return RedirectResponse("/start", status_code=303)
 
 
 # --- 自己开口说：每天的复述、周六的自由说 -----------------------------------
@@ -602,7 +569,7 @@ def plan_page(request: Request):
     source = db.get_source(connection, source_id) if source_id else None
     context = _source_context(connection, source) if source else {
         "source": None, "days": progress.calendar(connection),
-        "plan": _plan_view(connection, _today(), filters.Selection(), 0, 0)}
+        "plan": _plan_view(connection, _today(), filters.Selection(), 0)}
     return templates.TemplateResponse(request, "plan.html", context)
 
 
@@ -648,9 +615,6 @@ def _source_context(connection, source: dict) -> dict:
     # 该复习的那几句排过急迫程度，名次带给前端：点「该复习」时列表按它重排
     review = filters.select(filters.REVIEW, here, today)
     new_today = sum(1 for state in here if state.first_day == today)
-    # 周六的「整段跟读」要连的就是这些：本周练过的
-    since = plan.week_start(today)
-    week_count = sum(1 for state in here if state.last_day and state.last_day >= since)
     ranks = {index: rank for rank, index in enumerate(review.order, 1)}
     for index, item in enumerate(catalogue):
         state = here[index]
@@ -669,8 +633,7 @@ def _source_context(connection, source: dict) -> dict:
     return {"catalogue": catalogue, "source": source, "next_unit": next_unit,
          "practised": sum(1 for item in catalogue if item["runs"]),
          "days": progress.calendar(connection),
-         "plan": _plan_view(connection, today, review, new_today, week_count,
-                            review_start)}
+         "plan": _plan_view(connection, today, review, new_today, review_start)}
 
 
 @app.get("/today", response_class=HTMLResponse)
@@ -681,7 +644,7 @@ def today_page(request: Request, week: int = Query(0, ge=-52, le=52)):
     source = db.get_source(connection, source_id) if source_id else None
     context = _source_context(connection, source) if source else {
         "source": None, "next_unit": None, "days": progress.calendar(connection),
-        "plan": _plan_view(connection, today, filters.Selection(), 0, 0)}
+        "plan": _plan_view(connection, today, filters.Selection(), 0)}
     start = plan.week_start(today) + timedelta(weeks=week)
     calendar = progress.calendar(connection, weeks=max(10, 1 - min(week, 0)))
     by_date = {day.date: day for day in calendar.days}
@@ -704,7 +667,7 @@ def start_page(request: Request):
     source = db.get_source(connection, source_id) if source_id else None
     context = _source_context(connection, source) if source else {
         "source": None, "next_unit": None,
-        "plan": _plan_view(connection, _today(), filters.Selection(), 0, 0)}
+        "plan": _plan_view(connection, _today(), filters.Selection(), 0)}
     return templates.TemplateResponse(request, "start.html", context)
 
 

@@ -77,7 +77,7 @@ if (new URLSearchParams(window.location.search).get("keys") === "debug") {
 // 听清连读要的是时间，不是把人变成另一个嗓音。
 const SPEEDS = [0.5, 0.75, 1];
 
-// 「听」和「跟读」是两回事，各记各的速度：盲听调慢了，串起来那边还是原速开始。
+// 「听」和「跟读」是两回事，各记各的速度：盲听调慢了，跟读录音前的原声还是原速开始。
 function makeSpeed(key) {  // eslint-disable-line no-unused-vars
   const store = {
     rate: 1,
@@ -96,7 +96,7 @@ function makeSpeed(key) {  // eslint-disable-line no-unused-vars
       return media;
     },
 
-    // 放完就扔的（串起来里一句一个 Audio），别一直攒着
+    // 放完就扔的临时音频，别一直攒着
     forget(media) {
       this.tracked.delete(media);
       return media;

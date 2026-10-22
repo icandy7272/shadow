@@ -66,8 +66,8 @@ def test_the_home_page_shows_todays_plan(client, tmp_path):
 
     assert 'id="plan"' in body
     assert "今天的日课 · 周一 · 30 分钟" in body
-    # 五步都是复选框：系统看得出来的先替你勾上，也能点掉
-    assert body.count('class="plan-check"') == 5
+    # 四步都是复选框：系统看得出来的先替你勾上，也能点掉
+    assert body.count('class="plan-check"') == 4
     assert f'<a class="plan-link" href="/practice/{segment_id}/1"' in body
     assert 'href="/plan/guide"' in body
 
@@ -80,27 +80,18 @@ def test_saturday_shows_the_weekly_review(client, tmp_path, monkeypatch):
     body = _home(client, _seed(tmp_path))
 
     assert "今天的日课 · 周六 · 回顾" in body
-    assert body.count('class="plan-check"') == 4
+    assert body.count('class="plan-check"') == 3
 
 
-def test_a_ticked_step_is_remembered_for_the_day(client, tmp_path):
-    segment_id = _seed(tmp_path)
-
-    response = client.post("/api/plan", json={"step": "chain", "done": True})
-
-    assert response.json() == {"step": "chain", "done": True, "all_done": False}
-    assert 'data-step="chain" checked' in _home(client, segment_id)
-    connection = db.connect()
-    assert db.plan_checks(connection, MONDAY.isoformat()) == {"chain": True}
-    connection.close()
-
-    client.post("/api/plan", json={"step": "chain", "done": False})
-    assert 'data-step="chain" checked' not in _home(client, segment_id)
+def test_removed_continuous_play_steps_cannot_be_ticked(client):
+    for step in ("chain", "whole"):
+        response = client.post("/api/plan", json={"step": step, "done": True})
+        assert response.status_code == 400
 
 
 def test_ticking_every_step_finishes_the_day(client, tmp_path):
     segment_id = _seed(tmp_path)
-    for step in ("review", "new", "chain", "retell"):
+    for step in ("review", "new", "retell"):
         client.post("/api/plan", json={"step": step, "done": True})
 
     last = client.post("/api/plan", json={"step": "extensive", "done": True}).json()
@@ -207,7 +198,7 @@ def test_a_step_the_app_can_measure_ticks_itself(client, tmp_path):
     body = _home(client, segment_id)
 
     assert 'class="plan-check" data-step="review" checked' in body
-    assert 'class="plan-check" data-step="chain" id' in body   # 测不出来的还空着，自己勾
+    assert 'class="plan-check" data-step="retell" id' in body   # 测不出来的还空着，自己勾
 
 
 def test_you_can_untick_what_the_app_ticked_for_you(client, tmp_path):
@@ -256,7 +247,7 @@ def test_the_day_is_done_when_what_is_left_is_ticked(client, tmp_path):
 
     segment_id = _seed(tmp_path)                 # 没有到期的：复习那一步自动划掉
     second = _seed_second_segment()
-    for step in ("chain", "retell", "extensive"):
+    for step in ("retell", "extensive"):
         client.post("/api/plan", json={"step": step, "done": True})
 
     assert 'class="plan-done">做完了' not in _home(client, segment_id)   # 新句子还没练够

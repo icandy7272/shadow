@@ -10,11 +10,7 @@ from datetime import date, timedelta
 
 REVIEW = "review"      # 链接：直接进最急的那句，按急迫程度往下练
 NEXT = "next"          # 链接：开始下一句没练过的
-CHAIN = "chain"        # 链接：把今天练过的几句连起来跟
-WHOLE = "whole"        # 链接：把本周练过的连起来，从头跟到尾
 TALK = "talk"          # 链接：自己开口说，在页面上录下来
-CHAIN_ROUNDS = 2       # 串起来跟几遍
-WHOLE_ROUNDS = 1       # 整段跟读跟几遍：从头到尾一遍，不中断
 LOW_RATING = 2         # 盲听自评不超过这个分，算没听懂
 GOOD_RATING = 4        # 到这个分，算听懂了
 SATURDAY, SUNDAY = 5, 6
@@ -34,14 +30,12 @@ _EXTENSIVE = Step("extensive", "泛听", "碎片时间 10–20 分钟，原速�
 _WEEKDAY = (
     Step("review", "复习到期的", "从上往下 3–5 句：先盲听一遍；跟不上的，完整跟读一遍", REVIEW),
     Step("new", "精练新句子", "3–5 句：盲听 → 不看字跟读 → 默写揭晓 → 针对问题补录", NEXT),
-    Step("chain", "串起来", "今天练过的几句连着跟 2 遍，中间不停下来改", CHAIN),
     Step("retell", "复述", "用自己的话把今天新练的几句讲一遍（讲意思，不背原句），录下来回听", TALK),
     _EXTENSIVE,
 )
 
 _SATURDAY = (
     Step("redo", "重练", "到期的都过一遍：没听懂、问题没解决的排在最前面", REVIEW),
-    Step("whole", "整段跟读", "本周练过的句子从头跟到尾，不中断", WHOLE),
     Step("free_talk", "自由说", "挑本周学到的 3–5 个表达，就一个话题连着说 2 分钟，录音和上周对比",
          TALK),
     _EXTENSIVE,

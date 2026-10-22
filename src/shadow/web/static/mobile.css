@@ -393,12 +393,6 @@ body:has(#login-form) main { padding-bottom:32px; }
 #talk .row { margin:12px 0; }
 #talk-start,#talk-stop { width:100%; }
 #talk-clock { width:100%; font-variant-numeric:tabular-nums; text-align:center; }
-#chain-controls { position:sticky; top:0; z-index:2; padding:12px; background:var(--chrome); border-radius:var(--radius-card); }
-.chain-list { padding:0; list-style:none; display:grid; gap:12px; }
-.chain-item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; padding:16px; border-radius:var(--radius-card); background:var(--card); }
-.chain-item .num { grid-column:1; font-size:.8125rem; }
-.chain-text { grid-column:1 / -1; grid-row:2; font-size:1.0625rem; }
-.chain-go { grid-column:2; grid-row:1; min-height:44px; display:flex; align-items:center; }
 .plan-step { gap:12px; }
 .plan-step > div { min-width:0; }
 .plan-body label span { font-size:.9375rem; }

@@ -20,7 +20,6 @@ def test_detail_pages_return_to_their_parent(client, tmp_path):
         f'/sources/{_source_of(segment)}': '/sources',
         '/vocab': '/sources',
         '/talk': '/start',
-        '/chain': '/start',
         '/plan/guide': '/plan',
         '/records/day/2026-10-15?range=month': '/records?range=month',
     }
@@ -69,3 +68,14 @@ def test_overview_layouts_have_independent_responsive_regions(client):
     assert 'class="today-layout"' in client.get('/today').text
     assert 'class="records-overview"' in client.get('/records').text
     assert 'class="start-layout"' in client.get('/start').text
+
+
+def test_removed_continuous_play_entry_points_are_gone(client):
+    for route in ('/chain', '/chain?scope=week'):
+        response = client.get(route, follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers['location'] == '/start'
+
+    start = client.get('/start').text
+    assert '/chain' not in start
+    assert '整段跟读' not in start
