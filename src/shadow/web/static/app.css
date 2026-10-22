@@ -709,3 +709,10 @@ button.miss-word:hover { color: var(--accent); }
   .rec-settings select { max-width: 9em; }
   .rec-settings button { padding: 8px 12px; }
 }
+
+/* Keep textual feedback hidden until dictation is graded or explicitly skipped. */
+#practice:not([data-answers-revealed="true"]) :is(.peek,.history,#rec-result,#extra-record),
+#practice[data-answers-revealed="true"] .blind-record-note { display: none !important; }
+
+#practice:not([data-answers-revealed="true"]) #practice-dock .dock-pager,
+#practice:not([data-active-step="record"]) #practice-dock :is(#record-continue,#skip-record) { display:none!important; }

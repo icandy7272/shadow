@@ -1,5 +1,17 @@
-const {test}=require('node:test'),assert=require('node:assert/strict');const {nextPracticeStep}=require('../../src/shadow/web/static/mobile.js');
-test('rating advances, grading stays for feedback, skip advances',()=>{assert.equal(nextPracticeStep('listen',{listen:true,drill:false}),'drill');assert.equal(nextPracticeStep('drill',{listen:true,drill:true,skipped:false}),'drill');assert.equal(nextPracticeStep('drill',{listen:true,drill:true,skipped:true}),'record')});
-test('revisiting unlocked steps does not jump to results',()=>{assert.equal(nextPracticeStep('listen',{listen:true,drill:true}),'listen');assert.equal(nextPracticeStep('record',{listen:true,drill:true}),'record')});
-
-test('mastered dictation auto-skip opens recording immediately',()=>{assert.equal(nextPracticeStep('listen',{listen:true,drill:true,skipped:true}),'record')});
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {nextPracticeStep,answersRevealed}=require('../../src/shadow/web/static/mobile.js');
+test('rating advances to blind shadowing before dictation',()=>{
+ assert.equal(nextPracticeStep('listen',{listen:true,record:false,drill:false}),'record');
+});
+test('saved shadowing advances to dictation until answers are revealed',()=>{
+ assert.equal(nextPracticeStep('record',{listen:true,record:true,drill:false}),'drill');
+ assert.equal(nextPracticeStep('record',{listen:true,record:true,drill:true}),'record');
+});
+test('revisiting completed listening does not jump',()=>{
+ assert.equal(nextPracticeStep('listen',{listen:true,record:true,drill:true}),'listen');
+});
+test('only grading or explicit skip reveals answers, including restored sessions',()=>{
+ assert.equal(answersRevealed({graded:false,skipped:false}),false);
+ assert.equal(answersRevealed({graded:true,skipped:false}),true);
+ assert.equal(answersRevealed({graded:false,skipped:true}),true);
+});

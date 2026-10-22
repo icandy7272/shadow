@@ -1,4 +1,4 @@
-"""练习页第二步：一整句写在一个框里，按对齐判分。"""
+"""练习页第三步：一整句写在一个框里，按对齐判分。"""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,7 +33,12 @@ def test_the_dictation_step_is_one_box_with_a_word_count(client, tmp_path):
     assert 'class="box"' not in body
     # 对答案之前，默写这一步里不能有原文
     assert "Thank" not in body.split('id="step-record"')[0]
-    assert '<span class="n">3</span> 跟读' in body
+    assert '<span class="n">2</span> 跟读' in body
+    assert '<span class="n">3</span> 默写' in body
+    assert body.index('id="step-record"') < body.index('id="step-drill"')
+    assert 'data-answers-revealed="false"' in body
+    assert 'id="record-continue"' in body
+    assert 'id="skip-record"' in body
 
 
 def test_what_you_typed_is_lined_up_with_the_sentence(client, tmp_path):
@@ -166,7 +171,7 @@ def test_a_malformed_round_number_starts_a_fresh_round(client, tmp_path):
     assert isinstance(graded["run_id"], int)
 
 
-def test_dictation_auto_skip_uses_cumulative_perfect_runs(client, tmp_path):
+def test_perfect_history_does_not_reveal_answers_by_auto_skipping(client, tmp_path):
     segment_id = _seed(tmp_path)
     page = lambda: client.get(f"/practice/{segment_id}/2").text
     assert 'data-auto-skip="false"' in page()
@@ -174,8 +179,8 @@ def test_dictation_auto_skip_uses_cumulative_perfect_runs(client, tmp_path):
     assert 'data-auto-skip="false"' in page()
     _post(client, segment_id, "It was start.")
     _post(client, segment_id, "It was a start.")
-    assert 'data-auto-skip="true"' in page()
-    assert "已全对 2 次，自动跳过" in page()
+    assert 'data-auto-skip="false"' in page()
+    assert "自动跳过" not in page()
     assert 'data-auto-skip="false"' in client.get(f"/practice/{segment_id}/1").text
 
 

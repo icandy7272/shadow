@@ -14,11 +14,11 @@ test('Enter continues from completed dictation only, never skips a sentence',()=
  assert.equal(run('Enter').navigated,0);
 });
 test('arrow navigation clicks the link so draft saving and guards also run',()=>{const state=run('ArrowRight');assert.equal(state.navigated,1);assert.equal(state.assigned,0)});
-test('continue enters recording and starts it synchronously in the same user gesture',()=>{
+test('after dictation continue opens analysis without starting the microphone',()=>{
  const mobile=fs.readFileSync('src/shadow/web/static/mobile.js','utf8');const begin=mobile.indexOf("next.addEventListener('click'");const end=mobile.indexOf('\n',begin);
  for(const blocked of [false,true]){
   let click;const calls=[];vm.runInNewContext(mobile.slice(begin,end),{next:{addEventListener:(_,fn)=>click=fn},isBusy:()=>blocked,startControl:{disabled:false,click:()=>calls.push('start')},panels:[null,null,{classList:{contains:()=>false}}],show:()=>calls.push('record')});
-  click();assert.deepEqual(calls,blocked?[]:['record','start']);
+  click();assert.deepEqual(calls,blocked?[]:['record']);
  }
 });
 test('space chooses the current phase action and never starts during prelisten or analysis',()=>{
@@ -28,7 +28,7 @@ test('space chooses the current phase action and never starts during prelisten o
   const isRecord=['ready','saved','recording','prelisten','analysis','pending'].includes(scenario);
   const record={hidden:!isRecord,classList:{contains:()=>false}};
   const drill={hidden:isRecord||scenario==='listen',classList:{contains:n=>n==='graded'&&scenario==='graded'}};
-  const context={recording:['recording','prelisten'].includes(scenario),root:{dataset:{submitting:String(scenario==='analysis'),pending:String(scenario==='pending')}},document:{getElementById:id=>({'step-record':record,'step-drill':drill,'start-record':start,'practice-continue':next,'stop-take':stop,'rec-result':{hidden:scenario!=='saved'}}[id]),querySelector:()=>scenario==='saved'?both:null,querySelectorAll:()=>[play]}};
+  const context={recording:['recording','prelisten'].includes(scenario),root:{dataset:{answersRevealed:'true',submitting:String(scenario==='analysis'),pending:String(scenario==='pending')}},document:{getElementById:id=>({'step-record':record,'step-drill':drill,'start-record':start,'practice-continue':next,'stop-take':stop,'rec-result':{hidden:scenario!=='saved'}}[id]),querySelector:()=>scenario==='saved'?both:null,querySelectorAll:()=>[play]}};
   const target=vm.runInNewContext(source.slice(begin,end)+';spaceTarget()',context);
   const wanted={listen:play,drill:play,graded:next,ready:start,saved:both,recording:stop,prelisten:null,analysis:null,pending:null}[scenario];assert.equal(target,wanted,scenario);
  }

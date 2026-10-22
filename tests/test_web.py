@@ -310,7 +310,7 @@ def test_the_page_says_so_when_recording_is_impossible(client, tmp_path):
     body = client.get(f"/practice/{segment_id}/2").text
 
     assert 'id="no-mic"' in body
-    assert "跟读请用电脑" in body
+    assert "可以跳过跟读，继续默写" in body
 
 
 def test_the_list_carries_what_the_filters_need(client, tmp_path):

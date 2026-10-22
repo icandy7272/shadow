@@ -18,3 +18,16 @@ test('unexpected result rendering failure also keeps retry recovery',async()=>{c
 test('active submission stays protected through fetch and releases on failed response',async()=>{let reject;const c=setup(()=>new Promise((_,r)=>reject=r));const submitted=c.submit([{}]);assert.equal(c.root.dataset.submitting,'true');reject(Error('offline'));await submitted;assert.equal(c.root.dataset.submitting,'false')});
 
 test('expired authentication and refused origin retain every clip for retry',async()=>{for(const status of [401,403]){const c=setup(async()=>({ok:false,status,json:async()=>({detail:'sign in'})})),audio=[{},{}];await c.submit(audio);assert.equal(c.pending,audio);assert.equal(c.root.dataset.pending,'true');assert.equal(c.resubmitButton.hidden,false)}});
+
+test('saved blind shadowing retains its round for the following dictation',async()=>{
+ const c=setup(async()=>({ok:true}));let completed=0,advanced=0;
+ c.markComplete=()=>completed++;c.document.dispatchEvent=()=>advanced++;
+ await c.submit([{}]);
+ assert.equal(c.runId,4);assert.equal(completed,1);assert.equal(advanced,1);
+ assert.notEqual(c.root.dataset.answersRevealed,'true');
+});
+test('failed shadowing never completes or advances to dictation',async()=>{
+ const c=setup(async()=>({ok:false,status:500}));let completed=0,advanced=0;
+ c.markComplete=()=>completed++;c.document.dispatchEvent=()=>advanced++;
+ await c.submit([{}]);assert.equal(completed,0);assert.equal(advanced,0);
+});

@@ -32,6 +32,7 @@ for (const extra of [true, false]) {
 
 for (const scenario of [
   {name: 'available', expected: 1},
+  {name: 'answers still hidden', revealed:false, expected: 0},
   {name: 'hidden', hidden: true, expected: 0},
   {name: 'disabled', disabled: true, expected: 0},
   {name: 'recording', recording: true, expected: 0},
@@ -49,6 +50,7 @@ for (const scenario of [
       document: {addEventListener: (_, fn) => {handler = fn;},
         getElementById: id => id === 'extra-record' ? extra : {classList: {contains: () => false}},
         querySelectorAll: () => []},
+      root:{dataset:{answersRevealed:String(scenario.revealed!==false)}},
       physicalKey: () => 'n', recording: !!scenario.recording,
     });
     handler({target: {closest: () => scenario.typing}, ctrlKey: scenario.ctrlKey,

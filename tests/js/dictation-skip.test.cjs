@@ -61,31 +61,17 @@ test('skipping dictation unlocks recording without grading or discarding the dra
   assert.equal(draft.value, 'already typed');
 });
 
-test('mastered dictation advances to recording after blind rating', async () => {
-  const source = fs.readFileSync('src/shadow/web/static/app.js', 'utf8');
-  const start = source.indexOf('      const drill = document.getElementById("step-drill");');
-  const end = source.indexOf('\n      } finally', start);
-  for (const mastered of [false, true]) {
-    let skipped = false;
-    let focused = false;
-    let target;
-    const drill = {
-      dataset: { autoSkip: String(mastered) },
-      classList: { remove() {}, contains: () => false },
-      scrollIntoView: () => { target = 'drill'; },
-    };
-    await vm.runInNewContext(`(async () => {${source.slice(start, end)} })()`, {
-      listenStep: {}, markComplete() {},
-      window: { matchMedia: () => ({ matches: true }) },
-      document: { getElementById: (id) => ({
-        'step-drill': drill,
-        'skip-drill': { click: () => { skipped = true; } },
-        'step-record': { scrollIntoView: () => { target = 'record'; } },
-        'dictation-text': { focus: () => { focused = true; } },
-      })[id] },
-    });
-    assert.equal(skipped, mastered);
-    assert.equal(target, mastered ? 'record' : 'drill');
-    assert.equal(focused, !mastered);
-  }
+test('rating unlocks shadowing without exposing or skipping dictation', async () => {
+ const source=fs.readFileSync('src/shadow/web/static/app.js','utf8');
+ const start=source.indexOf('      const record = document.getElementById("step-record");');
+ const end=source.indexOf('      } finally',start);
+ let unlocked=false,focused=false,completed=false;
+ await vm.runInNewContext(`(async()=>{${source.slice(start,end)}})()`,{
+  listenStep:{},markComplete(){completed=true},window:{matchMedia:()=>({matches:true})},
+  document:{getElementById:id=>{
+   assert.ok(['step-record','start-record'].includes(id));
+   return id==='step-record'?{classList:{remove:name=>{unlocked=name==='locked'}},scrollIntoView(){}}:{focus(){focused=true}};
+  }}
+ });
+ assert.ok(unlocked&&focused&&completed);
 });

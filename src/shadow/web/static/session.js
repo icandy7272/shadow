@@ -16,6 +16,7 @@
     return Boolean(data&&Array.isArray(data.line)&&Array.isArray(data.items)&&Array.isArray(data.extras));
   }
   function completedSnapshot(saved) {
+    if(saved?.flowVersion===2&&!validGrading(saved.grading)&&!saved.steps?.drill?.includes('skipped'))return false;
     const data=saved?.analysis;
     return !saved?.pending?.length && Boolean(data&&Number.isInteger(data.run_id)&&data.run_id>0&&Number.isInteger(data.count)&&data.count>0
       &&[data.accuracy,data.speech].every(Number.isFinite)&&(data.pause===null||Number.isFinite(data.pause))

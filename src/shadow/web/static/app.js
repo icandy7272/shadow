@@ -273,21 +273,12 @@ if (root) {
         note.classList.add("bad");
         service.check();
       }
-      const drill = document.getElementById("step-drill");
-      drill.classList.remove("locked");
+      const record = document.getElementById("step-record");
+      record.classList.remove("locked");
       markComplete(listenStep);
-      if (drill.dataset.autoSkip === "true" && !drill.classList.contains("foldable")) {
-        document.getElementById("skip-drill").click();
-        document.getElementById("step-record").scrollIntoView({ block: "start" });
-        return;
-      }
-      // 展开了但页面不动，还得自己找下去。滚过去；电脑上顺手把光标放进输入框，
-      // 手机上不聚焦——弹出的键盘会挡掉半屏
-      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      drill.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
-      if (window.matchMedia("(hover: hover)").matches) {
-        document.getElementById("dictation-text")?.focus({ preventScroll: true });
-      }
+      record.scrollIntoView({block:"start"});
+      if(window.matchMedia("(hover: hover)").matches)
+        document.getElementById("start-record").focus({preventScroll:true});
       } finally {root.dataset.mutating='false';listenStep.querySelectorAll('.rating button').forEach(b=>b.disabled=false);}
     });
   });
@@ -307,7 +298,9 @@ if (root) {
         || root.dataset.mutating === 'true') return null;
     const record = document.getElementById("step-record");
     if (!record.hidden && !record.classList.contains("locked")) {
-      if (!document.getElementById("rec-result").hidden)
+      if (root.dataset.answersRevealed !== "true" && record.classList.contains("complete"))
+        return document.getElementById("record-continue");
+      if (root.dataset.answersRevealed === "true" && !document.getElementById("rec-result").hidden)
         return document.querySelector("#rec-result:not([hidden]) .playbar > button");
       return document.getElementById("start-record");
     }
@@ -376,7 +369,7 @@ if (root) {
       return;
     }
     if (key === "n") {
-      if (shadowing && !event.repeat) press(byId("extra-record"));
+      if (shadowing && !event.repeat && root.dataset.answersRevealed === "true") press(byId("extra-record"));
       return;
     }
     if (key === "t") {
@@ -384,7 +377,7 @@ if (root) {
       return;
     }
     if (key === "o" || key === "m") {
-      if (shadowing) press(key === "o" ? onlyRef : onlyMine);
+      if (shadowing && root.dataset.answersRevealed === "true") press(key === "o" ? onlyRef : onlyMine);
       return;
     }
     if (key === "k") {
@@ -424,7 +417,7 @@ if (root) {
     }
   });
 
-  // 第二步：整句默写。一整句写在一个框里，漏了词挪光标补上；不会的词写一个 ?
+  // 第三步：整句默写。一整句写在一个框里，漏了词挪光标补上；不会的词写一个 ?
   const drillStep = document.getElementById("step-drill");
   const submitDrill = document.getElementById("submit-drill");
   const skipDrill = document.getElementById("skip-drill");
@@ -665,11 +658,21 @@ if (root) {
     return nodes;
   }
   window.ShadowSession?.register({
-    capture:()=>({runId,grading:sessionGrading,typed:typed.value,rating:listenStep.querySelector('.rating button.chosen')?.dataset.rating||null,activeStep:root.dataset.activeStep||'listen',steps:Object.fromEntries(['listen','drill','record'].map(id=>[id,['locked','complete','graded','skipped','done','foldable'].filter(name=>document.getElementById(`step-${id}`).classList.contains(name))]))}),
+    capture:()=>({flowVersion:2,runId,grading:sessionGrading,typed:typed.value,rating:listenStep.querySelector('.rating button.chosen')?.dataset.rating||null,activeStep:root.dataset.activeStep||'listen',steps:Object.fromEntries(['listen','drill','record'].map(id=>[id,['locked','complete','graded','skipped','done','foldable'].filter(name=>document.getElementById(`step-${id}`).classList.contains(name))]))}),
     restore:saved=>{
       runId=Number.isInteger(saved.runId)?saved.runId:null;typed.value=typeof saved.typed==='string'?saved.typed:'';refreshCount();sessionGrading=window.ShadowSession.validGrading(saved.grading)?saved.grading:null;
       listenStep.querySelectorAll('.rating button').forEach(button=>button.classList.toggle('chosen',button.dataset.rating===saved.rating));
       for(const id of ['listen','drill','record']){const step=document.getElementById(`step-${id}`),names=saved.steps?.[id];if(!Array.isArray(names))continue;for(const name of ['locked','complete','graded','skipped','done','foldable'])step.classList.toggle(name,names.includes(name));if(names.includes('complete')){const badge=step.querySelector('h2 .n');if(badge)badge.textContent='✓';}}
+      // Old snapshots may contain unlock classes from the former step order.
+      // Only actual grading or an explicit skip can reveal text.
+      if(!sessionGrading)drillStep.classList.remove('graded');
+      if(saved.analysis){
+        document.getElementById('step-record').classList.add('complete');
+        drillStep.classList.remove('locked');
+        if(!sessionGrading&&Number.isInteger(saved.analysis.run_id))runId=saved.analysis.run_id;
+      }
+      if(saved.rating)document.getElementById('step-record').classList.remove('locked');
+      root.dataset.answersRevealed=String(Boolean(sessionGrading||drillStep.classList.contains('skipped')));
       if(sessionGrading){const box=drillStep.querySelector('.result');box.hidden=false;box.replaceChildren(...dictationResult(sessionGrading));}
       if(drillStep.classList.contains('foldable'))setFolded(drillStep.classList.contains('done'));root.dataset.activeStep=saved.activeStep||'listen';
     }
@@ -685,6 +688,7 @@ const peekButton = document.getElementById("peek");
 if (peekButton) {
   const peekText = document.getElementById("peek-text");
   peekButton.addEventListener("click", () => {
+    if(document.getElementById("practice").dataset.answersRevealed !== "true")return;
     peekText.hidden = !peekText.hidden;
     setLabel(peekButton, peekText.hidden ? "看一眼原文" : "收起原文");
     if (!peekText.hidden) sawText = true;
@@ -731,7 +735,7 @@ async function readEvents(response, onProgress) {
   return last;
 }
 
-// ---------- 第三步：浏览器录音 ----------
+// ---------- 第二步：浏览器录音 ----------
 if (root) {
   const segment = root.dataset.segment;
   const unit = root.dataset.unit;
@@ -1177,7 +1181,7 @@ if (root) {
   extraButton.hidden = true;
   document.getElementById("rec-result").after(extraButton);
   const beginExtra = () => {
-    if (startButton.disabled || recording || pending || root.dataset.mutating==='true') return;
+    if (startButton.disabled || recording || pending || root.dataset.mutating==='true' || root.dataset.answersRevealed!=='true') return;
     extraMode = true;
     submissionId = crypto.randomUUID();
     recordRound(true);
@@ -1186,11 +1190,13 @@ if (root) {
   startButton?.addEventListener("click", () => {
     if (pending || root.dataset.mutating==='true') return;
     extraMode = false;
+    if(root.dataset.answersRevealed === "true")runId = null;
     submissionId = crypto.randomUUID();
     recordRound(false);
   });
 
   async function recordRound(extra) {
+    if(document.getElementById("practice")?.dataset?.answersRevealed === "true")sawText = true;
     setRecording(true);
     startButton.disabled = true;
     let speaker = null, stream = null, ear = null, meterOff = null;
@@ -1427,7 +1433,7 @@ if (root) {
     pending = null;
     root.dataset.pending = "false";
     if (micNote && !micNote.classList.contains("low")) say("");
-    runId = null;
+    runId = last.result.run_id;
     markComplete(document.getElementById("step-record"));
     document.dispatchEvent(new CustomEvent("shadow:analysed"));
     sessionAnalysis = last.result;
@@ -1440,7 +1446,7 @@ if (root) {
     // 等分析的十几秒里人常切去别的标签页，页面在后台时平滑滚动不会动——那就直接跳过去
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
       || document.visibilityState === "hidden";
-    document.getElementById("step-record").scrollIntoView(
+    document.getElementById(root.dataset.answersRevealed === "true" ? "step-record" : "step-drill").scrollIntoView(
       { behavior: still ? "auto" : "smooth", block: "start" });
     } finally { root.dataset.submitting = "false"; }
   }

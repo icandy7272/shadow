@@ -39,3 +39,12 @@ test('explicit start ignores even recently autosaved completed result but preser
  assert.equal(session.practiceURL(url+'&start=1','https://shadow.test'),url);
  assert.equal(session.practiceURL(url+'&start=invalid','https://shadow.test'),null);
 });
+test('new flow preserves yesterday saved shadowing until dictation is graded or skipped',async()=>{
+ const now=new Date(2026,9,22,9).getTime();
+ const base={version:1,flowVersion:2,url:'/practice/1/2',updatedAt:now-86400000,activeStep:'drill',analysis:{run_id:3,count:3,accuracy:90,speech:1,pause:null,rejected:[],skipped:[],issues:[],good:[],view:{takes:[{}],chosen:0}},steps:{drill:[]}};
+ for(const done of [false,true]){
+  const saved={...base,steps:{drill:done?['skipped']:[]}};
+  const s=session.createSession({url:saved.url,origin:'https://shadow.test',now:()=>now,store:{get:async()=>saved},pointer:{getItem:()=>null}});
+  assert.equal(await s.ready,done?null:saved);
+ }
+});

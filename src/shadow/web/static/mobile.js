@@ -1,7 +1,8 @@
 /* UI only: existing recorder and API remain responsible for data. */
+function answersRevealed({graded=false,skipped=false}={}) { return graded || skipped; }
 function nextPracticeStep(active,status){
-  if(active==='listen'&&status.listen&&status.skipped)return 'record';
-  if(active==='listen'&&status.listen&&!status.drill)return 'drill';
+  if(active==='listen'&&status.listen&&!status.record&&!status.drill)return 'record';
+  if(active==='record'&&status.record&&!status.drill)return 'drill';
   if(active==='drill'&&status.skipped)return 'record';
   return active;
 }
@@ -42,7 +43,7 @@ function guardPracticeNavigation(doc, win, busy, notify) {
   });
 }
 
-if(typeof module!=='undefined')module.exports={keyboardInset,nextPracticeStep,focusPracticeStep,guardPracticeNavigation,sessionNavigationBusy};
+if(typeof module!=='undefined')module.exports={answersRevealed,keyboardInset,nextPracticeStep,focusPracticeStep,guardPracticeNavigation,sessionNavigationBusy};
 if(typeof document!=='undefined')(()=>{
  const theme=document.getElementById('app-theme');
  if(theme){theme.value=document.documentElement.dataset.theme||'system';theme.addEventListener('change',()=>{if(theme.value==='system')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=theme.value;try{localStorage.setItem('shadow.theme',theme.value)}catch(_){}})}
@@ -66,23 +67,34 @@ if(typeof document!=='undefined')(()=>{
  const queueNote=root.querySelector('.pager-note');if(menuBody&&queueNote)menuBody.append(queueNote);
  if(nextSentence){nextSentence.setAttribute('aria-label',nextSentence.textContent.trim());nextSentence.replaceChildren(document.createTextNode(new URL(nextSentence.href).pathname.startsWith('/practice/')?'练下一句':'完成，回素材'),el('kbd','key','→'))}
  const startControl=document.getElementById('start-record');
+ const toDictation=document.getElementById('record-continue');
+ const skipRecord=document.getElementById('skip-record');
+ function openDictation(){if(isBusy())return;panels[1].classList.remove('locked');show('drill');}
+ toDictation.addEventListener('click',openDictation);
+ skipRecord.addEventListener('click',openDictation);
+ dock.append(toDictation,skipRecord);
+
  startControl?.addEventListener('click',()=>{const dialog=startControl.closest('dialog');if(dialog?.open)window.ShadowSheets?.close(dialog)},true);
  const recSettings=more?.querySelector('.rec-settings');if(settings&&recSettings)settings.querySelector('.sheet-body').append(recSettings);
  more?.querySelector('summary')?.addEventListener('click',event=>{event.preventDefault();window.ShadowSheets?.open(settings)});
  for(const id of ['start-record','extra-record','stop-take','redo-take','resubmit']){const control=document.getElementById(id);if(control)dock.append(control)}
  function show(id,scroll=true){if(!ids.includes(id)||document.getElementById(`step-${id}`).classList.contains('locked'))return;if(active!==id)stopLoops();active=id;root.dataset.activeStep=id;if(nextSentence){const target=id==='record'?dockPager:pager;if(nextSentence.parentElement!==target)target.append(nextSentence)}panels.forEach((panel,index)=>{if(panel.hidden!==(ids[index]!==id))panel.hidden=ids[index]!==id});tabs.forEach(tab=>tab.setAttribute('aria-selected',String(tab.dataset.practiceStep===id)));if(dock.hidden!==(id!=='record'))dock.hidden=id!=='record';if(id==='drill'&&!panels[1].classList.contains('graded')&&!panels[1].classList.contains('done'))focusPracticeStep(id,window.matchMedia('(hover: hover)').matches,{typed:document.getElementById('dictation-text')});if(scroll)root.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}
  document.addEventListener('keydown',event=>{if(event.metaKey||event.ctrlKey||event.altKey||event.repeat||event.target.closest('input,textarea,select,[contenteditable]'))return;if(/^[rnt]$/i.test(physicalKey(event))&&!panels[2].classList.contains('locked')&&!document.querySelector('dialog[open]'))show('record',false)},true);
- tabs.forEach(tab=>tab.addEventListener('click',()=>show(tab.dataset.practiceStep)));next.addEventListener('click',()=>{if(isBusy()||startControl.disabled||panels[2].classList.contains('locked'))return;show('record');startControl.click()});
+ tabs.forEach(tab=>tab.addEventListener('click',()=>show(tab.dataset.practiceStep)));next.addEventListener('click',()=>{if(isBusy()||panels[2].classList.contains('locked'))return;show('record')});
  const micFeedback=document.createElement('p');micFeedback.className='hint';micFeedback.setAttribute('role','status');settings.querySelector('.sheet-body').append(micFeedback);
  const updateMicFeedback=()=>{micFeedback.textContent=[document.getElementById('rec-status')?.textContent,document.getElementById('mic-note')?.textContent].filter(Boolean).join(' · ')};
  const micObserver=new MutationObserver(updateMicFeedback);for(const id of ['rec-status','mic-note']){const el=document.getElementById(id);if(el)micObserver.observe(el,{childList:true,characterData:true,subtree:true})}
- let previous={listen:false,drill:false,skipped:false};
- function sync(){const status={listen:panels[0].classList.contains('complete'),drill:!panels[2].classList.contains('locked'),skipped:panels[1].classList.contains('skipped')};for(const tab of tabs){const locked=document.getElementById(`step-${tab.dataset.practiceStep}`).classList.contains('locked'),busy=isBusy();if(tab.disabled!==(locked||busy))tab.disabled=locked||busy}if(next.hidden!==!status.drill)next.hidden=!status.drill;let target=active;if(status.listen!==previous.listen||status.skipped!==previous.skipped)target=nextPracticeStep(active,status);if(typeof recording!=='undefined'&&recording)target='record';if(target!==active)show(target);if(dockPager.inert!==isBusy())dockPager.inert=isBusy();if(!isBusy()&&!navigationNote.hidden)navigationNote.hidden=true;const extra=document.getElementById('extra-record'),start=document.getElementById('start-record'),hasResult=Boolean(extra&&!extra.hidden);const targetParent=hasResult&&menuBody?menuBody:dock;if(start.parentElement!==targetParent)targetParent.append(start);
+ let previous={listen:false,record:false,drill:false,skipped:false};
+ function sync(){const status={listen:panels[0].classList.contains('complete'),record:panels[2].classList.contains('complete'),drill:answersRevealed({graded:panels[1].classList.contains('graded'),skipped:panels[1].classList.contains('skipped')}),skipped:panels[1].classList.contains('skipped')};if(root.dataset.answersRevealed!==String(status.drill))root.dataset.answersRevealed=String(status.drill);
+ const ready=!panels[1].classList.contains('locked')&&!status.drill&&!isBusy();
+ if(toDictation.hidden!==!ready)toDictation.hidden=!ready;
+ if(skipRecord.hidden!==Boolean(status.record||status.drill||isBusy()))skipRecord.hidden=Boolean(status.record||status.drill||isBusy());
+ for(const tab of tabs){const locked=document.getElementById(`step-${tab.dataset.practiceStep}`).classList.contains('locked'),busy=isBusy();if(tab.disabled!==(locked||busy))tab.disabled=locked||busy}if(next.hidden!==!status.drill)next.hidden=!status.drill;let target=active;if(status.listen!==previous.listen||status.record!==previous.record||status.skipped!==previous.skipped)target=nextPracticeStep(active,status);if(typeof recording!=='undefined'&&recording)target='record';if(target!==active)show(target);if(dockPager.inert!==isBusy())dockPager.inert=isBusy();if(!isBusy()&&!navigationNote.hidden)navigationNote.hidden=true;const extra=document.getElementById('extra-record'),start=document.getElementById('start-record'),hasResult=Boolean(extra&&!extra.hidden);const targetParent=hasResult&&menuBody?menuBody:dock;if(start.parentElement!==targetParent)targetParent.append(start);
  if(start.firstChild?.nodeType===3){const label=hasResult?'新一轮跟读':'开始跟读';if(start.firstChild.textContent!==label)start.firstChild.textContent=label}
  const busy=Boolean(recording||root.dataset.submitting==='true'||root.dataset.pending==='true');
  if(root.dataset.savedActions!==String(hasResult&&!busy))root.dataset.savedActions=String(hasResult&&!busy);
  if(root.dataset.recordBusy!==String(busy))root.dataset.recordBusy=String(busy);
  if(extra&&extra.disabled!==start.disabled)extra.disabled=start.disabled;
  previous=status}
- new MutationObserver(sync).observe(root,{subtree:true,attributes:true,attributeFilter:['class','hidden','disabled','data-pending','data-mutating'],childList:true});document.addEventListener('shadow:session-saved',sync);document.addEventListener('shadow:analysed',()=>show('record'));document.addEventListener('shadow:session-restored',()=>{show(root.dataset.activeStep||'listen',false);sync()});show('listen',false);sync();
+ new MutationObserver(sync).observe(root,{subtree:true,attributes:true,attributeFilter:['class','hidden','disabled','data-pending','data-mutating'],childList:true});document.addEventListener('shadow:session-saved',sync);document.addEventListener('shadow:analysed',()=>{panels[1].classList.remove('locked');show(answersRevealed({graded:panels[1].classList.contains('graded'),skipped:panels[1].classList.contains('skipped')})?'record':'drill')});document.addEventListener('shadow:session-restored',()=>{sync();show(root.dataset.activeStep||'listen',false)});show('listen',false);sync();
 })();

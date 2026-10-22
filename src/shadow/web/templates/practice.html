@@ -5,13 +5,13 @@
 {% macro times(n) %}<em class="step-count">{% if n %}之前 {{ n }} 次{% else %}第一次{% endif %}</em>{% endmacro %}
 <div id="practice" data-segment="{{ segment }}" data-unit="{{ unit }}"
      data-min-take="{{ min_take_sec }}" data-seconds="{{ seconds }}"
-     data-spoken="{{ spoken }}">
+     data-spoken="{{ spoken }}" data-answers-revealed="false">
 
   <aside class="practice-rail" aria-label="练习进度与操作"><div class="session-header"><button id="practice-minimize" type="button" aria-label="收起练习">⌄</button><div><b>{{ source }}</b><small>第 {{ number }} / {{ total_units }} 句{% if queue %} · {{ queue.title }}{% endif %}<span id="session-elapsed"></span></small></div><button type="button" data-open-dialog="practice-menu" aria-label="更多练习操作">•••</button><button id="practice-finish" type="button">结束</button></div>
   <dialog class="settings-dialog" id="practice-menu" aria-labelledby="practice-menu-title"><div class="sheet-header"><h2 id="practice-menu-title">练习操作</h2><button data-close-dialog type="button">完成</button></div><div class="sheet-body practice-menu-list"><a class="grouped-row" href="/sources/{{ source_id }}">返回素材 <span>›</span></a><button class="grouped-row" type="button" data-open-dialog="record-settings">录音设置 <span>›</span></button><a class="grouped-row" href="/settings">全局设置 <span>›</span></a></div></dialog>
   <dialog class="settings-dialog" id="session-finish" aria-labelledby="session-finish-title"><div class="sheet-header"><h2 id="session-finish-title">结束这次练习？</h2><button data-close-dialog type="button">取消</button></div><div class="sheet-body"><p id="session-finish-note">已保存的练习记录会保留。你也可以收起练习，稍后继续。</p><div id="session-summary" class="record-summary"></div><button class="primary" id="session-save-exit" type="button">完成，回到今日</button><button class="danger" id="session-discard" type="button" hidden>放弃未提交的录音</button><p class="hint" id="session-finish-error" role="status"></p></div></dialog>
   <nav class="practice-steps" aria-label="练习步骤" role="tablist">
-  {% for key,label in [('listen','盲听'),('drill','默写'),('record','跟读')] %}<button type="button" role="tab" aria-controls="step-{{ key }}" data-practice-step="{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}"{% if not loop.first %} disabled{% endif %}>{{ loop.index }} {{ label }}</button>{% endfor %}</nav></aside>
+  {% for key,label in [('listen','盲听'),('record','跟读'),('drill','默写')] %}<button type="button" role="tab" aria-controls="step-{{ key }}" data-practice-step="{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}"{% if not loop.first %} disabled{% endif %}>{{ loop.index }} {{ label }}</button>{% endfor %}</nav></aside>
   <section class="step" id="step-listen">
     <h2><span class="n">1</span> 盲听{{ times(done_before.listen) }}</h2>
     <p class="hint">不看文字，就听。听完给自己打个分。</p>
@@ -30,38 +30,14 @@
     <p class="saved" hidden></p>
   </section>
 
-  <section class="step locked" id="step-drill"
-           data-auto-skip="{{ 'true' if done_before.perfect >= 2 else 'false' }}">
-    <h2><span class="n">2</span> 默写{{ times(done_before.drill) }}{% if done_before.perfect >= 2 %}<em class="step-badge">已全对 {{ done_before.perfect }} 次，自动跳过</em>{% endif %}</h2>
-    <p class="hint">听到什么写什么，一整句写在下面。漏了词就把光标挪过去补上；不会的词写一个 ?——对完答案会给出释义，并记进生词本。</p>
-    <div class="row">
-      <button class="play" data-src="/audio/{{ segment }}/{{ unit }}"><span class="label">▶ 重听</span><kbd class="key" aria-hidden="true">Tab</kbd><kbd class="key key-space" aria-hidden="true">空格</kbd></button>
-      <label class="repeat">连播 <input type="number" class="times" value="3" min="1" max="50"> 遍</label>
-      <span class="plays"></span>
-    </div>
-    <div class="dictation">
-      <textarea id="dictation-text" rows="2" autocomplete="off" autocapitalize="off"
-                autocorrect="off" spellcheck="false" enterkeyhint="done"
-                aria-label="把这一句写下来" placeholder="听到什么写什么"></textarea>
-      <div class="dictation-bar">
-        <span class="dictation-count" id="dictation-count" data-total="{{ word_total }}">已写 0/{{ word_total }} 个词</span>
-        <button type="button" id="dictation-unknown" title="在光标处插一个 ?">不会 ?</button>
-        <button class="primary" id="submit-drill">对答案<kbd class="key" aria-hidden="true">回车</kbd></button>
-        <button type="button" id="skip-drill">跳过默写<kbd class="key" aria-hidden="true">空白时回车</kbd></button>
-      </div>
-    </div>
-    <div class="result" hidden></div>
-    <button type="button" class="primary practice-next-action" id="practice-continue" aria-keyshortcuts="Space Enter" hidden>开始跟读<kbd class="key key-space" aria-hidden="true">空格</kbd></button>
-  </section>
-
   <section class="step locked" id="step-record">
-    <h2><span class="n">3</span> 跟读{{ times(done_before.record) }}
+    <h2><span class="n">2</span> 跟读{{ times(done_before.record) }}
       {%- if history %}<em class="step-badge">上次{% if history.issues %}有
         {{ history.issues | length }} 处要改{% else %}没有反复出现的问题{% endif %}</em>
       {%- endif %}</h2>
     <p class="hint">每遍录音前会自动放几次原声，随后准备麦克风。听到提示音就开始说，说完停一下就自动收，手上不用动；想早点收就点「说完了」。</p>
     <p class="hint insecure" id="no-mic" hidden>这台设备上录不了音——浏览器只在
-      HTTPS 或 localhost 下才给麦克风权限。前两步照常，跟读请用电脑。</p>
+      HTTPS 或 localhost 下才给麦克风权限。可以跳过跟读，继续默写。</p>
     <div class="row">
       <button class="primary" id="start-record" aria-keyshortcuts="Space R">开始跟读<kbd class="key key-space" aria-hidden="true">空格</kbd></button>
       <details class="rec-more" id="rec-more">
@@ -86,6 +62,9 @@
       </div>
       <div class="bar" id="rec-progress" hidden><i></i></div>
     </div>
+    <button type="button" class="primary" id="record-continue" hidden>继续默写</button>
+    <button type="button" id="skip-record">跳过跟读，去默写</button>
+    <p class="hint blind-record-note">先模仿声音。默写对答案后，再查看原文、历史反馈和本次分析。</p>
     <div class="peek">
       <button id="peek"><span class="label">看一眼原文</span><kbd class="key" aria-hidden="true">T</kbd></button>
       <span class="hint">记不住再看。屏幕上有字，人就会去读它，而不是模仿声音。</span>
@@ -108,6 +87,30 @@
     </div>
     {% endif %}
     <div class="result" id="rec-result" hidden></div>
+  </section>
+
+  <section class="step locked" id="step-drill"
+           data-auto-skip="false">
+    <h2><span class="n">3</span> 默写{{ times(done_before.drill) }}</h2>
+    <p class="hint">听到什么写什么，一整句写在下面。漏了词就把光标挪过去补上；不会的词写一个 ?——对完答案会给出释义，并记进生词本。</p>
+    <div class="row">
+      <button class="play" data-src="/audio/{{ segment }}/{{ unit }}"><span class="label">▶ 重听</span><kbd class="key" aria-hidden="true">Tab</kbd><kbd class="key key-space" aria-hidden="true">空格</kbd></button>
+      <label class="repeat">连播 <input type="number" class="times" value="3" min="1" max="50"> 遍</label>
+      <span class="plays"></span>
+    </div>
+    <div class="dictation">
+      <textarea id="dictation-text" rows="2" autocomplete="off" autocapitalize="off"
+                autocorrect="off" spellcheck="false" enterkeyhint="done"
+                aria-label="把这一句写下来" placeholder="听到什么写什么"></textarea>
+      <div class="dictation-bar">
+        <span class="dictation-count" id="dictation-count" data-total="{{ word_total }}">已写 0/{{ word_total }} 个词</span>
+        <button type="button" id="dictation-unknown" title="在光标处插一个 ?">不会 ?</button>
+        <button class="primary" id="submit-drill">对答案<kbd class="key" aria-hidden="true">回车</kbd></button>
+        <button type="button" id="skip-drill">跳过默写<kbd class="key" aria-hidden="true">空白时回车</kbd></button>
+      </div>
+    </div>
+    <div class="result" hidden></div>
+    <button type="button" class="primary practice-next-action" id="practice-continue" aria-keyshortcuts="Space Enter" hidden>查看分析与补录<kbd class="key key-space" aria-hidden="true">空格</kbd></button>
   </section>
 
   <div class="practice-actions" id="practice-dock" hidden aria-label="练习操作"></div>
