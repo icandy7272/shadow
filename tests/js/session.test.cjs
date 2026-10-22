@@ -48,3 +48,10 @@ test('new flow preserves yesterday saved shadowing until dictation is graded or 
   assert.equal(await s.ready,done?null:saved);
  }
 });
+test('new flow with skipped recording and finished dictation starts fresh rather than resuming',async()=>{
+ for(const grading of [null,{line:[],items:[],extras:[]}]){
+  const url='/practice/1/2',saved={version:1,flowVersion:2,url,updatedAt:Date.now(),steps:{record:['skipped'],drill:grading?['graded']:['skipped']},grading};
+  const s=session.createSession({url,origin:'https://shadow.test',fresh:true,store:{get:async()=>saved,put:async()=>{}},pointer:{getItem:()=>null}});
+  assert.equal(await s.ready,null);
+ }
+});

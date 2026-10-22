@@ -7,10 +7,11 @@ for (const extra of [true, false]) {
     const source = fs.readFileSync('src/shadow/web/static/app.js', 'utf8');
     const begin = source.indexOf('  async function recordRound(extra) {');
     const end = source.indexOf('\n  // 录音只存在这个页面里', begin);
-    let heard = 0, recorded = 0, submitted;
+    let heard = 0, recorded = 0, submitted, folded = false;
     const settings = {takes: {value: '3'}, prelisten: {value: '4'}};
     const speaker = {ready: async () => {}, context: {}, close() {}, play: async () => {heard++;}, beep: async () => {}};
     const classes = {add() {}, remove() {}};
+    settings['step-drill']={classList:{contains:()=>false,add:name=>{if(name==='done')folded=true}}};
     await vm.runInNewContext(`${source.slice(begin, end)}\nrecordRound(extra)`, {
       extra, takeCount: 3, startButton: {}, setRecording() {}, captureAudioSession:()=>()=>{},createSpeaker: () => speaker,
       document: {getElementById: id => settings[id] || {classList: classes}},
@@ -22,6 +23,7 @@ for (const extra of [true, false]) {
       recordOne: async () => {recorded++; return {blob: {}, seconds: 1, loudest: null};},
       submit: async blobs => {submitted = blobs.length;},
     });
+    assert.equal(folded,false,'recording must not fold an unattempted dictation');
     assert.equal(recorded, extra ? 1 : 3);
     assert.equal(submitted, extra ? 1 : 3);
     assert.equal(heard, extra ? 4 : 12);

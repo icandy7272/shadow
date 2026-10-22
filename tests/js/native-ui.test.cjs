@@ -26,3 +26,9 @@ test('space target marks both original and dock proxy without oscillation',()=>{
  vm.runInNewContext(source.slice(begin,end)+';markSpace();markSpace();',{spaceTarget:()=>original,root:{querySelectorAll:()=>[original,proxy,other]}});
  assert.equal(original.classList.contains('space-target'),true);assert.equal(proxy.classList.contains('space-target'),true);assert.equal(other.classList.contains('space-target'),false);
 });
+test('finish summary hides analysis until dictation reveal',()=>{
+ const {practiceSummary}=require('../../src/shadow/web/static/native-ui.js');
+ const data={count:3,accuracy:90,issues:['one']};
+ assert.deepEqual(practiceSummary(data,false),[[3,'录音遍数']]);
+ assert.deepEqual(practiceSummary(data,true),[[3,'录音遍数'],['90%','中位可懂度'],[1,'待改问题']]);
+});

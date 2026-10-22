@@ -37,7 +37,7 @@ function physicalKey(event) {  // eslint-disable-line no-unused-vars
   if (digit) return digit[1];
   if (code === "Space") return " ";
   if (code === "Enter" || code === "NumpadEnter") return "Enter";
-  if (code === "ArrowLeft" || code === "ArrowRight" || code === "Escape") return code;
+  if (code === "Tab" || code === "ArrowLeft" || code === "ArrowRight" || code === "Escape") return code;
   // 字母键先认 key：键盘布局不同，同一个位置打出来的字母不一样。
   // 输入法接管时 key 是 "Process"，才退回按位置认
   const letter = /^Key([A-Z])$/.exec(code);

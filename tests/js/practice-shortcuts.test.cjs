@@ -33,3 +33,10 @@ test('space chooses the current phase action and never starts during prelisten o
   const wanted={listen:play,drill:play,graded:next,ready:start,saved:both,recording:stop,prelisten:null,analysis:null,pending:null}[scenario];assert.equal(target,wanted,scenario);
  }
 });
+for(const key of ['o','m'])for(const revealed of [false,true])test(`${key} analysis playback obeys reveal=${revealed}`,()=>{
+ let handler,played=0;
+ const control={hidden:false,click(){played++}};
+ vm.runInNewContext(source.slice(begin,end),{recording:false,root:{dataset:{answersRevealed:String(revealed)}},physicalKey:()=>key,
+ document:{addEventListener:(_,fn)=>handler=fn,getElementById:()=>({hidden:false,classList:{contains:()=>false}}),querySelectorAll:()=>[control,control,control]}});
+ handler({target:{closest:()=>null},preventDefault(){}});assert.equal(played,revealed?1:0);
+});

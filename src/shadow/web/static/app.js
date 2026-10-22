@@ -346,6 +346,15 @@ if (root) {
       event.preventDefault();
       button.click();
     };
+    // Tab replays dictation even if focus is on another control in this step.
+    if (key === "Tab" && !event.shiftKey) {
+      const drill = byId("step-drill");
+      if (!drill.hidden && !["locked","graded","skipped"].some(name=>drill.classList.contains(name))) {
+        press(drill.querySelector("button.play"));
+        byId("dictation-text").focus({preventScroll:true});
+      }
+      return;
+    }
     // 跟读这一步还锁着的时候，它里面的东西一律不碰：「看一眼原文」提前按出来，盲听就废了
     const shadowing = !byId("step-record").classList.contains("locked") && !byId("step-record").hidden;
     // 结果页的三个播放键：同时播放、只听原声、只听我的
@@ -435,8 +444,8 @@ if (root) {
   };
   typed.addEventListener("input", refreshCount);
   typed.addEventListener("keydown", (event) => {
-    if (event.isComposing) return;              // 输入法选词的回车、取消的 Esc 不算
     const key = physicalKey(event);
+    if (event.isComposing && key !== "Tab") return; // Tab 重听不参与输入法选词
     // Tab 在这个框里本来只会把光标跳走，拿来重听；想离开框用 Shift+Tab。Esc 也认
     if ((key === "Tab" && !event.shiftKey) || key === "Escape") {
       // 写到一半想再听一遍：手不用离开键盘，光标也留在原处
@@ -665,7 +674,13 @@ if (root) {
       for(const id of ['listen','drill','record']){const step=document.getElementById(`step-${id}`),names=saved.steps?.[id];if(!Array.isArray(names))continue;for(const name of ['locked','complete','graded','skipped','done','foldable'])step.classList.toggle(name,names.includes(name));if(names.includes('complete')){const badge=step.querySelector('h2 .n');if(badge)badge.textContent='✓';}}
       // Old snapshots may contain unlock classes from the former step order.
       // Only actual grading or an explicit skip can reveal text.
-      if(!sessionGrading)drillStep.classList.remove('graded');
+      if(!sessionGrading){
+        drillStep.classList.remove('graded');
+        if(!drillStep.classList.contains('skipped')){
+          drillStep.classList.remove('done','foldable','complete');
+          drillStep.querySelector('h2 .n').textContent='3';
+        }
+      }
       if(saved.analysis){
         document.getElementById('step-record').classList.add('complete');
         drillStep.classList.remove('locked');
@@ -1220,7 +1235,6 @@ if (root) {
       // Reference audio must use the normal playback route, without an active mic.
       restoreAudioSession = captureAudioSession(navigator, "playback");
       speaker = createSpeaker();
-      document.getElementById("step-drill").classList.add("done");
       status.textContent = "正在准备原声 …";
       const outcome = await Promise.race([
         speaker.ready().then(() => "ok", err => err.message || "原声解不开"),

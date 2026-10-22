@@ -71,7 +71,7 @@ if(typeof document!=='undefined')(()=>{
  const skipRecord=document.getElementById('skip-record');
  function openDictation(){if(isBusy())return;panels[1].classList.remove('locked');show('drill');}
  toDictation.addEventListener('click',openDictation);
- skipRecord.addEventListener('click',openDictation);
+ skipRecord.addEventListener('click',()=>{if(isBusy())return;panels[2].classList.add('skipped');openDictation()});
  dock.append(toDictation,skipRecord);
 
  startControl?.addEventListener('click',()=>{const dialog=startControl.closest('dialog');if(dialog?.open)window.ShadowSheets?.close(dialog)},true);
@@ -96,5 +96,5 @@ if(typeof document!=='undefined')(()=>{
  if(root.dataset.recordBusy!==String(busy))root.dataset.recordBusy=String(busy);
  if(extra&&extra.disabled!==start.disabled)extra.disabled=start.disabled;
  previous=status}
- new MutationObserver(sync).observe(root,{subtree:true,attributes:true,attributeFilter:['class','hidden','disabled','data-pending','data-mutating'],childList:true});document.addEventListener('shadow:session-saved',sync);document.addEventListener('shadow:analysed',()=>{panels[1].classList.remove('locked');show(answersRevealed({graded:panels[1].classList.contains('graded'),skipped:panels[1].classList.contains('skipped')})?'record':'drill')});document.addEventListener('shadow:session-restored',()=>{sync();show(root.dataset.activeStep||'listen',false)});show('listen',false);sync();
+ new MutationObserver(sync).observe(root,{subtree:true,attributes:true,attributeFilter:['class','hidden','disabled','data-pending','data-mutating'],childList:true});document.addEventListener('shadow:session-saved',sync);document.addEventListener('shadow:analysed',()=>{panels[1].classList.remove('locked');show(answersRevealed({graded:panels[1].classList.contains('graded'),skipped:panels[1].classList.contains('skipped')})?'record':'drill')});document.addEventListener('shadow:session-restored',()=>{const restored=root.dataset.activeStep||'listen';sync();show(restored,false)});const initial=root.dataset.activeStep||'listen';sync();show(initial,false);
 })();
