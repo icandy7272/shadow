@@ -14,6 +14,22 @@ test('Enter continues from completed dictation only, never skips a sentence',()=
  assert.equal(run('Enter').navigated,0);
 });
 test('arrow navigation clicks the link so draft saving and guards also run',()=>{const state=run('ArrowRight');assert.equal(state.navigated,1);assert.equal(state.assigned,0)});
+function runTakeArrow(key,{selected=1,revealed=true,hidden=false,activeStep='record'}={}){
+ let handler,prevented=false;const rows=[0,1,2].map(index=>({chosen:index===selected,focused:false,classList:{contains(name){return name==='chosen'&&rows[index].chosen}},click(){rows.forEach((row,i)=>row.chosen=i===index)},focus(){this.focused=true}}));
+ const result={hidden,querySelectorAll:()=>rows};const root={dataset:{answersRevealed:String(revealed),activeStep}};
+ vm.runInNewContext(source.slice(begin,end),{recording:false,root,physicalKey:()=>key,listenStep:{hidden:true},document:{addEventListener:(_,fn)=>handler=fn,getElementById:id=>id==='rec-result'?result:{hidden:true,classList:{contains:()=>false}},querySelectorAll:()=>[],querySelector:()=>null}});
+ handler({repeat:false,defaultPrevented:false,target:{closest:()=>null},preventDefault(){prevented=true}});return {rows,prevented};
+}
+test('up and down select the previous and next take after results appear',()=>{
+ const down=runTakeArrow('ArrowDown');assert.equal(down.rows[2].chosen,true);assert.equal(down.rows[2].focused,true);assert.equal(down.prevented,true);
+ const up=runTakeArrow('ArrowUp');assert.equal(up.rows[0].chosen,true);assert.equal(up.rows[0].focused,true);
+});
+test('take selection does not wrap or steal arrows before results are available',()=>{
+ const top=runTakeArrow('ArrowUp',{selected:0});assert.equal(top.rows[0].chosen,true);assert.equal(top.prevented,false);
+ const locked=runTakeArrow('ArrowDown',{revealed:false});assert.equal(locked.rows[1].chosen,true);assert.equal(locked.prevented,false);
+ const hidden=runTakeArrow('ArrowDown',{hidden:true});assert.equal(hidden.rows[1].chosen,true);assert.equal(hidden.prevented,false);
+ const otherStep=runTakeArrow('ArrowDown',{activeStep:'drill'});assert.equal(otherStep.rows[1].chosen,true);assert.equal(otherStep.prevented,false);
+});
 test('after dictation continue opens analysis without starting the microphone',()=>{
  const mobile=fs.readFileSync('src/shadow/web/static/mobile.js','utf8');const begin=mobile.indexOf("next.addEventListener('click'");const end=mobile.indexOf('\n',begin);
  for(const blocked of [false,true]){

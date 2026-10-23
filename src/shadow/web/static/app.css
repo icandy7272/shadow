@@ -289,6 +289,7 @@ table.units tr[data-retired="1"] a { color: var(--muted); }
 #redo-take { border-color: var(--line); color: var(--muted); font-size:0.9375rem;
   padding: 10px 18px; }
 #redo-take:hover { border-color: var(--warn); color: var(--warn); }
+#pause-take[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 
 /* 每一遍的结果一起列出来：哪一遍有问题一眼看得见，不用一遍遍切过去找。
    指标是全部遍数的中位数，图却只能画一遍——点某一行就把图换成那一遍 */

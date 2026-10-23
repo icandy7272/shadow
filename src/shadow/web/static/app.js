@@ -133,6 +133,9 @@ function stopLoops() {
 // 跟读那一步一开始，原声就由它自己按节奏放。这时别处再放一路，两个原声叠在一起，
 // 跟读全废——所以从「开始」到收工，连播的按钮一律停用（键盘也走同一条路）。
 let recording = false;
+let activeSpeaker = null;
+let activeRecorderControl = null;
+let recordingPaused = false;
 function setRecording(on) {
   recording = on;
   document.getElementById("practice")?.setAttribute("data-recording",String(on));
@@ -365,6 +368,20 @@ if (root) {
         byId("dictation-text").focus({preventScroll:true});
       }
       return;
+    }
+    if (key === "ArrowUp" || key === "ArrowDown") {
+      const result = byId("rec-result");
+      if (root.dataset.answersRevealed === "true" && root.dataset.activeStep === "record" && !result.hidden) {
+        const rows = [...result.querySelectorAll(".take-row")];
+        const current = rows.findIndex(row => row.classList.contains("chosen"));
+        const next = current + (key === "ArrowDown" ? 1 : -1);
+        if (current >= 0 && next >= 0 && next < rows.length) {
+          event.preventDefault();
+          rows[next].focus({ preventScroll: true });
+          rows[next].click();
+        }
+        return;
+      }
     }
     // 跟读这一步还锁着的时候，它里面的东西一律不碰：「看一眼原文」提前按出来，盲听就废了
     const shadowing = !byId("step-record").classList.contains("locked") && !byId("step-record").hidden;
@@ -771,8 +788,44 @@ if (root) {
   const fill = bar.querySelector("i");
   const stopButton = document.getElementById("stop-take");
   const redoButton = document.getElementById("redo-take");
+  const pauseButton = document.getElementById("pause-take");
   const startButton = document.getElementById("start-record");
   const src = `/audio/${segment}/${unit}`;
+  let pauseStatus = "";
+  let pauseMeterHidden = true;
+  let pauseWasLive = false;
+  const setPauseAvailable = (available) => {
+    pauseButton.hidden = !available;
+    if (!available && recordingPaused) {
+      recordingPaused = false;
+      pauseButton.textContent = "暂停";
+      pauseButton.setAttribute("aria-pressed", "false");
+    }
+  };
+  pauseButton.addEventListener("click", () => {
+    if (recordingPaused) {
+      activeSpeaker?.resume();
+      activeRecorderControl?.resume();
+      recordingPaused = false;
+      pauseButton.textContent = "暂停";
+      pauseButton.setAttribute("aria-pressed", "false");
+      if (pauseStatus) status.textContent = pauseStatus;
+      if (pauseWasLive) status.classList.add("live");
+      if (micMeter) micMeter.hidden = pauseMeterHidden;
+    } else {
+      pauseStatus = status.textContent;
+      pauseWasLive = status.classList.contains("live");
+      pauseMeterHidden = micMeter?.hidden ?? true;
+      activeSpeaker?.pause();
+      activeRecorderControl?.pause();
+      recordingPaused = true;
+      pauseButton.textContent = "继续";
+      pauseButton.setAttribute("aria-pressed", "true");
+      status.textContent = "已暂停原声和录音，点「继续」接着练。";
+      status.classList.remove("live");
+      if (micMeter) micMeter.hidden = true;
+    }
+  });
   // 盲听、默写时就准备好，点击跟读无需再走域名和隧道。
   window.ShadowAudio.url(src).catch(() => {});
 
@@ -820,6 +873,8 @@ if (root) {
       ready: () => clip,
       running: () => ctx.state === "running",
       wake,
+      pause: () => { if (ctx.state === "running") ctx.suspend().catch(() => {}); },
+      resume: wake,
       // 放一遍，放完才返回。ended 没来就按时长兜底，绝不卡住
       async play() {
         const buffer = await clip;
@@ -827,10 +882,13 @@ if (root) {
         source.buffer = buffer;
         source.connect(ctx.destination);
         await new Promise((resolve) => {
-          const guard = setTimeout(resolve, buffer.duration * 1000 + 1500);
+          const finish = () => { clearInterval(guard); resolve(); };
+          const startedAt = ctx.currentTime;
+          const guard = setInterval(() => {
+            if (ctx.currentTime - startedAt >= buffer.duration + 1.5) finish();
+          }, 250);
           source.addEventListener("ended", () => {
-            clearTimeout(guard);
-            resolve();
+            finish();
           }, { once: true });
           source.start();
         });
@@ -940,23 +998,28 @@ if (root) {
     await tapToContinue("接着放", speaker.wake);
   };
 
-  const recordOne = (stream, ear, minSpoken, autoStop) => new Promise((resolve, reject) => {
+  const recordOne = (stream, ear, minSpoken, autoStop, onControl) => new Promise((resolve, reject) => {
     const chunks = [];
     const recorder = new MediaRecorder(stream);
     let began = 0;
     let dropped = false;
     let watch = 0;
+    let pausedAt = 0;
+    let pausedMs = 0;
     recorder.addEventListener("dataavailable", (e) => chunks.push(e.data));
     const heard = [];
     const cleanup = () => {
       clearInterval(watch);
+      onControl?.(null);
       stopButton.hidden = true;
       stopButton.onclick = null;
       if (redoButton) { redoButton.hidden = true; redoButton.onclick = null; }
     };
     recorder.addEventListener("stop", () => {
       cleanup();
-      resolve({ blob: new Blob(chunks), seconds: (performance.now() - began) / 1000,
+      const now = performance.now();
+      const paused = pausedMs + (pausedAt ? now - pausedAt : 0);
+      resolve({ blob: new Blob(chunks), seconds: (now - began - paused) / 1000,
                 dropped, loudest: loudestOf(heard) });
     });
     recorder.addEventListener("error", event => {
@@ -968,6 +1031,19 @@ if (root) {
       try { if (recorder.state !== "inactive") recorder.stop(); }
       catch (err) { reject(err); }
     };
+    const control = {
+      pause() {
+        if (recorder.state !== "recording") return;
+        pausedAt = performance.now();
+        recorder.pause();
+      },
+      resume() {
+        if (recorder.state !== "paused") return;
+        pausedMs += performance.now() - pausedAt;
+        pausedAt = 0;
+        recorder.resume();
+      },
+    };
     stopButton.hidden = false;
     stopButton.onclick = finish;
     if (redoButton) {
@@ -978,6 +1054,7 @@ if (root) {
     }
     try { recorder.start(); } catch (err) { cleanup(); reject(err); return; }
     began = performance.now();
+    onControl?.(control);
     if (!ear) return;
     const ambientFloor = Number.isFinite(ear.noiseFloor) ? ear.noiseFloor : null;
     let floor = ambientFloor ?? FLOOR_CAP;
@@ -985,6 +1062,7 @@ if (root) {
     let spoke = 0;
     let hushFrom = 0;
     watch = setInterval(() => {
+      if (recorder.state !== "recording") return;
       const level = ear.level();
       const now = performance.now();
       heard.push(levelDb(level));     // 音量条由外面那个循环一直画，这里只记这一遍多响
@@ -1253,6 +1331,7 @@ if (root) {
       // Reference audio must use the normal playback route, without an active mic.
       restoreAudioSession = captureAudioSession(navigator, "playback");
       speaker = createSpeaker();
+      activeSpeaker = speaker;
       status.textContent = "正在准备原声 …";
       const outcome = await Promise.race([
         speaker.ready().then(() => "ok", err => err.message || "原声解不开"),
@@ -1268,7 +1347,8 @@ if (root) {
         for (let i = 1; i <= pre; i += 1) {
           await awake(speaker);
           status.textContent = `第 ${offset + take}/${offset + takes} 遍 —— 先听 ${i}/${pre}`;
-          await speaker.play();
+          setPauseAvailable(true);
+          try { await speaker.play(); } finally { setPauseAvailable(false); }
           if (i < pre) await sleep(GAP_MS);      // 最后一遍的空档留给提示音
         }
         // Open capture only after the last reference ends. Device preparation
@@ -1304,8 +1384,13 @@ if (root) {
         status.classList.add("live");
         let clip;
         try {
-          clip = await recordOne(stream, ear, minSpoken, autoBox?.checked !== false);
+          clip = await recordOne(stream, ear, minSpoken, autoBox?.checked !== false, control => {
+            activeRecorderControl = control;
+            setPauseAvailable(Boolean(control));
+          });
         } finally {
+          activeRecorderControl = null;
+          setPauseAvailable(false);
           releaseCapture();
         }
 
@@ -1346,6 +1431,10 @@ if (root) {
       setRecording(false);
       release(releaseCapture);
       release(() => speaker?.close());
+      activeSpeaker = null;
+      activeRecorderControl = null;
+      recordingPaused = false;
+      setPauseAvailable(false);
       release(restoreAudioSession);
       if (micMeter) micMeter.hidden = true;
       if (typeof stopButton !== "undefined" && stopButton) stopButton.hidden = true;

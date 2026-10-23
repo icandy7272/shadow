@@ -9,11 +9,12 @@ for (const extra of [true, false]) {
     const end = source.indexOf('\n  // 录音只存在这个页面里', begin);
     let heard = 0, recorded = 0, submitted, folded = false;
     const settings = {takes: {value: '3'}, prelisten: {value: '4'}};
+    const pauseButton = {hidden:true,setAttribute(){}};
     const speaker = {ready: async () => {}, context: {}, close() {}, play: async () => {heard++;}, beep: async () => {}};
     const classes = {add() {}, remove() {}};
     settings['step-drill']={classList:{contains:()=>false,add:name=>{if(name==='done')folded=true}}};
     await vm.runInNewContext(`${source.slice(begin, end)}\nrecordRound(extra)`, {
-      extra, takeCount: 3, startButton: {}, setRecording() {}, captureAudioSession:()=>()=>{},createSpeaker: () => speaker,
+      extra, takeCount: 3, startButton: {}, setRecording() {},activeSpeaker:null,activeRecorderControl:null,recordingPaused:false,pauseButton,setPauseAvailable:on=>{pauseButton.hidden=!on},captureAudioSession:()=>()=>{},createSpeaker: () => speaker,
       document: {getElementById: id => settings[id] || {classList: classes}},
       navigator: {mediaDevices: {getUserMedia: async () => ({getTracks: () => [{stop() {}}]})}},
       micWanted: () => ({}), status: {classList: classes}, fillMics() {},

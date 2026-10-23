@@ -4,8 +4,8 @@ function clampNumber(value,min,max,fallback){const n=value===''?NaN:Number(value
 function canDismissDrag(dy,dx,elapsed){return dy>0&&dy>Math.abs(dx)*1.2&&(dy>=90||(dy>=30&&dy/Math.max(1,elapsed)>.6));}
 function finishState({recording=false,submitting=false,pending=[],analysis=null}={}){return submitting?'submitting':recording?'recording':pending?.length?'pending':analysis?'saved':'draft';}
 function setDisabledIfChanged(control,value){value=Boolean(value);if(control&&control.disabled!==value)control.disabled=value;}
-function dockActionRole(id,saved=false){if(id==='stop-take')return 'stop';if(id==='next-sentence')return saved?'primary':'secondary';return ['skip-record','skip-drill','extra-record','redo-take'].includes(id)?'secondary':'primary';}
-function dockMode({recording=false,stopVisible=false,submitting=false,pending=false,saved=false}={}){return recording?(stopVisible?'recording':'prelisten'):submitting?'analysing':pending?'retry':saved?'saved':'ready';}
+function dockActionRole(id,saved=false){if(id==='stop-take')return 'stop';if(id==='next-sentence')return saved?'primary':'secondary';return ['skip-record','skip-drill','extra-record','redo-take','pause-take'].includes(id)?'secondary':'primary';}
+function dockMode({recording=false,stopVisible=false,pauseVisible=false,submitting=false,pending=false,saved=false}={}){return recording?(stopVisible||pauseVisible?'recording':'prelisten'):submitting?'analysing':pending?'retry':saved?'saved':'ready';}
 function syncDockProxy(original,proxy){
  for(const key of ['hidden','disabled','innerHTML'])if(proxy[key]!==original[key])proxy[key]=original[key];
  const space=original.classList.contains('space-target');if(proxy.classList.contains('space-target')!==space)proxy.classList.toggle('space-target',space);
@@ -89,7 +89,7 @@ if(typeof document!=='undefined')(()=>{
     if(window.matchMedia('(hover: hover)').matches)proxy.focus({preventScroll:true});else document.activeElement.blur();
    }
   }
-  const mode=dockMode({recording:root.dataset.recording==='true',stopVisible:!document.getElementById('stop-take')?.hidden,submitting:root.dataset.activeStep==='record'&&root.dataset.submitting==='true',pending:root.dataset.activeStep==='record'&&root.dataset.pending==='true',saved:!document.getElementById('extra-record')?.hidden});
+  const mode=dockMode({recording:root.dataset.recording==='true',stopVisible:!document.getElementById('stop-take')?.hidden,pauseVisible:!document.getElementById('pause-take')?.hidden,submitting:root.dataset.activeStep==='record'&&root.dataset.submitting==='true',pending:root.dataset.activeStep==='record'&&root.dataset.pending==='true',saved:!document.getElementById('extra-record')?.hidden});
   if(root.dataset.dockMode!==mode)root.dataset.dockMode=mode;
   const controls=[...dock.querySelectorAll(':scope > button,.dock-pager')];
   for(const control of controls){
