@@ -33,7 +33,7 @@ test('pausing a take freezes its recorded duration and exposes resume control',a
 
 test('the recorder pause control can pause reference playback too',()=>{
  const markup=fs.readFileSync('src/shadow/web/templates/practice.html','utf8');
- assert.match(markup,/<button[^>]*id="pause-take"[^>]*hidden[^>]*>暂停<\/button>/);
+ assert.match(markup,/<button[^>]*id="pause-take"[^>]*aria-keyshortcuts="P"[^>]*hidden[^>]*>暂停<kbd[^>]*>P<\/kbd><\/button>/);
 });
 
 test('the pause button pauses and resumes both the speaker and microphone',()=>{

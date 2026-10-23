@@ -394,6 +394,10 @@ if (root) {
       if (recording) press(byId("redo-take"));
       return;
     }
+    if (recording && key === "p") {
+      press(byId("pause-take"));
+      return;
+    }
     if (recording && key !== " ") return;           // 录着的时候只认说完了、重来
     if (key === "Enter") {
       const drill = byId("step-drill");

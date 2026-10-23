@@ -14,6 +14,20 @@ test('Enter continues from completed dictation only, never skips a sentence',()=
  assert.equal(run('Enter').navigated,0);
 });
 test('arrow navigation clicks the link so draft saving and guards also run',()=>{const state=run('ArrowRight');assert.equal(state.navigated,1);assert.equal(state.assigned,0)});
+function runPauseShortcut({recording=true,typing=false,hidden=false}={}){
+ let handler,clicked=0,prevented=false;const pause={hidden,disabled:false,click(){clicked++}};
+ vm.runInNewContext(source.slice(begin,end),{recording,physicalKey:()=> 'p',listenStep:{hidden:true},
+  document:{addEventListener:(_,fn)=>handler=fn,getElementById:id=>id==='pause-take'?pause:{hidden:true,classList:{contains:()=>false}},querySelectorAll:()=>[],querySelector:()=>null}});
+ handler({repeat:false,defaultPrevented:false,metaKey:false,ctrlKey:false,altKey:false,shiftKey:false,
+  target:{closest:()=>typing?{}:null},preventDefault(){prevented=true}});
+ return {clicked,prevented};
+}
+test('P toggles the visible pause control only during practice playback or recording',()=>{
+ const active=runPauseShortcut();assert.equal(active.clicked,1);assert.equal(active.prevented,true);
+ for(const options of [{recording:false},{typing:true},{hidden:true}]){
+  const inactive=runPauseShortcut(options);assert.equal(inactive.clicked,0);assert.equal(inactive.prevented,false);
+ }
+});
 function runTakeArrow(key,{selected=1,revealed=true,hidden=false,activeStep='record'}={}){
  let handler,prevented=false;const rows=[0,1,2].map(index=>({chosen:index===selected,focused:false,classList:{contains(name){return name==='chosen'&&rows[index].chosen}},click(){rows.forEach((row,i)=>row.chosen=i===index)},focus(){this.focused=true}}));
  const result={hidden,querySelectorAll:()=>rows};const root={dataset:{answersRevealed:String(revealed),activeStep}};
