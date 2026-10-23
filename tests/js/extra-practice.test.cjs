@@ -14,7 +14,7 @@ for (const extra of [true, false]) {
     const classes = {add() {}, remove() {}};
     settings['step-drill']={classList:{contains:()=>false,add:name=>{if(name==='done')folded=true}}};
     await vm.runInNewContext(`${source.slice(begin, end)}\nrecordRound(extra)`, {
-      extra, takeCount: 3, startButton: {}, setRecording() {},activeSpeaker:null,activeRecorderControl:null,recordingPaused:false,pauseButton,setPauseAvailable:on=>{pauseButton.hidden=!on},captureAudioSession:()=>()=>{},createSpeaker: () => speaker,
+      extra, takeCount: 3, startButton: {}, setRecording() {},activeSpeaker:null,activeRecorderControl:null,recordingPaused:false,pauseButton,setPauseAvailable:(on,keepVisible=false)=>{pauseButton.hidden=!(on||keepVisible);pauseButton.disabled=!on},captureAudioSession:()=>()=>{},createSpeaker: () => speaker,
       document: {getElementById: id => settings[id] || {classList: classes}},
       navigator: {mediaDevices: {getUserMedia: async () => ({getTracks: () => [{stop() {}}]})}},
       micWanted: () => ({}), status: {classList: classes}, fillMics() {},

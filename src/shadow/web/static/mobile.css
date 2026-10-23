@@ -125,7 +125,7 @@ input[type="checkbox"] { accent-color:var(--accent); width:20px; height:20px; }
 .practice-actions { position:sticky; bottom:calc(var(--keyboard-inset) + env(safe-area-inset-bottom)); background:var(--chrome); border-top:1px solid var(--line); padding:12px 0; display:flex; gap:9px; z-index:25; backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
 #practice-dock { position:fixed; bottom:var(--keyboard-inset); left:50%; transform:translateX(-50%); width:min(100%,var(--app-width)); padding:12px 16px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--chrome); z-index:40; display:flex; align-items:center; gap:10px; flex-wrap:wrap; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
 #practice-dock button,.practice-actions button { flex:1; min-height:49px; }
-#practice-dock #pause-take .key { display:inline-block; }
+#practice-dock #pause-take .key { display:inline-block!important; }
 #practice-dock .live-row { width:100%; margin:0; }
 #practice-dock .mic-note { width:100%; }
 #practice-dock .practice-next-action { flex:1; min-height:49px; display:flex; align-items:center; justify-content:center; border-radius:12px; padding:10px 12px; text-decoration:none; font-size:.9375rem; }
