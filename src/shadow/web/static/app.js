@@ -798,8 +798,9 @@ if (root) {
   let pauseStatus = "";
   let pauseMeterHidden = true;
   let pauseWasLive = false;
-  const setPauseAvailable = (available) => {
-    pauseButton.hidden = !available;
+  const setPauseAvailable = (available, keepVisible = false) => {
+    pauseButton.hidden = !(available || keepVisible);
+    pauseButton.disabled = !available;
     if (!available && recordingPaused) {
       recordingPaused = false;
       pauseButton.textContent = "暂停";
@@ -1336,6 +1337,7 @@ if (root) {
       restoreAudioSession = captureAudioSession(navigator, "playback");
       speaker = createSpeaker();
       activeSpeaker = speaker;
+      setPauseAvailable(false, true);
       status.textContent = "正在准备原声 …";
       const outcome = await Promise.race([
         speaker.ready().then(() => "ok", err => err.message || "原声解不开"),
@@ -1352,7 +1354,7 @@ if (root) {
           await awake(speaker);
           status.textContent = `第 ${offset + take}/${offset + takes} 遍 —— 先听 ${i}/${pre}`;
           setPauseAvailable(true);
-          try { await speaker.play(); } finally { setPauseAvailable(false); }
+          try { await speaker.play(); } finally { setPauseAvailable(false, true); }
           if (i < pre) await sleep(GAP_MS);      // 最后一遍的空档留给提示音
         }
         // Open capture only after the last reference ends. Device preparation
@@ -1390,11 +1392,11 @@ if (root) {
         try {
           clip = await recordOne(stream, ear, minSpoken, autoBox?.checked !== false, control => {
             activeRecorderControl = control;
-            setPauseAvailable(Boolean(control));
+            setPauseAvailable(Boolean(control), true);
           });
         } finally {
           activeRecorderControl = null;
-          setPauseAvailable(false);
+          setPauseAvailable(false, true);
           releaseCapture();
         }
 

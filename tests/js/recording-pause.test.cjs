@@ -7,6 +7,20 @@ const source=fs.readFileSync('src/shadow/web/static/app.js','utf8');
 const begin=source.indexOf('  const recordOne =');
 const end=source.indexOf('  // 服务端按音频时长',begin);
 
+test('the pause button remains in the dock but is disabled between active audio segments',()=>{
+ const beginSetter=source.indexOf('  const setPauseAvailable =');
+ const endSetter=source.indexOf('\n  };',beginSetter)+5;
+ const button={hidden:true,disabled:false,textContent:'暂停',setAttribute(){}};
+ const context={pauseButton:button,recordingPaused:false};
+ const setAvailable=vm.runInNewContext(source.slice(beginSetter,endSetter)+'\nsetPauseAvailable',context);
+ setAvailable(false,true);
+ assert.equal(button.hidden,false);assert.equal(button.disabled,true);
+ setAvailable(true,true);
+ assert.equal(button.hidden,false);assert.equal(button.disabled,false);
+ setAvailable(false);
+ assert.equal(button.hidden,true);assert.equal(button.disabled,true);
+});
+
 test('pausing a take freezes its recorded duration and exposes resume control',async()=>{
  let now=1000,control,stopHandler;
  class Recorder {
