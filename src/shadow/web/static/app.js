@@ -363,9 +363,11 @@ if (root) {
     // Tab replays dictation even if focus is on another control in this step.
     if (key === "Tab" && !event.shiftKey) {
       const drill = byId("step-drill");
-      if (!drill.hidden && !["locked","graded","skipped"].some(name=>drill.classList.contains(name))) {
+      if (!drill.hidden && !drill.classList.contains("locked")) {
         press(drill.querySelector("button.play"));
-        byId("dictation-text").focus({preventScroll:true});
+        if (!drill.classList.contains("graded") && !drill.classList.contains("skipped")) {
+          byId("dictation-text").focus({preventScroll:true});
+        }
       }
       return;
     }
@@ -800,7 +802,7 @@ if (root) {
   let pauseWasLive = false;
   const setPauseAvailable = (available, keepVisible = false) => {
     pauseButton.hidden = !(available || keepVisible);
-    pauseButton.disabled = !available;
+    pauseButton.disabled = false;
     if (!available && recordingPaused) {
       recordingPaused = false;
       pauseButton.textContent = "暂停";
@@ -817,7 +819,7 @@ if (root) {
       if (pauseStatus) status.textContent = pauseStatus;
       if (pauseWasLive) status.classList.add("live");
       if (micMeter) micMeter.hidden = pauseMeterHidden;
-    } else {
+    } else if (activeRecorderControl) {
       pauseStatus = status.textContent;
       pauseWasLive = status.classList.contains("live");
       pauseMeterHidden = micMeter?.hidden ?? true;
@@ -829,6 +831,8 @@ if (root) {
       status.textContent = "已暂停原声和录音，点「继续」接着练。";
       status.classList.remove("live");
       if (micMeter) micMeter.hidden = true;
+    } else {
+      activeSpeaker?.stopCurrent();
     }
   });
   // 盲听、默写时就准备好，点击跟读无需再走域名和隧道。
@@ -873,6 +877,11 @@ if (root) {
       throw err;
     }
     clip.catch(() => {});   // 先别报：等 ready() 时由调用方说清楚
+    let activeSource = null;
+    const stopCurrent = () => {
+      if (!activeSource) return false;
+      try { activeSource.stop(); return true; } catch (_) { return false; }
+    };
 
     return {
       ready: () => clip,
@@ -880,6 +889,7 @@ if (root) {
       wake,
       pause: () => { if (ctx.state === "running") ctx.suspend().catch(() => {}); },
       resume: wake,
+      stopCurrent,
       // 放一遍，放完才返回。ended 没来就按时长兜底，绝不卡住
       async play() {
         const buffer = await clip;
@@ -887,7 +897,11 @@ if (root) {
         source.buffer = buffer;
         source.connect(ctx.destination);
         await new Promise((resolve) => {
-          const finish = () => { clearInterval(guard); resolve(); };
+          const finish = () => {
+            clearInterval(guard);
+            if (activeSource === source) activeSource = null;
+            resolve();
+          };
           const startedAt = ctx.currentTime;
           const guard = setInterval(() => {
             if (ctx.currentTime - startedAt >= buffer.duration + 1.5) finish();
@@ -895,6 +909,7 @@ if (root) {
           source.addEventListener("ended", () => {
             finish();
           }, { once: true });
+          activeSource = source;
           source.start();
         });
       },
@@ -908,9 +923,18 @@ if (root) {
         gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + 0.015);
         gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + seconds);
         osc.connect(gain).connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + seconds + 0.02);
-        await sleep(seconds * 1000);
+        await new Promise((resolve) => {
+          const finish = () => {
+            clearTimeout(guard);
+            if (activeSource === osc) activeSource = null;
+            resolve();
+          };
+          const guard = setTimeout(finish, seconds * 1000 + 250);
+          osc.addEventListener("ended", finish, { once: true });
+          activeSource = osc;
+          osc.start();
+          osc.stop(ctx.currentTime + seconds + 0.02);
+        });
       },
       close: () => { ctx.close().catch(() => {}); },
       context: ctx,

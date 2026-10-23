@@ -20,12 +20,12 @@ test('restoring saved dictation selection survives automatic status synchronizat
  vm.runInNewContext(mobile.slice(begin,end),{document:{addEventListener:(_,fn)=>handler=fn},root,sync(){root.dataset.activeStep='record'},show(id){opened=id}});
  handler();assert.equal(opened,'drill');
 });
-for(const shiftKey of [false,true])test(`Tab on dictation panel outside input, shift=${shiftKey}`,()=>{
+for(const graded of [false,true])for(const shiftKey of [false,true])test(`Tab on dictation panel outside input, graded=${graded}, shift=${shiftKey}`,()=>{
  const begin=source.indexOf('  document.addEventListener("keydown",',source.indexOf('// 一句从头到尾')),end=source.indexOf('\n  });',begin)+6;
- let handler,played=0;const play={hidden:false,click(){played++}};
- const drill={hidden:false,classList:{contains:()=>false},querySelector:()=>play};
- vm.runInNewContext(source.slice(begin,end),{recording:false,physicalKey:()=> 'Tab',document:{addEventListener:(_,fn)=>handler=fn,getElementById:id=>id==='step-drill'?drill:{hidden:true,classList:{contains:()=>false},focus(){}},querySelectorAll:()=>[]}});
- handler({shiftKey,target:{closest:()=>null},preventDefault(){}});assert.equal(played,shiftKey?0:1);
+ let handler,played=0,focused=0;const play={hidden:false,click(){played++}};
+ const drill={hidden:false,classList:{contains:name=>name==='graded'&&graded},querySelector:()=>play};
+ vm.runInNewContext(source.slice(begin,end),{recording:false,physicalKey:()=> 'Tab',document:{addEventListener:(_,fn)=>handler=fn,getElementById:id=>id==='step-drill'?drill:{hidden:true,classList:{contains:()=>false},focus(){focused++}},querySelectorAll:()=>[]}});
+ handler({shiftKey,target:{closest:()=>null},preventDefault(){}});assert.equal(played,shiftKey?0:1);assert.equal(focused,!shiftKey&&!graded?1:0);
 });
 test('late-loading controls retain the step already restored from storage',()=>{
  const mobile=fs.readFileSync('src/shadow/web/static/mobile.js','utf8');
